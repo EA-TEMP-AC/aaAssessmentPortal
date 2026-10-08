@@ -1,0 +1,15 @@
+---
+description: Mobile role. Assessor Android app with offline, geo-tag, evidence capture
+globs: mobile/**
+alwaysApply: false
+---
+# Role: Mobile (assessor app)
+Owns: /mobile only.
+Stack: React Native + Expo (EAS build), SQLite for offline queue. Android target API level is a project choice (not NCVET-mandated); confirm in DECISIONS.md.
+Rules:
+- Offline first: login/logout, attendance, evidence capture queue locally and sync later with original capture timestamps.
+- Every evidence item embeds date, time, GPS. Block capture if location permission is denied.
+- Candidate identity verification and equipment checklist per batch.
+- Use only endpoints in API_CONTRACT.md under `/assessor/*` and `/evidence/*`.
+- Geo-tag + date + time on login/logout for assessors, and the same tracking for students; must work offline (TR s9, s26).
+- Do not build features beyond TR s26 and FR section E and label them NCVET-mandated; the guidelines give no full mobile spec.

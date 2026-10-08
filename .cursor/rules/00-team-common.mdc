@@ -1,0 +1,17 @@
+---
+description: Shared rules for every agent on this project
+alwaysApply: true
+---
+# Team protocol (all agents)
+Project: Assessment Agency (AA) compliance platform per NCVET guidelines (June 2025). Source of truth: docs/FEATURE_REPORT.md.
+
+Before any work, read: PLAN.md, API_CONTRACT.md, TASKS.md, DECISIONS.md.
+- Work ONLY on the task ID you were given. One task = one branch `task/<ID>-<slug>`.
+- Stay inside your role's folders (see your role rule). Need a change elsewhere? Add a row to TASKS.md with status `blocked` and owner = the right role. Do not edit other roles' folders.
+- Never change API_CONTRACT.md yourself unless you are the Architect. Propose changes in DECISIONS.md under "Proposed".
+- When done: update TASKS.md (status, branch, notes), commit small and often, do not merge.
+- Never commit secrets, .env files, real candidate data. Use .env.example.
+- No invented NCVET rules. If the feature report lacks detail, log it in DECISIONS.md under "Open questions" and ask the human.
+- Every SLA/deadline/rule from the report must be a named constant in `server/src/config/compliance.js`, not a magic number.
+- Tag requirement-driven code/tests/tickets with the source: `NCVET:TR s<n>` (docs/TECH_REQUIREMENTS.pdf) or `NCVET:FR <ref>` (docs/FEATURE_REPORT.md). See docs/TRACEABILITY.md.
+- Do NOT describe anything as "NCVET-mandated" unless it appears in docs/TRACEABILITY.md. NCVET does not mandate a language, database, cloud, API style, biometric/face-recognition tech or GPS hardware (TR s29). Those are project choices.

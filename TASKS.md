@@ -1,0 +1,73 @@
+# TASKS
+Status: todo | in_progress | review | done | blocked
+Branch format: task/<ID>-<slug>. Agents update only their own rows.
+
+## Phase 0: Foundation
+| ID | Task | Owner | Depends | Status | Acceptance |
+|---|---|---|---|---|---|
+| A-01 | Full Mongo schema, indexes, enums, permission matrix; expand API_CONTRACT for Phase 1 | architect | - | todo | Schema doc in docs/SCHEMA.md; contract has request/response examples |
+| D-01 | Monorepo scaffold, lint, env examples, CI | backend | A-01 | todo | `npm test` runs in CI |
+
+## Phase 1: Batch workflow and assessor
+| ID | Task | Owner | Depends | Status | Acceptance |
+|---|---|---|---|---|---|
+| B-01 | Auth, roles, audit log middleware | backend | D-01 | todo | Login works; every write logged |
+| B-02 | compliance.js constants + working-day calculator | backend | D-01 | todo | Unit tests incl. holidays config |
+| B-03 | Batch CRUD + status machine + SLA timers | backend | B-01,B-02 | todo | Illegal transitions return 409 |
+| B-04 | Assessor registry + ToA validity + assignment rules | backend | B-03 | todo | Clash, max-4-AAs, ratio rules tested |
+| B-05 | Result bulk upload + validation + change log | backend | B-03 | todo | Pass marks per theory/practical/viva |
+| B-06 | Email AB on assessor login; proctor + student geo login events (offline-safe) | backend | B-03 | todo | NCVET:TR s9,s26 |
+| F-01 | Web shell, login, role routing | frontend | B-01 | todo | |
+| F-02 | Batch list/detail with SLA countdown, accept/reject/assign | frontend | B-03,B-04 | todo | |
+| F-03 | Assessor registry screens | frontend | B-04 | todo | |
+| M-01 | Mobile login, offline queue, geo login/logout | mobile | B-01 | todo | Works in airplane mode, syncs later |
+| M-02 | Attendance, ID check, equipment checklist | mobile | M-01 | todo | |
+| M-03 | Student tracking + proctor geo-tag flows | mobile | M-01,B-06 | todo | Offline works |
+| Q-01 | Contract + rule tests for B-01..B-05 | qa | B-05 | todo | |
+| R-01 | Review each Phase 1 branch before merge | reviewer | each | todo | |
+
+## Phase 2: Question bank, engine, evidence (NCVET:TR s4-s5, s13-s17)
+| ID | Task | Owner | Depends | Status | Acceptance |
+|---|---|---|---|---|---|
+| Q-01 | Question bank model + CRUD + import (xlsx), NOS/PC mapping, MCQ/short answer/scenario/viva/practical, language field | backend | B-03 | todo | Bank coverage endpoint flags PCs under 5 Q average |
+| Q-02 | Auto difficulty classification (easy/medium/tough) from attempt data + per-question usage report | backend | Q-01,E-03 | todo | TR s13 |
+| Q-03 | Flag mostly-wrong questions + notify AB/TP | backend | Q-02 | todo | |
+| Q-04 | Review cycles with AB + periodic upgrade reminders | backend | Q-01 | todo | |
+| Q-05 | Per-sector coverage check (>=5% of NQR qualifications), sector config + NQR CSV import | backend | Q-01 | todo | One row per sector applied for |
+| E-01 | Auto test generator: qualification>NOS>PC, random selection | backend | Q-01 | todo | Seeded randomness for audit |
+| E-02 | Difficulty + Bloom weight config per assessment (set with AB) | backend | E-01 | todo | Weights stored, versioned |
+| E-03 | Attempt engine: deliver, answer, submit, score | backend | E-01 | todo | |
+| E-04 | Content refresh mechanism (retire/replace questions, version tests) | backend | E-03 | todo | |
+| E-05 | Offline assessment package: download, answer offline, sync | mobile | E-03 | todo | TR s12 |
+| E-06 | Simulator integration hook for blended mode (interface only) | backend | E-03 | todo | Only if required by qualification |
+| V-01 | Evidence vault: upload with sha256, GPS, timestamp, index by candidate/batch/date/location | backend | B-03 | todo | |
+| V-02 | Evidence browser UI | frontend | V-01 | todo | |
+| F-04 | Question bank screens, coverage, usage report | frontend | Q-01..Q-03 | todo | |
+| F-05 | Test builder + attempt UI (candidate) | frontend | E-03 | todo | |
+| Q-90 | Tests for Phase 2 rules | qa | Q-01..E-05 | todo | |
+| R-02 | Review Phase 2 branches | reviewer | each | todo | |
+
+## Phase 3: Proctoring, analytics, ERF, website, PwD, security
+| ID | Task | Owner | Depends | Status | Acceptance |
+|---|---|---|---|---|---|
+| P-01 | Proctoring session model, audio+video recording storage | backend | V-01 | todo | TR s6 |
+| P-02 | Live feed, random photo capture at intervals | backend+frontend | P-01 | todo | TR s8; interval configurable |
+| P-03 | Candidate verification (photo check, mismatch flag) behind a replaceable interface | backend | P-01 | todo | Vendor choice open, DECISIONS Q5 |
+| P-05 | Camera-blocked/tamper detection (black/covered/frozen feed) | backend | P-01 | todo | Sustained for N seconds raises high flag; thresholds configurable |
+| P-06 | Second-person and background-person detection; second-voice detection | backend | P-01 | todo | Flags have media ref; tested with sample clips |
+| P-07 | Device/object detection (phone, earphone, book, extra screen) | backend | P-01 | todo | Model behind replaceable interface |
+| P-08 | Human review queue + decisions (dismiss/warn/invalidate) + candidate warnings | backend+frontend | P-04 | todo | No auto-invalidation; all decisions audit logged |
+| P-04 | Malpractice detection hooks, record + flag, proctor report | backend | P-01 | todo | TR s7 |
+| N-01 | Analytics API + graphs: assessor, TP, job role, state, date range | backend+frontend | B-05 | todo | TR s10 |
+| C-01 | ERF score tracker (+4/-1/-2/-4, max 400, grades) and risk plan | backend | B-05 | todo | Full sub-parameters need Annexure IX |
+| C-02 | DEP export | backend | C-01 | todo | Blocked until format known |
+| W-01 | Public site data model + admin CRUD (team, organogram, assessors, proctors, sample papers, industry linkages, grievance, POSH, office docs) | backend | B-04 | todo | TR s22 |
+| W-02 | Public website frontend + monthly calendar | frontend | W-01 | todo | |
+| X-01 | Accommodations model + accessible question variants | backend | Q-01 | todo | TR s23 |
+| X-02 | Accessible result publishing (formats) | backend+frontend | B-05 | todo | |
+| X-03 | Accessibility pass on web UI (keyboard, screen reader, contrast) | frontend | F-* | todo | Also satisfies TR s21 usability |
+| S-03 | Learner repository export interface: versioned export + scoped read-only credentials, all access audit-logged | backend | B-05,S-01 | todo | TR s25; export schema documented in docs/ |
+| S-01 | Encryption at rest, access logging, retention, DPDP checklist | backend | B-01 | todo | TR s18-s20 |
+| S-02 | Security audit tracker + content-theft controls (watermarking, no bulk export, signed URLs) | backend | S-01 | todo | "Zero content theft" is a goal; track audits |
+| Q-91 | Phase 3 tests | qa | all P,N,C,W,X,S | todo | |
+| R-03 | Review Phase 3 branches | reviewer | each | todo | |

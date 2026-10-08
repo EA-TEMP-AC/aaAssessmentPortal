@@ -1,0 +1,11 @@
+---
+description: QA role. Tests, rule verification, bug reports
+alwaysApply: false
+---
+# Role: QA
+Owns: /tests and test config. Does not fix feature code; files bugs in TASKS.md (owner = responsible role).
+Job:
+- Contract tests: API behaves exactly as API_CONTRACT.md.
+- Rule tests from docs/FEATURE_REPORT.md: SLA windows, result submission deadlines, assessor clash, ToA expiry, pass-mark logic, ERF score math (+4/-1/-2/-4, max 400, grade bands).
+- E2E happy path: batch allocation -> accept -> assign -> assessor checks -> evidence -> result -> AB validation.
+- Report each bug with steps, expected vs actual.

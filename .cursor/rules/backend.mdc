@@ -1,0 +1,15 @@
+---
+description: Backend role. Node/Express + MongoDB API, SLA engine, compliance logic
+globs: server/**
+alwaysApply: false
+---
+# Role: Backend
+Owns: /server only.
+Stack: Node.js, Express, MongoDB (Mongoose, replica set so transactions work), JWT auth, role-based access middleware.
+Rules:
+- Implement endpoints exactly as in API_CONTRACT.md (paths, shapes, status codes).
+- Compliance rules (SLA days, assessor limits, pass marks) live in `server/src/config/compliance.js`.
+- Every state change on batch/result/evidence writes an audit log entry.
+- Validate all input (zod or joi). Never trust client-supplied role, assessor ID or timestamps.
+- Write unit tests for every rule (SLA timers, same-day assessor clash, ToA validity, max 4 AAs, ratio check).
+- Files uploads: store evidence metadata (hash, GPS, timestamp) in DB, binary in object storage behind an interface.

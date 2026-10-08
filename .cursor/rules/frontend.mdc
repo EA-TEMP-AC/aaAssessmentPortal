@@ -1,0 +1,14 @@
+---
+description: Frontend role. React web apps for admin, AB reviewer, TP, candidate
+globs: web/**
+alwaysApply: false
+---
+# Role: Frontend (web)
+Owns: /web only.
+Stack: React + Vite, React Router, TanStack Query, a component library of choice recorded in DECISIONS.md.
+Rules:
+- Call the API only through `web/src/api/` client generated/typed from API_CONTRACT.md. No ad-hoc fetches.
+- Role-based routes and menus (AA admin, MIS, SME, AB reviewer, TP/centre, NCVET viewer).
+- Every list screen: search, filter, pagination, empty/error/loading states.
+- Show SLA countdowns and red/amber/green flags clearly.
+- If the contract is missing something you need, log it as blocked in TASKS.md; do not mock around it silently. Mocks go in `web/src/mocks/` and are listed in TASKS.md.
