@@ -5,25 +5,31 @@ Branch format: task/<ID>-<slug>. Agents update only their own rows.
 ## Phase 0: Foundation
 | ID | Task | Owner | Depends | Status | Acceptance |
 |---|---|---|---|---|---|
-| A-01 | Full Mongo schema, indexes, enums, permission matrix; expand API_CONTRACT for Phase 1 | architect | - | todo | Schema doc in docs/SCHEMA.md; contract has request/response examples |
+| A-01 | Full Mongo schema, indexes, enums, permission matrix; expand API_CONTRACT for Phase 1 | architect | - | review | Schema + Phase 1 contract examples. Branch: `task/A-01-schema-contract`. Review pass 3 applied (soft SLA, learners, reassign/cancel, result rules, TASKS split). |
 | D-01 | Monorepo scaffold, lint, env examples, CI | backend | A-01 | todo | `npm test` runs in CI |
 
 ## Phase 1: Batch workflow and assessor
 | ID | Task | Owner | Depends | Status | Acceptance |
 |---|---|---|---|---|---|
-| B-01 | Auth, roles, audit log middleware | backend | D-01 | todo | Login works; every write logged |
-| B-02 | compliance.js constants + working-day calculator | backend | D-01 | todo | Unit tests incl. holidays config |
-| B-03 | Batch CRUD + status machine + SLA timers | backend | B-01,B-02 | todo | Illegal transitions return 409 |
-| B-04 | Assessor registry + ToA validity + assignment rules | backend | B-03 | todo | Clash, max-4-AAs, ratio rules tested |
-| B-05 | Result bulk upload + validation + change log | backend | B-03 | todo | Pass marks per theory/practical/viva |
-| B-06 | Email AB on assessor login; proctor + student geo login events (offline-safe) | backend | B-03 | todo | NCVET:TR s9,s26 |
-| F-01 | Web shell, login, role routing | frontend | B-01 | todo | |
-| F-02 | Batch list/detail with SLA countdown, accept/reject/assign | frontend | B-03,B-04 | todo | |
-| F-03 | Assessor registry screens | frontend | B-04 | todo | |
-| M-01 | Mobile login, offline queue, geo login/logout | mobile | B-01 | todo | Works in airplane mode, syncs later |
+| B-01 | Auth (login/refresh/logout), roles, mustChangePassword, login rate limits, audit middleware (redact secrets) | backend | D-01 | todo | Login/refresh works; every write logged; passwordHash never in audit |
+| B-02 | compliance.js constants + working-day calculator + nightly sla.breached job | backend | D-01 | todo | Unit tests incl. holidays; §2.1 counting; non-retroactive holiday edits |
+| B-03 | Batch CRUD + status machine (incl. cancelled) + soft SLA lateReason + CAS | backend | B-01,B-02 | todo | Illegal transitions 409; late without reason → SLA_*; with reason → breach+audit |
+| B-04 | Assessor/proctor registry + ToA + assign/reassign + assessorDayLocks txn | backend | B-03 | todo | Clash/max-AAs/ratio/override tested; reassign releases/takes locks |
+| B-05 | Results PUT/submit + server outcome + change log + RESULT_INCOMPLETE | backend | B-03,B-07 | todo | PUT only assessment_completed+draft; Absent from attendance; passMarkUnit |
+| B-06 | Login-events (assessor/proctor/student) offline-safe; enqueue AB email; **emailQueue worker + retries** | backend | B-03,B-08 | todo | NCVET:TR s9,s26; email failure ≠ login failure; capturedAt in mail |
+| B-07 | Master data APIs: awardingBodies, TP, centres, qualifications, learners; candidates POST/GET/PATCH/CSV | backend | B-01 | todo | CSV import links learners; deactivate candidate |
+| B-08 | Users CRUD + password reset (mustChangePassword); GET batch login-events/attendance/checklist | backend | B-01 | todo | Contract examples pass |
+| B-09 | Reassessment endpoint + cancel endpoint (lock release) | backend | B-03,B-04,B-05 | todo | REASSESS_NOT_ELIGIBLE; window from first assessment; inherit fields |
+| F-01 | Web shell, login, mustChangePassword gate, role routing | frontend | B-01 | todo | |
+| F-02 | Batch list/detail: SLA countdown, accept/reject/assign/reassign/cancel, lateReason UX | frontend | B-03,B-04 | todo | |
+| F-03 | Assessor/proctor registry screens | frontend | B-04 | todo | |
+| F-06 | Master data screens: AB, TP, centres, qualifications, learners | frontend | B-07 | todo | |
+| F-07 | Result entry UI (NOS marks) + incompleteness warnings | frontend | B-05 | todo | |
+| F-08 | AB validate/publish (+ change reason) screens | frontend | B-05 | todo | Scoped to abId |
+| M-01 | Mobile login, offline queue, geo login/logout, lateSync | mobile | B-01 | todo | Airplane mode; sync later |
 | M-02 | Attendance, ID check, equipment checklist | mobile | M-01 | todo | |
 | M-03 | Student tracking + proctor geo-tag flows | mobile | M-01,B-06 | todo | Offline works |
-| Q-01 | Contract + rule tests for B-01..B-05 | qa | B-05 | todo | |
+| T-01 | Contract + rule tests for Phase 1 backend (B-01..B-09) | qa | B-05,B-09 | todo | Soft SLA, locks, reassessment, email queue |
 | R-01 | Review each Phase 1 branch before merge | reviewer | each | todo | |
 
 ## Phase 2: Question bank, engine, evidence (NCVET:TR s4-s5, s13-s17)
@@ -44,7 +50,7 @@ Branch format: task/<ID>-<slug>. Agents update only their own rows.
 | V-02 | Evidence browser UI | frontend | V-01 | todo | |
 | F-04 | Question bank screens, coverage, usage report | frontend | Q-01..Q-03 | todo | |
 | F-05 | Test builder + attempt UI (candidate) | frontend | E-03 | todo | |
-| Q-90 | Tests for Phase 2 rules | qa | Q-01..E-05 | todo | |
+| T-02 | Tests for Phase 2 rules | qa | Q-01..E-05 | todo | |
 | R-02 | Review Phase 2 branches | reviewer | each | todo | |
 
 ## Phase 3: Proctoring, analytics, ERF, website, PwD, security
@@ -69,5 +75,5 @@ Branch format: task/<ID>-<slug>. Agents update only their own rows.
 | S-03 | Learner repository export interface: versioned export + scoped read-only credentials, all access audit-logged | backend | B-05,S-01 | todo | TR s25; export schema documented in docs/ |
 | S-01 | Encryption at rest, access logging, retention, DPDP checklist | backend | B-01 | todo | TR s18-s20 |
 | S-02 | Security audit tracker + content-theft controls (watermarking, no bulk export, signed URLs) | backend | S-01 | todo | "Zero content theft" is a goal; track audits |
-| Q-91 | Phase 3 tests | qa | all P,N,C,W,X,S | todo | |
+| T-03 | Phase 3 tests | qa | all P,N,C,W,X,S | todo | |
 | R-03 | Review Phase 3 branches | reviewer | each | todo | |

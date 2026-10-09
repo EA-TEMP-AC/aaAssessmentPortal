@@ -1,106 +1,435 @@
-# API CONTRACT (owned by Architect). v0.1 draft
+# API CONTRACT (owned by Architect). v0.4
 
-Base: `/api/v1`. JSON. Auth: `Authorization: Bearer <jwt>`. Errors: `{ "error": { "code": "STRING", "message": "..." } }`.
-Roles: aa_admin, mis, sme, assessor, proctor, candidate, tp, ab_reviewer, ncvet_viewer.
+Base: `/api/v1`. JSON (unless multipart/CSV). Auth: `Authorization: Bearer <accessToken>`.
+
+Errors: `{ "error": { "code": "STRING", "message": "...", "details?: object" } }`.
+
+Roles: `aa_admin`, `mis`, `sme`, `assessor`, `proctor`, `candidate`, `tp`, `ab_reviewer`, `ncvet_viewer`.
+
+Schema / scopes / working-day counting / soft SLA: [docs/SCHEMA.md](docs/SCHEMA.md).
+
+**Dates:** `assessmentStartDate` / `assessmentEndDate` as `YYYY-MM-DD` (IST). **Clash:** range overlap + different centre; `assessorDayLocks` txn. **CAS:** `statusVersion`.
+
+Phase 1 endpoints have examples. Phase 2+ stubs without full examples.
+
+---
+
+## Error catalog (Phase 1)
+
+| Code | HTTP | When |
+|---|---|---|
+| `UNAUTHORIZED` | 401 | Missing/invalid access token |
+| `FORBIDDEN` | 403 | Role or row-scope denied |
+| `NOT_FOUND` | 404 | Unknown id |
+| `VALIDATION_ERROR` | 400 | Body/query invalid |
+| `RATE_LIMITED` | 429 | Login/API rate limit (`LOGIN_RATE_LIMIT_*`) |
+| `DUPLICATE_RESOURCE` | 409 | Unique constraint |
+| `INVALID_TRANSITION` | 409 | Illegal/raced status change |
+| `SLA_ACCEPT_EXPIRED` | 409 | Late accept/reject **without** `lateReason` |
+| `SLA_ASSIGN_EXPIRED` | 409 | Late assign/reassign **without** `lateReason` |
+| `SLA_RESULT_EXPIRED` | 409 | Late submit-result **without** `lateReason` |
+| `RULE_ASSESSOR_CLASH` | 409 | Overlapping range, different centre |
+| `RULE_TOA_INVALID` | 409 | Missing/expired ToA |
+| `RULE_MAX_AAS` | 409 | >4 AAs |
+| `RULE_RATIO` | 409 | Over ratio without override |
+| `RESULT_PASS_MARK_INVALID` | 400 | Marks vs max/pass rules |
+| `RESULT_OUTCOME_MISMATCH` | 400 | Client `outcome` ≠ server |
+| `RESULT_INCOMPLETE` | 409 | Submit missing active roster rows |
+| `EVIDENCE_REQUIRED` | 409 | Flag true (Phase 2) |
+| `REASSESS_NOT_ELIGIBLE` | 409 | Reassessment rules failed |
+| `CONFLICT_IDEMPOTENT` | 409 | Same `clientEventId`, different payload |
+
+**Soft SLA:** `aa_admin` may proceed after due with required `lateReason`; server records `sla.breached` + audit. Codes above only when late and reason missing.
+
+---
 
 ## Auth
-- POST /auth/login {email, password} -> {token, user{id, role, name}}
-- POST /auth/logout
+
+### POST /auth/login
+
+Public. Rate limit: `LOGIN_RATE_LIMIT_MAX` / `LOGIN_RATE_LIMIT_WINDOW_MS` per IP+email → `429 RATE_LIMITED`.
+
+Request:
+```json
+{
+  "email": "admin@aa.example",
+  "password": "********",
+  "device": { "deviceId": "dev-9f3a", "platform": "web", "appVersion": "1.0.0" }
+}
+```
+
+Response `200`:
+```json
+{
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "refreshToken": "rt_8f3c...",
+  "expiresInMs": 900000,
+  "offlineSessionMaxMs": 259200000,
+  "user": {
+    "id": "66f000000000000000000001",
+    "role": "aa_admin",
+    "name": "AA Admin",
+    "mustChangePassword": false
+  }
+}
+```
+
+### POST /auth/refresh
+
+Request: `{ "refreshToken": "rt_8f3c...", "device": { "deviceId": "dev-9f3a", "platform": "android", "appVersion": "1.0.0" } }`  
+Response `200`: new tokens. `401` if revoked/expired/device mismatch.
+
+### POST /auth/logout
+
+Optional `{ "refreshToken": "..." }`. `204`.
+
+---
+
+## Users
+
+### POST /users
+
+Roles: `aa_admin` | `mis` (no create `aa_admin` for mis).
+
+Request:
+```json
+{
+  "email": "learner1@example.com",
+  "name": "Asha Devi",
+  "role": "candidate",
+  "password": "Temporary-Pass-1",
+  "linkedProfileId": "66f0000000000000000000L1"
+}
+```
+
+Admin-set password → `mustChangePassword: true`. Response `201` without `passwordHash`.
+
+### GET /users, GET /users/:id, PATCH /users/:id
+
+### POST /users/:id/password-reset
+
+Admin set `{ "newPassword": "********" }` → `mustChangePassword: true`, `204`. Or `{ "sendEmail": true }` → `202` queued. Rate-limited.
+
+---
+
+## Learners
+
+`POST /learners`, `GET /learners`, `GET /learners/:id`, `PATCH /learners/:id`
+
+Roles: write `aa_admin` | `mis`; read scoped roles as needed.
+
+Request: `{ "name": "Asha Devi", "externalRef": "TP-REG-10021", "active": true }`
+
+---
+
+## Master data
+
+### Awarding bodies / training partners / centres / qualifications
+
+CRUD as v0.3. Qualification create example:
+```json
+{
+  "code": "Q-ELEC-L4",
+  "name": "Electrician L4",
+  "sector": "manufacturing",
+  "passCriteriaMode": "nos_wise",
+  "passMarkUnit": "percent",
+  "passMarks": { "theory": 50, "practical": 50, "viva": 50 },
+  "maxMarks": null,
+  "nos": [
+    {
+      "nosId": "NOS-01",
+      "code": "N01",
+      "name": "Safety",
+      "maxMarks": { "theory": null, "practical": null, "viva": null },
+      "pcs": [{ "pcId": "PC-01", "code": "P1", "name": "PPE" }]
+    }
+  ]
+}
+```
+
+When `passMarkUnit: "absolute"`, supply non-null `maxMarks` (and/or per-NOS `maxMarks`).
+
+---
 
 ## Batches
-- POST /batches (ab_reviewer|aa_admin) {abId, qualificationId, type:"STT"|"LTT", mode:"online"|"offline"|"blended", assessmentDate, tpId, centreId, candidateCount} -> Batch
-- GET /batches?status=&from=&to=&tpId= -> {items[], page, total}
-- GET /batches/:id -> Batch (includes `sla` {acceptDueAt, assignDueAt, resultDueAt, breached[]})
-- POST /batches/:id/accept (aa_admin)
-- POST /batches/:id/reject (aa_admin) {reason}
-- POST /batches/:id/assign (aa_admin) {assessorId, proctorId?} -> 409 RULE_ASSESSOR_CLASH | RULE_TOA_INVALID | RULE_MAX_AAS | RULE_RATIO
-- POST /batches/:id/submit-result (aa_admin) {resultSetId}
-- POST /batches/:id/validate (ab_reviewer) {changes[]?}
+
+### POST /batches
+
+Roles: `ab_reviewer` | `aa_admin`.
+
+Request:
+```json
+{
+  "abId": "66f0000000000000000000ab",
+  "qualificationId": "66f0000000000000000000q1",
+  "type": "STT",
+  "mode": "offline",
+  "assessmentStartDate": "2026-11-20",
+  "assessmentEndDate": "2026-11-21",
+  "tpId": "66f0000000000000000000tp",
+  "centreId": "66f0000000000000000000c1",
+  "candidateCount": 24
+}
+```
+
+Response `201` (note corrected `assignDueAt`):
+```json
+{
+  "id": "66f0000000000000000000b1",
+  "abId": "66f0000000000000000000ab",
+  "qualificationId": "66f0000000000000000000q1",
+  "type": "STT",
+  "mode": "offline",
+  "assessmentStartDate": "2026-11-20",
+  "assessmentEndDate": "2026-11-21",
+  "tpId": "66f0000000000000000000tp",
+  "centreId": "66f0000000000000000000c1",
+  "candidateCount": 24,
+  "sector": "manufacturing",
+  "status": "allocated",
+  "statusVersion": 1,
+  "assessorId": null,
+  "proctorId": null,
+  "resultId": null,
+  "isReassessment": false,
+  "reassessmentOf": null,
+  "firstAssessmentBatchId": "66f0000000000000000000b1",
+  "sla": {
+    "acceptDueAt": "2026-10-12T18:29:59.999Z",
+    "assignDueAt": "2026-11-11T18:29:59.999Z",
+    "resultDueAt": null,
+    "breached": []
+  },
+  "allocatedAt": "2026-10-08T08:00:00.000Z",
+  "ratioOverride": null
+}
+```
+
+`GET` responses recompute `sla.breached` for open steps (plus persisted late-action keys). Nightly job refreshes stored breach flags.
+
+### GET /batches?status=&from=&to=&tpId=&page=&pageSize=
+
+### GET /batches/:id
+
+### POST /batches/:id/accept
+
+Roles: `aa_admin`.
+
+Request: `{ "lateReason": "AB confirmation delayed" }` — `lateReason` **required if** now > `acceptDueAt`; omit if on time.
+
+Response `200`: `accepted`; if late → `sla.breached` includes `accept`, audit logged.
+
+Errors: `SLA_ACCEPT_EXPIRED` (late, no reason), `INVALID_TRANSITION`.
+
+### POST /batches/:id/reject
+
+`{ "reason": "...", "lateReason?: "..." }`. Terminal.
+
+### POST /batches/:id/assign
+
+Roles: `aa_admin`. Transaction + `assessorDayLocks`.
+
+```json
+{
+  "assessorId": "66f0000000000000000000a1",
+  "proctorId": "66f0000000000000000000p1",
+  "ratioOverrideReason": "AB approved larger cohort",
+  "lateReason": "Assessor travel clearance delayed"
+}
+```
+
+Errors: `RULE_*` | `SLA_ASSIGN_EXPIRED` | `INVALID_TRANSITION`.
+
+### POST /batches/:id/reassign
+
+Roles: `aa_admin`. From `assessor_assigned` (or `in_progress` if product allows — Phase 1: `assessor_assigned` only unless B-03 extends). Transaction: release old locks, take new locks.
+
+```json
+{
+  "assessorId": "66f0000000000000000000a2",
+  "proctorId": null,
+  "lateReason": "Original assessor unavailable"
+}
+```
+
+### POST /batches/:id/cancel
+
+Roles: `aa_admin`. From pre-result statuses (see SCHEMA). Releases locks.
+
+```json
+{ "reason": "Centre flooded; AB agreed to cancel" }
+```
+
+Response `200`: `status: "cancelled"`, `cancelledAt` set.
+
+### POST /batches/:id/submit-result
+
+Roles: `aa_admin`. **No body** except optional soft-SLA:
+
+```json
+{ "lateReason": "Marks verification with TP took extra day" }
+```
+
+Requires `results.status=draft` with a row per **active** candidate → else `RESULT_INCOMPLETE`. Batch → `result_submitted`; result → `submitted`.
+
+### POST /batches/:id/validate / publish / dispute / resolve-dispute
+
+As v0.3 (AB validate/publish; pre-publication dispute).
+
+### POST /batches/:id/reassessments
+
+Roles: `aa_admin` (initiator open Q22). New batch; inherits `abId`, `qualificationId`, `type`, `mode`, `tpId`, `sector` from parent; sets `firstAssessmentBatchId` from root; window from **first** assessment end.
+
+```json
+{
+  "assessmentStartDate": "2027-02-01",
+  "assessmentEndDate": "2027-02-01",
+  "centreId": "66f0000000000000000000c1",
+  "learnerIds": ["66f0000000000000000000L2"]
+}
+```
+
+Response `201` new Batch. Errors: `REASSESS_NOT_ELIGIBLE`.
+
+### Batch child reads
+
+Roles: scoped batch readers.
+
+- `GET /batches/:id/login-events?from=&to=&actorType=`
+- `GET /batches/:id/attendance`
+- `GET /batches/:id/checklist` — latest or list by `capturedAt`
+
+---
+
+## Batch candidates
+
+### POST /batches/:id/candidates
+
+```json
+{
+  "learnerId": "66f0000000000000000000L1",
+  "accommodations": []
+}
+```
+
+Creates roster row (name/externalRef from learner). Or `{ "name", "externalRef" }` to upsert learner then link.
+
+### GET /batches/:id/candidates
+
+### PATCH /batches/:id/candidates/:candidateId
+
+`{ "active": false }` deactivate; or update accommodations. Soft-delete only (no hard delete in Phase 1).
+
+### POST /batches/:id/candidates/import
+
+CSV: `name,externalRef` (creates/links learners). Response `{ created, skipped, errors[] }`.
+
+---
 
 ## Assessors / Proctors
-- POST /assessors, GET /assessors, GET /assessors/:id, PATCH /assessors/:id
-  Assessor: {name, phone, email, languages[], qualifications[], toa:{certNo, issuedOn, expiresOn}, otherAaCount}
-- GET /assessors/available?date=&languages=&batchId=
+
+Unchanged CRUD + `GET /assessors/available?from=&to=&languages=&batchId=`.
+
+---
 
 ## Assessor field app
-- POST /assessor/login-event {batchId, lat, lng, capturedAt, type:"login"|"logout"} (offline-queue safe). Side effect on login: email to the batch's AB (TR s9)
-- POST /proctor/login-event same shape for proctors (TR s9)
-- POST /student/login-event {batchId, candidateId, lat, lng, capturedAt, type} (TR s26 student tracking, offline-queue safe)
-- POST /assessor/batches/:id/attendance {candidateId, present, idVerified, capturedAt}
-- POST /assessor/batches/:id/checklist {items[{key, ok, note}]}
 
-## Evidence
-- POST /evidence (multipart) {batchId, candidateId?, kind:"theory"|"practical"|"viva", lat, lng, capturedAt, file} -> {id, sha256}
-- GET /evidence?batchId=&candidateId=&kind=&from=&to=
+### POST /assessor/login-event
 
-## Questions / Tests
-- POST /questions, GET /questions, PATCH /questions/:id (nosId, pcId, difficulty, bloom, type, language, options[], answer)
-- POST /questions/import (xlsx)
-- GET /question-bank/coverage?qualificationId= -> per NOS/PC counts, flags PCs with fewer than 5
-- POST /tests {qualificationId, rules{difficultyMix, bloomWeights}} -> generated Test
-- POST /attempts/:id/answers, POST /attempts/:id/submit
+Validation: assigned assessor; status ≥ `assessor_assigned` (not rejected/cancelled); **`capturedAt`** IST date in assessment window; flags `clockSkewFlag`, `lateSync`.
+
+Request/response as v0.3 plus:
+```json
+{
+  "clockSkewFlag": false,
+  "lateSync": true,
+  "abEmailQueuedAt": "2026-11-22T10:00:00.000Z",
+  "abEmailSentAt": null,
+  "replayed": false
+}
+```
+
+AB email async to `notificationEmails` with `capturedAt` in body; failures never fail this call.
+
+### POST /proctor/login-event / POST /student/login-event
+
+Same validation pattern (proctor assigned / student on roster).
+
+### POST /assessor/batches/:id/attendance | checklist
+
+Unchanged write shapes.
+
+---
 
 ## Results
-- GET /batches/:id/results
-- PUT /batches/:id/results (bulk) {rows[{candidateId, nos[{nosId, theory, practical, viva}]}]}
-- GET /results/:id/change-log
 
-## Compliance
-- GET /compliance/dashboard
-- GET /compliance/erf -> {score, max:400, grade, macroScores[]}
-- POST /compliance/risk-plan
+### PUT /batches/:id/results
 
-## Grievance
-- POST /grievances, GET /grievances, PATCH /grievances/:id
+Roles: `aa_admin`. **Only if** batch=`assessment_completed` and result=`draft` (or none yet → create draft).
+
+Request — omit `outcome`; do not send conflicting `absent`:
+```json
+{
+  "rows": [
+    {
+      "candidateId": "66f0000000000000000000k1",
+      "nos": [{ "nosId": "NOS-01", "theory": 70, "practical": 80, "viva": 75 }]
+    },
+    {
+      "candidateId": "66f0000000000000000000k2",
+      "nos": []
+    }
+  ]
+}
+```
+
+Server sets `outcome` from marks + **attendance** (`Absent` if `present=false`). Response includes computed outcomes, `status: "draft"`.
+
+Errors: `INVALID_TRANSITION`, `RESULT_PASS_MARK_INVALID`, `RESULT_OUTCOME_MISMATCH`, `VALIDATION_ERROR` (absent conflict).
+
+### GET /batches/:id/results
+
+Scoped; **candidate** sees own row only.
+
+### GET /results/:id/change-log
+
+`aa_admin` | `ab_reviewer` | `mis`.
+
+---
+
+## Working days / holidays
+
+### GET|PUT /admin/working-day-config
+
+Counting: SCHEMA §2.1. Example anchor **Tuesday 06 Oct 2026**, N=2 → due end of Thu 08 Oct IST.
+
+### GET|POST|DELETE /admin/holidays
+
+Example: `{ "date": "2026-10-02", "name": "Gandhi Jayanti", "region": null }`.
+
+All holiday mutations **audit-logged**. Do **not** recompute existing batch `sla.*DueAt` values.
+
+---
 
 ## Audit
-- GET /audit-logs?entity=&entityId=
 
+### GET /audit-logs?entity=&entityId=&from=&to=&page=
 
-## Analytics (TR s10)
-- GET /analytics/performance?groupBy=assessor|trainingPartner|jobRole|state&from=&to= -> {series[{key, label, passRate, avgScore, candidates, batches}]}
-  All five filters (assessor, TP, job role, state, date from/to) must be combinable; graphs rendered by web.
+- `aa_admin` | `mis`: all  
+- `ab_reviewer`: entities related to own `abId` batches  
+- `ncvet_viewer`: read-only all (monitoring)
 
-## Question analytics and review (TR s13, s15)
-- GET /questions/:id/usage -> {timesUsed, correctRate, classifiedDifficulty:"easy"|"medium"|"tough"}
-- GET /question-bank/usage-report?qualificationId= (ready-reference report)
-- GET /question-bank/flagged?qualificationId= (most candidates answered wrongly) ; POST /question-bank/flagged/:id/notify {to:["ab","tp"]}
-- POST /question-bank/review-cycles {qualificationId, abId, dueOn}, PATCH /question-bank/review-cycles/:id (periodic review with AB)
-- GET /question-bank/sector-coverage?sector= -> {qualificationsWithBank, totalInSector, percent, meetsFivePercent}  (>=5% of NQR qualifications in sector, at application)
-- Question difficulty enum for authors: low|medium|high; auto-classified: easy|medium|tough. Keep both fields.
+Secrets redacted. Append-only.
 
-## Proctoring (TR s6-s8, s11)
-- POST /proctoring/sessions {attemptId, mode:"live"|"auto", streamType:"video"|"image", ai:boolean}
-- POST /proctoring/sessions/:id/media (audio+video chunks or periodic photos)
-- POST /proctoring/sessions/:id/flags {type, severity:"low"|"medium"|"high", at, mediaRef}  (malpractice recorded + flagged)
-- GET /proctoring/sessions/:id/report
-- Alert types (project choice, not NCVET-mandated): camera_blocked (covered, black frame, lens obstructed, frozen feed), face_not_present, multiple_faces, person_in_background (someone standing/sitting nearby), face_mismatch, looking_away, object_detected (phone, earphone, book, second screen), voice_detected (second voice), voice_muted, screen_focus_lost, permission_revoked.
-- Severity defaults: high = multiple_faces, person_in_background, face_mismatch, camera_blocked(sustained), object_detected(phone); medium = face_not_present; low = looking_away, voice_muted, screen_focus_lost. Configurable per test.
-- Flags go to a human review queue: GET /proctoring/review-queue, POST /proctoring/flags/:id/decision {decision:"dismiss"|"warn"|"invalidate", note}. No automatic invalidation.
-- Candidate gets a visible warning on high flags (as in the demo UFM popup) and every flag keeps its media reference for audit/grievance.
+---
 
-## Registries and repositories (TR s25)
-- Assessor has `experienceYears` and `qualifications[]`; same fields for proctor. GET /proctors, POST /proctors.
-- GET /repository/learners?batchId=  (learner assessment data repository, role-restricted)
-- GET /repository/export?from=&to=&format=json|csv&version=1 (admin only, scoped, audit-logged; for handing data to an NCVET-proposed agency)
-- POST /admin/export-credentials {agency, scopes[], expiresOn} -> read-only API key for that agency; revocable
+## Compliance stubs
 
-## Public website data (TR s22) , no auth, read-only
-- Each site document has `visibility: "public"|"on_request"|"hidden"` (default on_request until DECISIONS Q9 is settled; redacted copies supported)
-- GET /public/team (operational team + organogram), /public/assessors, /public/proctors (name, qualifications, experience only; no contact data)
-- GET /public/sample-papers?qualificationId=, /public/industry-linkages, /public/grievance-info, /public/posh-info, /public/calendar (monthly assessment calendar)
-- Admin side: CRUD for each under /admin/site/*, plus /admin/site/documents for registered-office docs and premises proof (these two are stored/shown per TR s22 F,G; confirm with human whether they are public or only on request).
+`GET /compliance/dashboard`; ERF/risk-plan Phase 3.
 
-## Accessibility / PwD (TR s23)
-- Batch and candidate carry `accommodations[]` (e.g. extra time, screen reader, large print, scribe).
-- Question has `accessibleVariantOf` link for disability-specific content.
-- GET /results/:id/accessible?format=large-print|screen-reader-friendly|braille-ready (result publishing tool)
-- Proctor/assessor profile field `pwdTrained:boolean`.
+---
 
-## Data and security (TR s18-s20)
-- All learner PII and results encrypted at rest; access-logged; retention policy configurable. (DPDP Act 2023)
-- POST /admin/security-audits {scheduledOn, scope}, GET /admin/security-audits (track periodic info-security audits)
+## Phase 2+ stubs
 
-## Question bank sector config (multi-sector)
-- POST /admin/sectors {name, nqrQualificationCount, nqrImportedOn}, POST /admin/sectors/:id/nqr-import (CSV exported from nqr.gov.in)
-- GET /question-bank/sector-coverage now returns one row per configured sector.
+Evidence, questions/tests, proctoring, grievances, analytics, public site, accessibility, security, sectors — unchanged intent; see SCHEMA.
