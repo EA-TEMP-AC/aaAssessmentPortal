@@ -6,7 +6,7 @@ Branch format: task/<ID>-<slug>. Agents update only their own rows.
 | ID | Task | Owner | Depends | Status | Acceptance |
 |---|---|---|---|---|---|
 | A-01 | Full Mongo schema, indexes, enums, permission matrix; expand API_CONTRACT for Phase 1 | architect | - | review | Schema + Phase 1 contract examples. Branch: `task/A-01-schema-contract`. Review pass 3 applied (soft SLA, learners, reassign/cancel, result rules, TASKS split). |
-| D-01 | Monorepo scaffold, lint, env examples, CI | backend | A-01 | todo | `npm test` runs in CI |
+| D-01 | Monorepo scaffold, lint, env examples, CI | backend | A-01 | review | Workspaces server/web/mobile/tests; health GET /api/v1/health; docker-compose Mongo replica set; CI lint+test. Branch: `task/D-01-monorepo-scaffold` |
 
 ## Phase 1: Batch workflow and assessor
 | ID | Task | Owner | Depends | Status | Acceptance |

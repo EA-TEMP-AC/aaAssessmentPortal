@@ -1,0 +1,37 @@
+# Dependencies
+node_modules/
+
+# Environment / secrets
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Builds / output
+dist/
+build/
+coverage/
+.expo/
+web-build/
+*.tsbuildinfo
+
+# Logs / caches
+logs/
+*.log
+npm-debug.log*
+.eslintcache
+.cache/
+.vite/
+.turbo/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Test / temp
+tmp/
+temp/
+*.tmp

@@ -1,0 +1,16 @@
+{
+  "expo": {
+    "name": "AA Assessor",
+    "slug": "aa-assessor",
+    "version": "0.0.1",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "platforms": ["ios", "android"],
+    "android": {
+      "package": "com.aa.assessor"
+    },
+    "ios": {
+      "bundleIdentifier": "com.aa.assessor"
+    }
+  }
+}

@@ -1,5 +1,21 @@
 # AA Compliance App: agent team kit
 
+## Local MongoDB (replica set)
+
+Transactions (e.g. `assessorDayLocks`) need a replica set. From the repo root:
+
+```bash
+docker compose up -d
+```
+
+Wait until healthy (`docker compose ps` shows `aa-mongo` healthy). Then copy `server/.env.example` to `server/.env` and use:
+
+```text
+MONGO_URI=mongodb://127.0.0.1:27017/aa_portal?replicaSet=rs0&directConnection=true
+```
+
+Stop: `docker compose down`. Wipe data: `docker compose down -v`.
+
 ## How to run the team in Cursor
 1. Open this folder as a git repo (`git init && git add . && git commit -m "kit"`).
 2. Agent 1 (Plan mode), prompt:

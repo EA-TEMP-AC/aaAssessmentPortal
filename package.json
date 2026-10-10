@@ -1,0 +1,20 @@
+{
+  "name": "aa-assessment-portal",
+  "private": true,
+  "workspaces": [
+    "server",
+    "web",
+    "mobile",
+    "tests"
+  ],
+  "scripts": {
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "dev:server": "npm run dev -w server",
+    "dev:web": "npm run dev -w web",
+    "dev:mobile": "npm run start -w mobile"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "name": "@aa/tests",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "lint": "node -e \"console.log('tests: no lint yet'); process.exit(0)\"",
+    "test": "node -e \"console.log('tests: contract/e2e suites land in T-01+'); process.exit(0)\""
+  }
+}
