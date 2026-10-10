@@ -10,8 +10,8 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().positive().default(3000),
   MONGO_URI: z.string().min(1).optional(),
   JWT_ACCESS_SECRET: z.string().min(1).optional(),
-  /** bcrypt cost. Defaults to 10. Tests set 4. */
-  BCRYPT_COST: z.coerce.number().int().min(4).max(31).default(10),
+  /** bcrypt cost. Integer 4–15. Defaults to 10. Tests usually set 4. */
+  BCRYPT_COST: z.coerce.number().int().min(4).max(15).default(10),
   /** Dev seed only. When unset, the seed script uses its documented default. */
   SEED_PASSWORD: z.string().min(8).optional(),
 });

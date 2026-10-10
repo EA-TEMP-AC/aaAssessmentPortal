@@ -16,6 +16,10 @@ import { createUser, webDevice } from "./helpers/fixtures.js";
 
 const app = createApp();
 
+function serverRoot() {
+  return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+}
+
 async function login(email, password, device = webDevice) {
   return request(app).post("/api/v1/auth/login").send({ email, password, device });
 }
@@ -323,9 +327,8 @@ describe("production secrets", () => {
   });
 
   it("refuses to start in production when the access secret is too short", () => {
-    const serverRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
     const result = spawnSync(process.execPath, ["src/index.js"], {
-      cwd: serverRoot,
+      cwd: serverRoot(),
       encoding: "utf8",
       timeout: 15000,
       env: {
@@ -338,5 +341,53 @@ describe("production secrets", () => {
 
     expect(result.status).not.toBe(0);
     expect(`${result.stdout ?? ""}${result.stderr ?? ""}`).toMatch(/JWT_ACCESS_SECRET/);
+  });
+});
+
+describe("BCRYPT_COST", () => {
+  it("stores cost 5 in the bcrypt hash when NODE_ENV is test", () => {
+    const result = spawnSync(
+      process.execPath,
+      [
+        "--input-type=module",
+        "-e",
+        "import { hashPassword } from './src/lib/password.js'; process.stdout.write(await hashPassword('cost-check'));",
+      ],
+      {
+        cwd: serverRoot(),
+        encoding: "utf8",
+        timeout: 20000,
+        env: {
+          ...process.env,
+          NODE_ENV: "test",
+          BCRYPT_COST: "5",
+          JWT_ACCESS_SECRET: "test-access-secret-32-characters-xx",
+        },
+      },
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toMatch(/^\$2b\$05\$/);
+  });
+
+  it.each(["nope", "3", "16"])("fails config load for BCRYPT_COST %s", (cost) => {
+    const result = spawnSync(
+      process.execPath,
+      ["--input-type=module", "-e", "import './src/config/env.js';"],
+      {
+        cwd: serverRoot(),
+        encoding: "utf8",
+        timeout: 15000,
+        env: {
+          ...process.env,
+          NODE_ENV: "test",
+          BCRYPT_COST: cost,
+          JWT_ACCESS_SECRET: "test-access-secret-32-characters-xx",
+        },
+      },
+    );
+
+    expect(result.status).not.toBe(0);
+    expect(`${result.stdout ?? ""}${result.stderr ?? ""}`).toMatch(/BCRYPT_COST/);
   });
 });
