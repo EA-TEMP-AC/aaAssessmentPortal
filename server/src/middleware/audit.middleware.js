@@ -47,7 +47,7 @@ function auditEntryFromRequest(req) {
 
 /**
  * Writes one append-only auditLogs row for successful mutations.
- * Failed logins set req.audit.logOnFailure. Secrets are redacted.
+ * Failed auth sets req.audit.logOnFailure. Secrets are redacted.
  */
 export function auditMiddleware(req, res, next) {
   if (!MUTATING.has(req.method)) {

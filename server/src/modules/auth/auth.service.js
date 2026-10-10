@@ -34,6 +34,23 @@ function sessionBody(user, accessToken, refreshToken) {
   };
 }
 
+function refreshError(auditAction, existing, user) {
+  const actorId = user?._id ?? existing?.userId ?? null;
+  const err = new AppError(401, "UNAUTHORIZED", "Invalid refresh token");
+  err.auditAction = auditAction;
+  err.auditActorId = actorId;
+  err.auditActorRole = user?.role ?? null;
+  err.auditEntityId = actorId ? String(actorId) : undefined;
+  return err;
+}
+
+async function revokeActiveRefreshTokens(userId, deviceId, now) {
+  await RefreshToken.updateMany(
+    { userId, deviceId, revokedAt: null, expiresAt: { $gt: now } },
+    { $set: { revokedAt: now } },
+  );
+}
+
 async function issueRefreshToken(user, device) {
   const refreshToken = generateRefreshToken();
   const expiresAt = new Date(Date.now() + compliance.REFRESH_TOKEN_TTL_MS);
@@ -74,24 +91,41 @@ export async function refresh({ refreshToken, device }) {
   const existing = await RefreshToken.findOne({ tokenHash });
   const now = new Date();
 
-  if (!existing || existing.revokedAt || existing.expiresAt <= now) {
-    throw new AppError(401, "UNAUTHORIZED", "Invalid refresh token");
+  if (!existing) {
+    throw refreshError("auth.refresh_failed");
   }
+
+  // Expired and never revoked: plain 401. Do not revoke the rest of the device family.
+  if (!existing.revokedAt && existing.expiresAt <= now) {
+    throw refreshError("auth.refresh_failed", existing);
+  }
+
+  if (existing.revokedAt) {
+    await revokeActiveRefreshTokens(existing.userId, existing.deviceId, now);
+    const user = await User.findById(existing.userId);
+    throw refreshError("auth.refresh_reuse_detected", existing, user);
+  }
+
   if (existing.deviceId !== device.deviceId) {
-    throw new AppError(401, "UNAUTHORIZED", "Invalid refresh token");
+    throw refreshError("auth.refresh_failed", existing);
   }
 
   const user = await User.findById(existing.userId);
   if (!user || !user.active) {
-    throw new AppError(401, "UNAUTHORIZED", "Invalid refresh token");
+    throw refreshError("auth.refresh_failed", existing, user);
   }
 
   const claimed = await RefreshToken.findOneAndUpdate(
-    { _id: existing._id, revokedAt: null },
+    { _id: existing._id, revokedAt: null, expiresAt: { $gt: now } },
     { $set: { revokedAt: now, lastUsedAt: now } },
   );
   if (!claimed) {
-    throw new AppError(401, "UNAUTHORIZED", "Invalid refresh token");
+    const current = await RefreshToken.findById(existing._id);
+    if (current?.revokedAt) {
+      await revokeActiveRefreshTokens(current.userId, current.deviceId, now);
+      throw refreshError("auth.refresh_reuse_detected", current, user);
+    }
+    throw refreshError("auth.refresh_failed", current ?? existing, user);
   }
 
   const nextRefreshToken = await issueRefreshToken(user, device);

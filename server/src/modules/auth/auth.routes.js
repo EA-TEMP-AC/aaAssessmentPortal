@@ -23,7 +23,14 @@ authRouter.post(
       };
       await res.status(200).json(session);
     } catch (err) {
-      if (err instanceof AppError && err.code === "UNAUTHORIZED") {
+      if (err instanceof AppError && err.code === "RATE_LIMITED") {
+        req.audit = {
+          action: "auth.login_rate_limited",
+          entity: "user",
+          logOnFailure: true,
+          meta: { email: body.email.trim().toLowerCase() },
+        };
+      } else if (err instanceof AppError && err.code === "UNAUTHORIZED") {
         req.audit = {
           action: "auth.login_failed",
           entity: "user",
@@ -40,16 +47,31 @@ authRouter.post(
   "/refresh",
   asyncHandler(async (req, res) => {
     const body = refreshBodySchema.parse(req.body);
-    const session = await refresh(body);
-    req.audit = {
-      action: "auth.refresh",
-      entity: "user",
-      entityId: session.user.id,
-      actorId: session.user.id,
-      actorRole: session.user.role,
-      meta: { device: body.device, rotated: true },
-    };
-    await res.status(200).json(session);
+    try {
+      const session = await refresh(body);
+      req.audit = {
+        action: "auth.refresh",
+        entity: "user",
+        entityId: session.user.id,
+        actorId: session.user.id,
+        actorRole: session.user.role,
+        meta: { device: body.device, rotated: true },
+      };
+      await res.status(200).json(session);
+    } catch (err) {
+      if (err instanceof AppError && err.status === 401) {
+        req.audit = {
+          action: err.auditAction ?? "auth.refresh_failed",
+          entity: "user",
+          entityId: err.auditEntityId,
+          actorId: err.auditActorId,
+          actorRole: err.auditActorRole,
+          logOnFailure: true,
+          meta: { device: body.device },
+        };
+      }
+      throw err;
+    }
   }),
 );
 

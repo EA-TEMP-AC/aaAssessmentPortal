@@ -1,7 +1,13 @@
+import { spawnSync } from "node:child_process";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import request from "supertest";
+import { vi } from "vitest";
 import { createApp } from "../src/app.js";
 import { compliance } from "../src/config/compliance.js";
+import { productionSecretProblem } from "../src/config/env.js";
 import { hashRefreshToken } from "../src/lib/tokens.js";
+import { AuditLog } from "../src/models/audit-log.model.js";
 import { RefreshToken } from "../src/models/refresh-token.model.js";
 import { User } from "../src/models/user.model.js";
 import { consumeLoginAttempt, resetLoginRateLimit } from "../src/modules/auth/login-rate-limit.js";
@@ -68,6 +74,15 @@ describe("auth", () => {
       error: { code: "UNAUTHORIZED", message: "Invalid email or password" },
     });
     expect(wrong.body).toEqual(unknown.body);
+
+    const rows = await AuditLog.find({ action: "auth.login_failed" }).lean();
+    expect(rows.length).toBeGreaterThan(0);
+    const serialized = JSON.stringify(rows);
+    expect(serialized).not.toContain(password);
+    expect(serialized).not.toContain("not-the-password");
+    for (const row of rows) {
+      expect(row.meta.requestBody.password).toBe("***");
+    }
   });
 
   it("rejects inactive users", async () => {
@@ -100,6 +115,12 @@ describe("auth", () => {
 
     const separateEmail = await login(other.user.email, other.password);
     expect(separateEmail.status).toBe(200);
+
+    const limited = await AuditLog.find({ action: "auth.login_rate_limited" }).lean();
+    expect(limited).toHaveLength(1);
+    expect(JSON.stringify(limited)).not.toContain(password);
+    expect(JSON.stringify(limited)).not.toContain("wrong-password");
+    expect(limited[0].meta.requestBody.password).toBe("***");
   });
 
   it("expires login attempts outside the rate-limit window", () => {
@@ -143,6 +164,14 @@ describe("auth", () => {
     expect(rotated.body.accessToken).not.toBe(first.body.accessToken);
     expect(rotated.body.user.role).toBe("aa_admin");
 
+    const otherDeviceToken = "rt_other_device_still_valid";
+    await RefreshToken.create({
+      userId: first.body.user.id,
+      tokenHash: hashRefreshToken(otherDeviceToken),
+      deviceId: "other-device",
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+
     const reused = await request(app).post("/api/v1/auth/refresh").send({
       refreshToken: first.body.refreshToken,
       device: webDevice,
@@ -153,12 +182,38 @@ describe("auth", () => {
       refreshToken: rotated.body.refreshToken,
       device: webDevice,
     });
-    expect(next.status).toBe(200);
+    expect(next.status).toBe(401);
+    expect(next.body.error.code).toBe("UNAUTHORIZED");
 
     const previous = await RefreshToken.findOne({
       tokenHash: hashRefreshToken(first.body.refreshToken),
     });
     expect(previous.revokedAt).toBeInstanceOf(Date);
+    const successor = await RefreshToken.findOne({
+      tokenHash: hashRefreshToken(rotated.body.refreshToken),
+    });
+    expect(successor.revokedAt).toBeInstanceOf(Date);
+    const otherDevice = await RefreshToken.findOne({
+      tokenHash: hashRefreshToken(otherDeviceToken),
+    });
+    expect(otherDevice.revokedAt).toBeFalsy();
+
+    const failed = await AuditLog.find({ action: "auth.refresh_failed" }).lean();
+    expect(failed.length).toBeGreaterThan(0);
+    expect(JSON.stringify(failed)).not.toContain(first.body.refreshToken);
+    expect(JSON.stringify(failed)).not.toContain(hashRefreshToken(first.body.refreshToken));
+    expect(failed[0].meta.requestBody.refreshToken).toBe("***");
+
+    const reuseLogs = await AuditLog.find({ action: "auth.refresh_reuse_detected" }).lean();
+    expect(reuseLogs.length).toBeGreaterThan(0);
+    const reuseSerialized = JSON.stringify(reuseLogs);
+    expect(reuseSerialized).not.toContain(first.body.refreshToken);
+    expect(reuseSerialized).not.toContain(rotated.body.refreshToken);
+    expect(reuseSerialized).not.toContain(hashRefreshToken(first.body.refreshToken));
+    expect(reuseSerialized).not.toContain(hashRefreshToken(rotated.body.refreshToken));
+    for (const row of reuseLogs) {
+      expect(row.meta.requestBody.refreshToken).toBe("***");
+    }
   });
 
   it("revokes the refresh token on logout", async () => {
@@ -181,8 +236,9 @@ describe("auth", () => {
     expect(empty.status).toBe(204);
   });
 
-  it("rejects an expired refresh token", async () => {
-    const { user } = await createUser({ email: "admin@aa.example" });
+  it("rejects an expired refresh token without revoking active ones", async () => {
+    const { user, password } = await createUser({ email: "admin@aa.example" });
+    const session = await login("admin@aa.example", password);
     const raw = "rt_expiredtokenvalue";
     await RefreshToken.create({
       userId: user._id,
@@ -197,6 +253,55 @@ describe("auth", () => {
     });
     expect(res.status).toBe(401);
     expect(res.body.error.code).toBe("UNAUTHORIZED");
+
+    const live = await RefreshToken.findOne({
+      tokenHash: hashRefreshToken(session.body.refreshToken),
+    });
+    expect(live.revokedAt).toBeFalsy();
+    expect(await AuditLog.countDocuments({ action: "auth.refresh_reuse_detected" })).toBe(0);
+
+    const failed = await AuditLog.find({ action: "auth.refresh_failed" }).lean();
+    expect(failed).toHaveLength(1);
+    expect(JSON.stringify(failed)).not.toContain(raw);
+    expect(JSON.stringify(failed)).not.toContain(hashRefreshToken(raw));
+    expect(failed[0].meta.requestBody.refreshToken).toBe("***");
+  });
+
+  it("revokes the device family when refresh compare-and-set loses the race", async () => {
+    const { password } = await createUser({ email: "admin@aa.example" });
+    const session = await login("admin@aa.example", password);
+    const siblingRaw = "rt_sibling_on_same_device";
+    await RefreshToken.create({
+      userId: session.body.user.id,
+      tokenHash: hashRefreshToken(siblingRaw),
+      deviceId: webDevice.deviceId,
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+
+    const spy = vi.spyOn(RefreshToken, "findOneAndUpdate").mockImplementation(async (filter) => {
+      await RefreshToken.updateOne({ _id: filter._id }, { $set: { revokedAt: new Date() } });
+      return null;
+    });
+
+    try {
+      const res = await request(app).post("/api/v1/auth/refresh").send({
+        refreshToken: session.body.refreshToken,
+        device: webDevice,
+      });
+      expect(res.status).toBe(401);
+      expect(res.body.error.code).toBe("UNAUTHORIZED");
+    } finally {
+      spy.mockRestore();
+    }
+
+    const sibling = await RefreshToken.findOne({ tokenHash: hashRefreshToken(siblingRaw) });
+    expect(sibling.revokedAt).toBeInstanceOf(Date);
+
+    const reuseLogs = await AuditLog.find({ action: "auth.refresh_reuse_detected" }).lean();
+    expect(reuseLogs).toHaveLength(1);
+    expect(JSON.stringify(reuseLogs)).not.toContain(session.body.refreshToken);
+    expect(JSON.stringify(reuseLogs)).not.toContain(hashRefreshToken(session.body.refreshToken));
+    expect(reuseLogs[0].meta.requestBody.refreshToken).toBe("***");
   });
 
   it("does not store a plaintext password on the user", async () => {
@@ -204,5 +309,34 @@ describe("auth", () => {
     const stored = await User.findById(user._id).select("+passwordHash");
     expect(stored.passwordHash).not.toBe(password);
     expect(stored.passwordHash.startsWith("$2")).toBe(true);
+  });
+});
+
+describe("production secrets", () => {
+  it("requires a 32-character JWT access secret only in production", () => {
+    expect(productionSecretProblem("production", undefined)).toMatch(/JWT_ACCESS_SECRET/);
+    expect(productionSecretProblem("production", "short")).toMatch(/JWT_ACCESS_SECRET/);
+    expect(productionSecretProblem("production", "x".repeat(31))).toMatch(/JWT_ACCESS_SECRET/);
+    expect(productionSecretProblem("production", "x".repeat(32))).toBeNull();
+    expect(productionSecretProblem("test", undefined)).toBeNull();
+    expect(productionSecretProblem("development", "")).toBeNull();
+  });
+
+  it("refuses to start in production when the access secret is too short", () => {
+    const serverRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+    const result = spawnSync(process.execPath, ["src/index.js"], {
+      cwd: serverRoot,
+      encoding: "utf8",
+      timeout: 15000,
+      env: {
+        ...process.env,
+        NODE_ENV: "production",
+        JWT_ACCESS_SECRET: "too-short",
+        BCRYPT_COST: "4",
+      },
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(`${result.stdout ?? ""}${result.stderr ?? ""}`).toMatch(/JWT_ACCESS_SECRET/);
   });
 });
