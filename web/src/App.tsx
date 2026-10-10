@@ -1,20 +1,58 @@
+import { useState } from "react";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { ErrorBoundary } from "./components/ErrorBoundary";
+import { AppLayout } from "./components/AppLayout";
+import { LoginPage } from "./pages/LoginPage";
+import { NotFoundPage } from "./pages/NotFoundPage";
+import { PasswordGatePage } from "./pages/PasswordGatePage";
+import { PlaceholderPage } from "./pages/PlaceholderPage";
+import { RoleHomePage } from "./pages/RoleHomePage";
+import { AuthBridge, GuestOnly, RequireAuth, RequireRole, RootRedirect } from "./routing/guards";
+import { NAV_ITEMS } from "./routing/nav";
+import { createQueryClient } from "./queryClient";
 
-function HomePage() {
+export function AppRoutes() {
+  const sections = NAV_ITEMS.filter((item) => item.id !== "home");
+
   return (
-    <main>
-      <h1>AA Assessment Portal</h1>
-      <p>Web shell placeholder. Feature UI lands in F-01+.</p>
-    </main>
+    <>
+      <AuthBridge />
+      <Routes>
+        <Route path="/" element={<RootRedirect />} />
+        <Route element={<GuestOnly />}>
+          <Route path="/login" element={<LoginPage />} />
+        </Route>
+        <Route element={<RequireAuth />}>
+          <Route path="/change-password" element={<PasswordGatePage />} />
+          <Route element={<AppLayout />}>
+            <Route path="/home" element={<RoleHomePage />} />
+            {sections.map((item) => (
+              <Route key={item.id} element={<RequireRole roles={item.roles} />}>
+                <Route
+                  path={item.to}
+                  element={<PlaceholderPage title={item.label} description={item.description} />}
+                />
+              </Route>
+            ))}
+          </Route>
+        </Route>
+        <Route path="*" element={<NotFoundPage />} />
+      </Routes>
+    </>
   );
 }
 
 export function App() {
+  const [queryClient] = useState(createQueryClient);
+
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<HomePage />} />
-      </Routes>
-    </BrowserRouter>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+          <AppRoutes />
+        </BrowserRouter>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }

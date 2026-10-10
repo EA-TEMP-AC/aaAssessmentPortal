@@ -26,6 +26,7 @@
 - **B-01 `auditLogs` document (2026-10-10):** SCHEMA §3.15 says "as before" and does not list fields. Implemented append-only rows: `actorId`, `actorRole`, `action`, `entity`, `entityId`, `abId`, `batchId`, `before`, `after`, `meta`, `ip`, `createdAt`. `password`, `passwordHash`, `passwordResetToken`, `passwordResetTokenHash`, `refreshToken`, and `tokenHash` are stored as `"***"`. Query indexes not yet in SCHEMA: `{ entity: 1, entityId: 1, createdAt: -1 }`, `{ abId: 1, createdAt: -1 }`, `{ createdAt: -1 }`. Architect: please fold this into SCHEMA.md.
 - **B-01 response shapes:** `GET /audit-logs` returns `{ page, pageSize, total, items }` with `pageSize` 20 (contract lists `page` only). `POST /auth/refresh` returns the same session body as login (new access and refresh tokens plus `expiresInMs`, `offlineSessionMaxMs`, and `user`).
 - Refresh tokens are opaque random values stored as SHA-256 hashes, not JWTs.
+- **F-01 web shell (2026-10-10):** React 18, Vite, TypeScript, React Router 6, and TanStack Query. No third-party component library; pages use semantic HTML and CSS in `web/`. Access and refresh tokens stay in memory for the page session. `device.platform` sent to auth is `web`. SME has a landing page because `UserRole` includes `sme`. The candidate route is only a placeholder landing; question 23 still defers a candidate portal.
 
 ## Open questions (need human / NCVET / AB)
 1. DEP and SIDH integration: API or file upload? Formats?
@@ -52,6 +53,7 @@
 22. **Who initiates reassessment?** AA admin only, AB reviewer, or either?
 23. **Candidate-facing UI (Phase 1):** no candidate-facing web/mobile UI is planned for Phase 1. Candidates may read their own result row via API only (`GET /batches/:id/results` scoped). Decide later whether/when to ship a candidate portal screen.
 24. **Login rate limiter:** the limiter is a process-local map keyed by IP+email, so a restart clears it and each server instance has its own window. A shared store (Redis or MongoDB) is needed before running more than one instance.
+25. **Self-service password change:** `POST /auth/login` returns `mustChangePassword`, but Phase 1 has no endpoint for the signed-in user to set a new password. `POST /users/:id/password-reset` is an administrator action. F-01 blocks the shell and offers sign-out until the flag is false. A contract endpoint is needed before the gate can collect a new password.
 
 ## Not mandated by NCVET (TR s29), do not market as compliance features
 Specific language, DB, cloud, server architecture, API style, biometric or face-recognition tech, GPS hardware, payment gateway, CRM, help-desk software.
