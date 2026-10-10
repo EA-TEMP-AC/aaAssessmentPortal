@@ -5,10 +5,11 @@ import { env } from "../config/env.js";
 import { AppError } from "./errors.js";
 
 function accessSecret() {
-  if (!env.JWT_ACCESS_SECRET) {
+  const secret = env.JWT_ACCESS_SECRET;
+  if (!secret) {
     throw new AppError(500, "INTERNAL", "JWT access secret is not configured");
   }
-  return env.JWT_ACCESS_SECRET;
+  return secret;
 }
 
 export function signAccessToken(user) {

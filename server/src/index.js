@@ -1,8 +1,10 @@
 import mongoose from "mongoose";
 import { createApp } from "./app.js";
-import { env } from "./config/env.js";
+import { assertProductionSecrets, env } from "./config/env.js";
 
 async function main() {
+  assertProductionSecrets();
+
   const app = createApp();
 
   if (env.MONGO_URI) {
