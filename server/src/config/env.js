@@ -9,6 +9,8 @@ const envSchema = z.object({
   MONGO_URI: z.string().min(1).optional(),
   JWT_ACCESS_SECRET: z.string().min(1).optional(),
   JWT_REFRESH_SECRET: z.string().min(1).optional(),
+  /** Dev seed only. When unset, the seed script uses its documented default. */
+  SEED_PASSWORD: z.string().min(8).optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);
