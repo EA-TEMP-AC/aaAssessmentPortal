@@ -47,6 +47,7 @@
 20. **How do AB batches arrive?** portal vs file vs API?
 21. **Unaccepted batches past accept SLA:** auto-escalate to AB, keep `allocated` with breach flag only, or auto-reject? Soft late-accept covers AA action but not silence.
 22. **Who initiates reassessment?** AA admin only, AB reviewer, or either?
+23. **Candidate-facing UI (Phase 1):** no candidate-facing web/mobile UI is planned for Phase 1. Candidates may read their own result row via API only (`GET /batches/:id/results` scoped). Decide later whether/when to ship a candidate portal screen.
 
 ## Not mandated by NCVET (TR s29), do not market as compliance features
 Specific language, DB, cloud, server architecture, API style, biometric or face-recognition tech, GPS hardware, payment gateway, CRM, help-desk software.

@@ -5,32 +5,59 @@ Branch format: task/<ID>-<slug>. Agents update only their own rows.
 ## Phase 0: Foundation
 | ID | Task | Owner | Depends | Status | Acceptance |
 |---|---|---|---|---|---|
-| A-01 | Full Mongo schema, indexes, enums, permission matrix; expand API_CONTRACT for Phase 1 | architect | - | review | Schema + Phase 1 contract examples. Branch: `task/A-01-schema-contract`. Review pass 3 applied (soft SLA, learners, reassign/cancel, result rules, TASKS split). |
-| D-01 | Monorepo scaffold, lint, env examples, CI | backend | A-01 | review | Workspaces server/web/mobile/tests; health GET /api/v1/health; docker-compose Mongo replica set; CI lint+test. Branch: `task/D-01-monorepo-scaffold` |
+| A-01 | Full Mongo schema, indexes, enums, permission matrix; expand API_CONTRACT for Phase 1 | architect | - | done | Schema + Phase 1 contract examples. Branch: `task/A-01-schema-contract` |
+| A-02 | Refresh Phase 1 task graph, waves, ownership; add POST /batches/:id/complete | architect | A-01 | review | TASKS waves + deps; contract + schema for complete. Branch: `task/A-02-tasks-refresh` |
+| D-01 | Monorepo scaffold, lint, env examples, CI | backend | A-01 | done | Workspaces server/web/mobile/tests; health GET /api/v1/health; docker-compose Mongo replica set; CI lint+test. Branch: `task/D-01-monorepo-scaffold` |
 
 ## Phase 1: Batch workflow and assessor
 | ID | Task | Owner | Depends | Status | Acceptance |
 |---|---|---|---|---|---|
-| B-01 | Auth (login/refresh/logout), roles, mustChangePassword, login rate limits, audit middleware (redact secrets) | backend | D-01 | todo | Login/refresh works; every write logged; passwordHash never in audit |
-| B-02 | compliance.js constants + working-day calculator + nightly sla.breached job | backend | D-01 | todo | Unit tests incl. holidays; §2.1 counting; non-retroactive holiday edits |
-| B-03 | Batch CRUD + status machine (incl. cancelled) + soft SLA lateReason + CAS | backend | B-01,B-02 | todo | Illegal transitions 409; late without reason → SLA_*; with reason → breach+audit |
-| B-04 | Assessor/proctor registry + ToA + assign/reassign + assessorDayLocks txn | backend | B-03 | todo | Clash/max-AAs/ratio/override tested; reassign releases/takes locks |
-| B-05 | Results PUT/submit + server outcome + change log + RESULT_INCOMPLETE | backend | B-03,B-07 | todo | PUT only assessment_completed+draft; Absent from attendance; passMarkUnit |
-| B-06 | Login-events (assessor/proctor/student) offline-safe; enqueue AB email; **emailQueue worker + retries** | backend | B-03,B-08 | todo | NCVET:TR s9,s26; email failure ≠ login failure; capturedAt in mail |
-| B-07 | Master data APIs: awardingBodies, TP, centres, qualifications, learners; candidates POST/GET/PATCH/CSV | backend | B-01 | todo | CSV import links learners; deactivate candidate |
-| B-08 | Users CRUD + password reset (mustChangePassword); GET batch login-events/attendance/checklist | backend | B-01 | todo | Contract examples pass |
-| B-09 | Reassessment endpoint + cancel endpoint (lock release) | backend | B-03,B-04,B-05 | todo | REASSESS_NOT_ELIGIBLE; window from first assessment; inherit fields |
+| B-01 | Auth (login/refresh/logout), roles, mustChangePassword, login rate limits, audit middleware (redact secrets); GET /audit-logs; **dev seed (users only)** | backend | D-01 | todo | Login/refresh works; every write logged; passwordHash never in audit; seed: **one user per role only**. Later tasks extend seed with their own sample data |
+| B-02 | compliance.js constants + working-day calculator; GET\|PUT /admin/working-day-config; GET\|POST\|DELETE /admin/holidays | backend | D-01 | todo | Unit tests incl. holidays; SCHEMA §2.1 counting; non-retroactive holiday edits |
+| B-03 | Batch CRUD + status machine (incl. cancelled) + soft SLA lateReason + CAS; **POST /batches/:id/complete**; **nightly sla.breached job**; GET /compliance/dashboard stub | backend | B-01,B-02,B-07a,B-08 | todo | Illegal transitions 409; late without reason → SLA_*; with reason → breach+audit; complete(reason) → assessment_completed + audit |
+| B-04 | Assessor/proctor registry + ToA + assign/reassign + assessorDayLocks txn; seed sample assessor/proctor | backend | B-03 | todo | Clash/max-AAs/ratio/override tested; POST /batches/:id/reassign releases/takes locks |
+| B-05 | Results PUT/submit + server outcome + change log + RESULT_INCOMPLETE; **POST validate/publish/dispute/resolve-dispute** | backend | B-03,B-06,B-07b | todo | PUT only assessment_completed+draft; Absent from attendance; passMarkUnit; AB validate/publish + dispute flows |
+| B-06 | Login-events (assessor/proctor/student) offline-safe; **enqueue** AB login mail only (worker in B-08); GET batch login-events/attendance/checklist; **POST assessor attendance + checklist**; auto `assessor_assigned`→`in_progress` and checklist→`assessment_completed` | backend | B-03,B-04,B-07b,B-08 | todo | NCVET:TR s9,s26; enqueue never fails login; capturedAt in mail payload; no SMTP/worker ownership |
+| B-07a | Master data APIs: awardingBodies, TP, centres, qualifications, learners; seed sample master data | backend | B-01 | todo | CRUD + contract examples |
+| B-07b | Candidates POST/GET/PATCH/CSV + learner linking; seed sample roster | backend | B-03 | todo | CSV import links learners; deactivate candidate |
+| B-08 | Users CRUD + password reset (mustChangePassword); **emailQueue + worker + retries + SMTP env config** | backend | B-01 | todo | Reset emails send via queue; SMTP via `.env.example`; no passwordHash in responses/audit |
+| B-09 | Reassessment endpoint + cancel endpoint (lock release) | backend | B-03,B-04,B-05,B-07b | todo | REASSESS_NOT_ELIGIBLE; window from first assessment; inherit fields |
 | F-01 | Web shell, login, mustChangePassword gate, role routing | frontend | B-01 | todo | |
-| F-02 | Batch list/detail: SLA countdown, accept/reject/assign/reassign/cancel, lateReason UX | frontend | B-03,B-04 | todo | |
+| F-02 | Batch list/detail: SLA countdown, accept/reject/assign/reassign/cancel/complete, lateReason UX | frontend | B-03,B-04,B-07a | todo | |
 | F-03 | Assessor/proctor registry screens | frontend | B-04 | todo | |
-| F-06 | Master data screens: AB, TP, centres, qualifications, learners | frontend | B-07 | todo | |
+| F-06 | Master data screens: AB, TP, centres, qualifications, learners | frontend | B-07a | todo | |
 | F-07 | Result entry UI (NOS marks) + incompleteness warnings | frontend | B-05 | todo | |
 | F-08 | AB validate/publish (+ change reason) screens | frontend | B-05 | todo | Scoped to abId |
-| M-01 | Mobile login, offline queue, geo login/logout, lateSync | mobile | B-01 | todo | Airplane mode; sync later |
-| M-02 | Attendance, ID check, equipment checklist | mobile | M-01 | todo | |
+| F-09 | Users management (CRUD + password reset UX) | frontend | B-08 | todo | Reset-email UX assumes B-08 queue/SMTP |
+| F-10 | Candidate roster + CSV import | frontend | B-07b | todo | |
+| F-11 | Audit-log viewer | frontend | B-01 | todo | Scoped per role |
+| F-12 | Holidays / working-day settings | frontend | B-02 | todo | |
+| M-01 | Mobile login, offline queue, geo login/logout, lateSync against **mocked** login-event APIs | mobile | B-01 | todo | Airplane mode; queue persists; mocks: `POST /assessor/login-event`, `POST /proctor/login-event`, `POST /student/login-event` (real sync in M-02) |
+| M-02 | Attendance, ID check, equipment checklist; **download assigned batch + roster for offline use**; verify real login-event sync against B-06 | mobile | M-01,B-06 | todo | Offline: batch+roster cached; queue drains to live endpoints |
 | M-03 | Student tracking + proctor geo-tag flows | mobile | M-01,B-06 | todo | Offline works |
-| T-01 | Contract + rule tests for Phase 1 backend (B-01..B-09) | qa | B-05,B-09 | todo | Soft SLA, locks, reassessment, email queue |
+| T-01 | Contract + rule tests for Phase 1 backend (B-01..B-09, incl. B-07a/B-07b) | qa | B-05,B-06,B-07a,B-07b,B-08,B-09 | todo | Soft SLA, locks, reassessment, email queue; cross-cutting/e2e (each task still writes its own tests) |
 | R-01 | Review each Phase 1 branch before merge | reviewer | each | todo | |
+
+## Suggested run order (Phase 1)
+
+At most **one in-flight task per folder** (`server/`, `web/`, `mobile/`, `tests/`). Tasks listed in the same wave may start together. `R-01` reviews each branch before merge (not a wave of its own).
+
+| Wave | Tasks |
+|---|---|
+| W1 | D-01 |
+| W2 | B-01 |
+| W3 | B-02, F-01, M-01 |
+| W4 | B-08, F-11 |
+| W5 | B-07a, F-09 |
+| W6 | B-03, F-06 |
+| W7 | B-04, F-12 |
+| W8 | B-07b, F-02 |
+| W9 | B-06, F-03 |
+| W10 | B-05, F-10, M-02 |
+| W11 | B-09, F-07, M-03 |
+| W12 | F-08, T-01 |
+
+Phase 2+ follow the Depends column with the same one-folder-at-a-time rule.
 
 ## Phase 2: Question bank, engine, evidence (NCVET:TR s4-s5, s13-s17)
 | ID | Task | Owner | Depends | Status | Acceptance |
