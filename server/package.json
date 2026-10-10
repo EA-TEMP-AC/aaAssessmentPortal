@@ -11,11 +11,14 @@
     "start": "node src/index.js",
     "lint": "eslint src tests && prettier --check src tests",
     "format": "prettier --write src tests",
-    "test": "vitest run"
+    "test": "vitest run",
+    "seed": "node src/scripts/seed-users.js"
   },
   "dependencies": {
+    "bcryptjs": "^3.0.3",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.3",
     "mongoose": "^8.9.5",
     "zod": "^3.24.1"
   },
@@ -24,6 +27,7 @@
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^10.0.1",
     "globals": "^15.14.0",
+    "mongodb-memory-server": "^11.3.0",
     "prettier": "^3.4.2",
     "supertest": "^7.0.0",
     "vitest": "^2.1.8"
