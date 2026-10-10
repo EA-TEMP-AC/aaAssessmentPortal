@@ -263,6 +263,19 @@ Roles: `aa_admin`. From pre-result statuses (see SCHEMA). Releases locks.
 
 Response `200`: `status: "cancelled"`, `cancelledAt` set.
 
+### POST /batches/:id/complete
+
+Roles: `aa_admin`. From `in_progress` → `assessment_completed` when checklist/attendance gate is skipped or overridden. **Required** `reason`. Audit-logged. (Owned by **B-03**; assessor checklist path may also reach `assessment_completed` without this call — B-06.)
+
+Request:
+```json
+{ "reason": "Centre closed early; practical and viva completed; attendance recorded" }
+```
+
+Response `200`: Batch `status: "assessment_completed"`, `statusVersion` incremented.
+
+Errors: `400 VALIDATION_ERROR` (missing reason), `409 INVALID_TRANSITION`.
+
 ### POST /batches/:id/submit-result
 
 Roles: `aa_admin`. **No body** except optional soft-SLA:
@@ -275,7 +288,7 @@ Requires `results.status=draft` with a row per **active** candidate → else `RE
 
 ### POST /batches/:id/validate / publish / dispute / resolve-dispute
 
-As v0.3 (AB validate/publish; pre-publication dispute).
+Owned by **B-05**. AB validate/publish; pre-publication dispute/resolve (see SCHEMA).
 
 ### POST /batches/:id/reassessments
 
@@ -350,7 +363,7 @@ Request/response as v0.3 plus:
 }
 ```
 
-AB email async to `notificationEmails` with `capturedAt` in body; failures never fail this call.
+AB email: **enqueue** to `emailQueue` for `notificationEmails` with `capturedAt` in body (B-06); enqueue failure never fails this call. Worker/SMTP (B-08) delivers asynchronously.
 
 ### POST /proctor/login-event / POST /student/login-event
 

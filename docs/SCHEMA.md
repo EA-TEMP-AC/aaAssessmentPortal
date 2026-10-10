@@ -43,7 +43,7 @@ Terminal / side: `cancelled`, `disputed`
 | `assessor_assigned` | `in_progress` | first valid assessor login-event |
 | `assessor_assigned` | `assessor_assigned` | `aa_admin` **reassign** (same status; new assessor) |
 | `assessor_assigned` | `cancelled` | `aa_admin` |
-| `in_progress` | `assessment_completed` | checklist/attendance gate or `aa_admin` |
+| `in_progress` | `assessment_completed` | checklist/attendance gate (B-06), or `aa_admin` via `POST /batches/:id/complete` (+ reason, audit; B-03) |
 | `in_progress` | `cancelled` | `aa_admin` |
 | `assessment_completed` | `result_submitted` | `aa_admin` submit-result (+ lateReason if late) |
 | `assessment_completed` | `cancelled` | `aa_admin` (rare; open whether allowed after results draft) |
@@ -130,7 +130,7 @@ Accept / assign / submit-result after the relevant due instant:
 - **Require** `lateReason` (non-empty string) from `aa_admin`.
 - On success: append key to `sla.breached`, write audit (`action: sla_late_*`, meta includes reason), proceed.
 - If late and `lateReason` missing → `409 SLA_ACCEPT_EXPIRED` | `SLA_ASSIGN_EXPIRED` | `SLA_RESULT_EXPIRED`.
-- `sla.breached` is also **recomputed on read** (compare now vs dueAts for open steps) and refreshed by a **nightly job**; persisted breaches from late actions are never cleared.
+- `sla.breached` is also **recomputed on read** (compare now vs dueAts for open steps) and refreshed by a **nightly job** (owned by **B-03**); persisted breaches from late actions are never cleared.
 
 Holiday CRUD is audit-logged. **Changing holidays does not retroactively recompute** stored `acceptDueAt` / `assignDueAt` / `resultDueAt` on existing batches.
 
@@ -328,13 +328,13 @@ Indexes: `{ batchId: 1 }`; `{ learnerId: 1 }`; unique `{ batchId: 1, learnerId: 
 3. IST date of **`capturedAt`** ∈ `[assessmentStartDate, assessmentEndDate]`. Outside → `VALIDATION_ERROR`.
 4. Set `clockSkewFlag` / `lateSync` as flags; do not reject for skew alone.
 
-**AB email:** enqueue to `notificationEmails`; body includes `capturedAt`; never fails API; retries via `emailQueue`.
+**AB email:** B-06 **enqueues** to `emailQueue` for `notificationEmails`; body includes `capturedAt`; enqueue never fails login API. Worker/retries/SMTP owned by **B-08**.
 
 Indexes: `{ clientEventId: 1 }` unique; `{ batchId: 1, capturedAt: 1 }`; `{ actorType: 1, actorId: 1, capturedAt: -1 }`.
 
 ### 3.12 `emailQueue` (phase 1)
 
-Unchanged shape (`pending|sending|sent|failed`, attempts, nextAttemptAt).
+Shape: `pending|sending|sent|failed`, attempts, nextAttemptAt. **B-08** owns worker + SMTP env (password-reset + AB login delivery). B-06 only inserts jobs.
 
 ### 3.13 `attendanceRecords` / `equipmentChecklists` (phase 1)
 
@@ -404,7 +404,7 @@ New batch:
 | Batch create | A | D | D | D | D | D | D | A | D | ab own abId |
 | Batch list/get + child GETs | A | R | D | R | R | R | R | R | R | row scope |
 | Candidates CUD / CSV | A | A | D | R | D | D | R | R | R | scoped |
-| Accept/reject/assign/reassign/cancel/reassess | A | D | D | D | D | D | D | D | D | lateReason aa_admin |
+| Accept/reject/assign/reassign/cancel/complete/reassess | A | D | D | D | D | D | D | D | D | lateReason aa_admin; complete needs reason |
 | Submit result | A | D | D | D | D | D | D | D | D | |
 | Validate / publish | D | D | D | D | D | D | D | A | D | own abId |
 | Login-event write | D | D | D | A | A | D† | D | D | D | assigned |
