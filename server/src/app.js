@@ -4,6 +4,10 @@ import { errorHandler } from "./middleware/error-handler.js";
 import { auditRouter } from "./modules/audit/audit.routes.js";
 import { authRouter } from "./modules/auth/auth.routes.js";
 import { healthRouter } from "./modules/health/health.routes.js";
+import {
+  holidaysRouter,
+  workingDayConfigRouter,
+} from "./modules/working-days/working-days.routes.js";
 
 export function createApp() {
   const app = express();
@@ -15,6 +19,8 @@ export function createApp() {
   app.use("/api/v1/health", healthRouter);
   app.use("/api/v1/auth", authRouter);
   app.use("/api/v1/audit-logs", auditRouter);
+  app.use("/api/v1/admin/working-day-config", workingDayConfigRouter);
+  app.use("/api/v1/admin/holidays", holidaysRouter);
 
   app.use((_req, res) => {
     res.status(404).json({

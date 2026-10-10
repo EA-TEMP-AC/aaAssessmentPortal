@@ -21,3 +21,11 @@ export function unauthorized(message = "Missing or invalid access token") {
 export function forbidden(message = "Role or row scope denied") {
   return new AppError(403, "FORBIDDEN", message);
 }
+
+export function notFound(message = "Unknown id") {
+  return new AppError(404, "NOT_FOUND", message);
+}
+
+export function duplicateResource(message = "Unique constraint") {
+  return new AppError(409, "DUPLICATE_RESOURCE", message);
+}

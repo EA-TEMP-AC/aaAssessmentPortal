@@ -26,6 +26,13 @@
 - **B-01 `auditLogs` document (2026-10-10):** SCHEMA §3.15 says "as before" and does not list fields. Implemented append-only rows: `actorId`, `actorRole`, `action`, `entity`, `entityId`, `abId`, `batchId`, `before`, `after`, `meta`, `ip`, `createdAt`. `password`, `passwordHash`, `passwordResetToken`, `passwordResetTokenHash`, `refreshToken`, and `tokenHash` are stored as `"***"`. Query indexes not yet in SCHEMA: `{ entity: 1, entityId: 1, createdAt: -1 }`, `{ abId: 1, createdAt: -1 }`, `{ createdAt: -1 }`. Architect: please fold this into SCHEMA.md.
 - **B-01 response shapes:** `GET /audit-logs` returns `{ page, pageSize, total, items }` with `pageSize` 20 (contract lists `page` only). `POST /auth/refresh` returns the same session body as login (new access and refresh tokens plus `expiresInMs`, `offlineSessionMaxMs`, and `user`).
 - Refresh tokens are opaque random values stored as SHA-256 hashes, not JWTs.
+- **B-02 working-day admin (2026-10-10):** SCHEMA §3.15 says workingDayConfig and holidays are "as before" and lists no fields. API_CONTRACT.md has no response bodies. Until open questions 25–30 are confirmed, B-02 uses:
+  - `workingDayConfig` singleton `{ key: "default", weekendDays: number[], updatedBy }`. `GET /api/v1/admin/working-day-config` returns `{ weekendDays, timezone }` and includes `id` after the first `PUT`. `timezone` echoes `TIMEZONE` and is not writable. `PUT` body is `{ weekendDays }` (unique integers `0..6`, at most 6, so one weekday remains). The first `GET` does not insert a row.
+  - `holidays` `{ date: YYYY-MM-DD, name, region: string|null, createdBy }` with unique `{ date, region }`. `region: null` is AA-wide. `POST` returns `201` `{ id, date, name, region }`. `GET` returns `{ items }` with optional `from`, `to`, and `region`. `DELETE /api/v1/admin/holidays/:id` returns `204`.
+  - `ASSIGN_SLA_MODE` `before_exam` counts back from `assessmentStartDate`. The alternate string is `from_acceptance` (counts forward from `acceptedAt`) because the schema names `ASSIGN_FROM_ACCEPTANCE_*`.
+  - `RESULT_SLA_ANCHOR` `assessment_end_date` counts forward from `assessmentEndDate`. Alternates, from open Q16, are `assessment_start_date` and `assessment_completed` (the completion instant).
+  - Due helpers load AA-wide holidays unless the caller passes a region. A regional holiday applies only for that region. Batches have no region field yet.
+  - Holiday and weekend writes do not update `batches`.
 
 ## Open questions (need human / NCVET / AB)
 1. DEP and SIDH integration: API or file upload? Formats?
@@ -52,6 +59,12 @@
 22. **Who initiates reassessment?** AA admin only, AB reviewer, or either?
 23. **Candidate-facing UI (Phase 1):** no candidate-facing web/mobile UI is planned for Phase 1. Candidates may read their own result row via API only (`GET /batches/:id/results` scoped). Decide later whether/when to ship a candidate portal screen.
 24. **Login rate limiter:** the limiter is a process-local map keyed by IP+email, so a restart clears it and each server instance has its own window. A shared store (Redis or MongoDB) is needed before running more than one instance.
+25. **workingDayConfig / holidays fields:** SCHEMA §3.15 does not list them. Are the B-02 fields in Proposed (singleton `key`, `weekendDays`, `updatedBy`; holiday `date`, `name`, `region`, `createdBy`) the ones to fold into the schema?
+26. **DELETE /admin/holidays:** the contract has no id segment. B-02 implements `DELETE /api/v1/admin/holidays/:id` and returns `204`. Is that the path?
+27. **Holiday region:** AA-wide (`region: null`) always counts. A non-null region counts only when the due-date caller passes that region. Batches have no region. Is that the match rule, and where does a batch's region come from?
+28. **ASSIGN_SLA_MODE alternate:** B-02 uses the string `from_acceptance`. Is that the enum value?
+29. **RESULT_SLA_ANCHOR alternates:** B-02 uses `assessment_start_date` and `assessment_completed` in addition to `assessment_end_date` (open Q16). Are those the enum strings?
+30. **GET working-day-config:** B-02 does not insert a row on read, so the calculator uses `WEEKEND_DAYS` until the first `PUT`. Should the first read create the singleton instead?
 
 ## Not mandated by NCVET (TR s29), do not market as compliance features
 Specific language, DB, cloud, server architecture, API style, biometric or face-recognition tech, GPS hardware, payment gateway, CRM, help-desk software.
