@@ -398,6 +398,52 @@ legend {
   font-weight: 700;
 }
 
+.choice-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  align-items: end;
+  margin-bottom: 0.5rem;
+}
+
+.choice-toolbar .field {
+  flex: 1 1 16rem;
+  margin-bottom: 0;
+}
+
+.choice-list {
+  max-height: 16rem;
+  overflow: auto;
+  margin: 0.5rem 0 0;
+  padding: 0.5rem 0.75rem;
+  list-style: none;
+  border: 2px solid #243040;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.choice-list label {
+  font-weight: 400;
+}
+
+.recognition-dates {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 0.75rem 1rem;
+}
+
+.recognition-facts {
+  margin: 0;
+}
+
+.recognition-facts div {
+  margin-bottom: 0.5rem;
+}
+
+.recognition-facts dt {
+  font-weight: 600;
+}
+
 .mark-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));

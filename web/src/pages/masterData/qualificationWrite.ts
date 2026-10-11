@@ -1,3 +1,4 @@
+import { isSectorName, type SectorName } from "../../api/annexure";
 import type {
   BatchType,
   ComponentMarks,
@@ -7,8 +8,9 @@ import type {
   PcWrite,
   Qualification,
   QualificationWrite,
-  Sector,
+  RatioClass,
 } from "../../api/masterData";
+import { isRatioClass } from "../../api/masterData";
 
 /**
  * Mirrors server/src/config/compliance.js and pass-marks.js.
@@ -49,7 +51,8 @@ export type NosDraft = {
 export type QualificationDraft = {
   code: string;
   name: string;
-  sector: Sector | "";
+  sector: SectorName | "";
+  ratioClass: RatioClass | "";
   defaultBatchType: BatchType | "";
   passCriteriaMode: PassCriteriaMode | "";
   passMarkUnit: PassMarkUnit;
@@ -79,6 +82,7 @@ export function emptyQualificationDraft(): QualificationDraft {
     code: "",
     name: "",
     sector: "",
+    ratioClass: "",
     defaultBatchType: "",
     passCriteriaMode: "",
     passMarkUnit: "percent",
@@ -106,6 +110,7 @@ export function qualificationDraftFromRecord(record: Qualification, nextKey: () 
     code: record.code,
     name: record.name,
     sector: record.sector,
+    ratioClass: record.ratioClass,
     defaultBatchType: record.defaultBatchType ?? "",
     passCriteriaMode: record.passCriteriaMode ?? "",
     passMarkUnit: record.passMarkUnit,
@@ -139,6 +144,7 @@ export function qualificationFieldOrder(draft: QualificationDraft): string[] {
     "code",
     "name",
     "sector",
+    "ratioClass",
     "defaultBatchType",
     "passCriteriaMode",
     "passMarkUnit",
@@ -324,9 +330,13 @@ export function buildQualification(draft: QualificationDraft, mode: "create" | "
     messages.push("Name is required.");
     fields.push("name");
   } else lengthError(name, 200, "Name", "name", messages, fields);
-  if (!draft.sector) {
+  if (!isSectorName(draft.sector)) {
     messages.push("Choose a sector.");
     fields.push("sector");
+  }
+  if (!isRatioClass(draft.ratioClass)) {
+    messages.push("Choose a ratio class.");
+    fields.push("ratioClass");
   }
 
   const passMarks = { theory: 0, practical: 0, viva: 0 };
@@ -427,7 +437,9 @@ export function buildQualification(draft: QualificationDraft, mode: "create" | "
     nos.push(writtenNos);
   });
 
-  if (messages.length > 0 || !draft.sector) return fail(messages, fields);
+  if (messages.length > 0 || !isSectorName(draft.sector) || !isRatioClass(draft.ratioClass)) return fail(messages, fields);
+  const sector = draft.sector;
+  const ratioClass = draft.ratioClass;
 
   const nosIds = new Map<string, number>();
   const nosCodes = new Map<string, number>();
@@ -463,7 +475,8 @@ export function buildQualification(draft: QualificationDraft, mode: "create" | "
   const body: QualificationWrite = {
     code,
     name,
-    sector: draft.sector,
+    sector,
+    ratioClass,
     passMarkUnit: draft.passMarkUnit,
     passMarks,
     nos,

@@ -6,15 +6,15 @@ import { renderApp } from "../test/render";
 import { sessionFor } from "../test/fixtures";
 
 const VISIBLE: Record<Role, readonly string[]> = {
-  aa_admin: ["Home", "Batches", "Users", "Master data", "Results", "Audit log", "Working days"],
-  mis: ["Home", "Batches", "Users", "Master data", "Results", "Audit log", "Working days"],
+  aa_admin: ["Home", "Batches", "Users", "Master data", "Recognition", "Results", "Audit log", "Working days"],
+  mis: ["Home", "Batches", "Users", "Master data", "Recognition", "Results", "Audit log", "Working days"],
   sme: ["Home"],
   assessor: ["Home", "Batches", "Results"],
   proctor: ["Home", "Batches"],
   candidate: ["Home", "Batches", "Master data", "Results"],
   tp: ["Home", "Batches", "Master data", "Results"],
   ab_reviewer: ["Home", "Batches", "Master data", "Results", "Audit log"],
-  ncvet_viewer: ["Home", "Batches", "Master data", "Results", "Audit log"],
+  ncvet_viewer: ["Home", "Batches", "Master data", "Recognition", "Results", "Audit log"],
 };
 
 it.each(Object.entries(VISIBLE) as [Role, readonly string[]][])(

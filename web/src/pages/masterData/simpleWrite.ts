@@ -1,3 +1,4 @@
+import { isStateName } from "../../api/annexure";
 import type { AwardingBodyWrite, CentreWrite, LearnerWrite, TrainingPartnerWrite } from "../../api/masterData";
 import type { MasterCollection } from "../masterDataAccess";
 
@@ -13,6 +14,7 @@ export type SimpleDraft = {
   code: string;
   email: string;
   tpId: string;
+  state: string;
   active: boolean;
   notificationEmails: string[];
   externalRef: string;
@@ -30,6 +32,7 @@ export function emptySimpleDraft(): SimpleDraft {
     code: "",
     email: "",
     tpId: "",
+    state: "",
     active: true,
     notificationEmails: [""],
     externalRef: "",
@@ -56,7 +59,7 @@ export function simpleFieldOrder(collection: MasterCollection, draft: SimpleDraf
     return ["name", "code", ...draft.notificationEmails.map((_, index) => `notificationEmails.${index}`)];
   }
   if (collection === "training-partners") return ["name", "code", "email"];
-  if (collection === "centres") return ["name", "code", "tpId"];
+  if (collection === "centres") return ["name", "code", "tpId", "state"];
   return ["name", "externalRef", "phone", ...draft.accommodations.map((_, index) => `accommodations.${index}`)];
 }
 
@@ -126,8 +129,12 @@ export function buildSimpleWrite(collection: MasterCollection, draft: SimpleDraf
       messages.push("Training partner id must be a 24-character id.");
       fields.push("tpId");
     }
-    if (messages.length > 0) return fail(messages, fields);
-    const body: CentreWrite = { name, tpId, active: draft.active };
+    if (!isStateName(draft.state)) {
+      messages.push("Choose a state.");
+      fields.push("state");
+    }
+    if (messages.length > 0 || !isStateName(draft.state)) return fail(messages, fields);
+    const body: CentreWrite = { name, tpId, state: draft.state, active: draft.active };
     if (code) body.code = code;
     else if (mode === "edit") body.code = null;
     return { ok: true, body };

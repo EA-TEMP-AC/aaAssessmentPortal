@@ -1,6 +1,6 @@
-import type { BatchType, PassCriteriaMode, PassMarkUnit, Sector } from "../../api/masterData";
+import type { BatchType, PassCriteriaMode, PassMarkUnit, RatioClass } from "../../api/masterData";
 
-export const SECTOR_LABELS: Record<Sector, string> = {
+export const RATIO_CLASS_LABELS: Record<RatioClass, string> = {
   manufacturing: "Manufacturing",
   services: "Services",
   school_education: "School education",

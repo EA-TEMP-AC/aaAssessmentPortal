@@ -4,6 +4,7 @@ import {
   AUDIT_ROLES,
   BATCH_ROLES,
   MASTER_DATA_ROLES,
+  RECOGNITION_ROLES,
   RESULTS_ROLES,
   USER_ADMIN_ROLES,
   WORKING_DAY_ROLES,
@@ -45,6 +46,13 @@ export const NAV_ITEMS: readonly NavItem[] = [
     to: "/master-data",
     description: "Awarding bodies, training partners, centres, qualifications, and learners your account is allowed to read.",
     roles: MASTER_DATA_ROLES,
+  },
+  {
+    id: "recognition",
+    label: "Recognition",
+    to: "/recognition",
+    description: "Recognised sectors, states or PAN India, and the recognition dates.",
+    roles: RECOGNITION_ROLES,
   },
   {
     id: "results",

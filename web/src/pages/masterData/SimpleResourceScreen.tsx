@@ -1,5 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import { STATE_NAMES } from "../../api/annexure";
 import type {
   AwardingBody,
   AwardingBodyWrite,
@@ -85,7 +86,14 @@ function draftFrom(collection: SimpleCollection, record: SimpleRecord | null): S
     return { ...empty, name: record.name, code: record.code ?? "", email: record.email ?? "", active: record.active };
   }
   if (collection === "centres" && "tpId" in record) {
-    return { ...empty, name: record.name, code: record.code ?? "", tpId: record.tpId, active: record.active };
+    return {
+      ...empty,
+      name: record.name,
+      code: record.code ?? "",
+      tpId: record.tpId,
+      state: record.state,
+      active: record.active,
+    };
   }
   if ("externalRef" in record) {
     return {
@@ -170,6 +178,7 @@ function SimpleForm({
   const codeId = useId();
   const emailId = useId();
   const tpId = useId();
+  const stateId = useId();
   const externalRefId = useId();
   const phoneId = useId();
   const activeId = useId();
@@ -365,6 +374,31 @@ function SimpleForm({
               </p>
             </div>
           ) : null}
+          {collection === "centres" ? (
+            <div className="field">
+              <label htmlFor={stateId}>State</label>
+              <select
+                id={stateId}
+                ref={bind("state")}
+                name="state"
+                value={draft.state}
+                aria-required="true"
+                aria-invalid={formError?.fields.includes("state") || undefined}
+                aria-describedby={described("state", `${stateId}-hint`)}
+                onChange={(event) => update({ state: event.target.value })}
+              >
+                <option value="">Choose a state</option>
+                {STATE_NAMES.map((state) => (
+                  <option key={state} value={state}>
+                    {state}
+                  </option>
+                ))}
+              </select>
+              <p id={`${stateId}-hint`} className="field-hint">
+                Required. Annexure IV state or union territory.
+              </p>
+            </div>
+          ) : null}
           {collection === "learners" ? (
             <>
               <div className="field">
@@ -555,7 +589,7 @@ function cellsFor(collection: SimpleCollection, record: SimpleRecord): ReactNode
     return [record.name, display(record.code), display(record.email), status];
   }
   if (collection === "centres" && "tpId" in record) {
-    return [record.name, display(record.code), record.tpId, status];
+    return [record.name, display(record.code), record.tpId, record.state, status];
   }
   if ("accommodations" in record) {
     return [
@@ -609,7 +643,7 @@ export function SimpleResourceScreen({ collection }: { collection: SimpleCollect
     ...(collection === "learners" ? ["External reference", "Phone", "Accommodations"] : ["Code"]),
     ...(collection === "awarding-bodies" ? ["Notification emails"] : []),
     ...(collection === "training-partners" ? ["Email"] : []),
-    ...(collection === "centres" ? ["Training partner id"] : []),
+    ...(collection === "centres" ? ["Training partner id", "State"] : []),
     "Status",
     ...(canWrite ? ["Actions"] : []),
   ];
