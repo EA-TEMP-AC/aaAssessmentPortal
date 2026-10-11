@@ -30,7 +30,7 @@ Branch format: task/<ID>-<slug>. Agents update only their own rows.
 | F-08 | AB validate/publish (+ change reason) screens | frontend | B-05 | todo | Scoped to abId |
 | F-09 | Users management (CRUD + password reset UX) | frontend | B-08 | todo | Reset-email UX assumes B-08 queue/SMTP |
 | F-10 | Candidate roster + CSV import | frontend | B-07b | todo | |
-| F-11 | Audit-log viewer | frontend | B-01 | todo | Scoped per role |
+| F-11 | Audit-log viewer | frontend | B-01 | review | Scoped per role. Branch: `task/F-11-audit-viewer`. GET /audit-logs via the typed client. Filters: entity, entityId, from/to. Actor is shown, not queried (open question 37). Route and nav use `AUDIT_ROLES`. The page does not treat the list as complete. |
 | F-12 | Holidays / working-day settings | frontend | B-02 | todo | |
 | M-01 | Mobile login, offline queue, geo login/logout, lateSync against **mocked** login-event APIs | mobile | B-01 | review | Airplane mode; queue persists; mocks: `POST /assessor/login-event`, `POST /proctor/login-event`, `POST /student/login-event` (real sync in M-02). Branch: `task/M-01-mobile-login-offline`. Queue in AsyncStorage; tokens in expo-secure-store; login events mock unless `EXPO_PUBLIC_LOGIN_EVENTS_MODE=live`. GPS miss stored as `locationStatus: unavailable` (no placeholder coordinates). Offline window uses server `offlineSessionMaxMs` else SCHEMA `OFFLINE_SESSION_MAX_MS`. Open questions 25–29 in DECISIONS.md. |
 | M-02 | Attendance, ID check, equipment checklist; **download assigned batch + roster for offline use**; verify real login-event sync against B-06 | mobile | M-01,B-06 | todo | Offline: batch+roster cached; queue drains to live endpoints |

@@ -73,6 +73,9 @@
 34. **M-01 `batchId`.** SCHEMA requires `loginEvents.batchId`. Batch download is M-02, so M-01 queues login/logout with `batchId: null`. The mock accepts null. Should sync wait until a batch id is on the device?
 35. **M-01 candidate vs student.** The user role is `candidate`. The app maps that role to `POST /student/login-event` (SCHEMA actorType `student`).
 36. **M-01 `mustChangePassword`.** The contract has no mobile password-change route. The app blocks field use and tells the user to change the password on the web portal.
+37. **F-11 actor filter.** The viewer was asked to filter by actor. `GET /audit-logs` in API_CONTRACT accepts `entity`, `entityId`, `from`, `to`, and `page` only. The page shows `actorId` and `actorRole` on each row and does not send an actor query. Should the contract add `actorId` and/or `actorRole` filters?
+38. **F-11 `from` / `to`.** The contract does not say whether those values are calendar dates or instants, or which timezone bounds a date. The viewer treats each date input as a local calendar day: `from` is the start of that day and `to` is the end of that day, sent as ISO-8601 instants. Is that the intended range, or should the bounds be IST (`TIMEZONE`)?
+39. **F-11 audit item shape.** API_CONTRACT does not list fields on `items[]`. The viewer renders the B-01 proposed row: `id`, `actorId`, `actorRole`, `action`, `entity`, `entityId`, `abId`, `batchId`, `before`, `after`, `meta`, `ip`, `createdAt`, plus the list envelope `{ page, pageSize, total, items }`. Please confirm that item list in the contract.
 
 ## Not mandated by NCVET (TR s29), do not market as compliance features
 Specific language, DB, cloud, server architecture, API style, biometric or face-recognition tech, GPS hardware, payment gateway, CRM, help-desk software.

@@ -6,6 +6,7 @@ import { AppLayout } from "./components/AppLayout";
 import { LoginPage } from "./pages/LoginPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import { PasswordGatePage } from "./pages/PasswordGatePage";
+import { AuditLogPage } from "./pages/AuditLogPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
 import { RoleHomePage } from "./pages/RoleHomePage";
 import { AuthBridge, GuestOnly, RequireAuth, RequireRole, RootRedirect } from "./routing/guards";
@@ -31,7 +32,13 @@ export function AppRoutes() {
               <Route key={item.id} element={<RequireRole roles={item.roles} />}>
                 <Route
                   path={item.to}
-                  element={<PlaceholderPage title={item.label} description={item.description} />}
+                  element={
+                    item.id === "audit" ? (
+                      <AuditLogPage />
+                    ) : (
+                      <PlaceholderPage title={item.label} description={item.description} />
+                    )
+                  }
                 />
               </Route>
             ))}
