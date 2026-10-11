@@ -72,7 +72,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     id: "working-days",
     label: "Working days",
     to: "/working-days",
-    description: "Holiday and working-day settings will be added in a later task.",
+    description: "Choose weekend days and record holidays. Changes do not rewrite due dates already stored on batches.",
     roles: WORKING_DAY_ROLES,
   },
 ];

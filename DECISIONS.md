@@ -189,6 +189,9 @@
 89. **Qualification list `sector` filter.** The filter now sends an Annexure II name. B-07a described `sector` as a list filter when the stored value was a ratio class. Confirm the server matches Annexure II names, not `ratioClass`.
 90. **TRACEABILITY and F-13.** docs/TRACEABILITY.md still maps Annexure II recognition UI to F-06. This task did not edit that file. Should the row also name F-13?
 91. **Recognition dates versus the assessment window.** SCHEMA §4.3 step 3 compares today's IST date with `aaRecognition.startDate` and `endDate`. B-12 does that. It does not also reject a batch whose `assessmentStartDate` or `assessmentEndDate` falls outside that window. Confirm that an exam after recognition ends is still allowed when the create itself happens inside the window.
+92. **F-12 holiday list has no pages or search.** `GET /admin/holidays` returns `{ items }` for optional `from`, `to`, and `region` as `YYYY-MM-DD`. The screen sends `from` and `to` only and lists every returned row. It does not send a search string, `region`, `page`, or `pageSize`. Should the contract add search and pagination?
+93. **F-12 blank region and weekday numbers.** A blank region is sent as `null` (AA-wide). A typed region is trimmed. The screen says batches do not use region yet (open question 27). Weekend checkboxes use 0 for Sunday through 6 for Saturday. Confirm both.
+94. **F-12 config before the first save.** GET may omit `id` and still return `weekendDays` and `timezone`. The timezone control is read-only and is not sent on PUT. The screen still edits those default weekend days. Confirm.
 
 ## Not mandated by NCVET (TR s29), do not market as compliance features
 Specific language, DB, cloud, server architecture, API style, biometric or face-recognition tech, GPS hardware, payment gateway, CRM, help-desk software.
