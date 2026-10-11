@@ -32,7 +32,7 @@ Branch format: task/<ID>-<slug>. Agents update only their own rows.
 | F-10 | Candidate roster + CSV import | frontend | B-07b | todo | |
 | F-11 | Audit-log viewer | frontend | B-01 | todo | Scoped per role |
 | F-12 | Holidays / working-day settings | frontend | B-02 | todo | |
-| M-01 | Mobile login, offline queue, geo login/logout, lateSync against **mocked** login-event APIs | mobile | B-01 | todo | Airplane mode; queue persists; mocks: `POST /assessor/login-event`, `POST /proctor/login-event`, `POST /student/login-event` (real sync in M-02) |
+| M-01 | Mobile login, offline queue, geo login/logout, lateSync against **mocked** login-event APIs | mobile | B-01 | review | Airplane mode; queue persists; mocks: `POST /assessor/login-event`, `POST /proctor/login-event`, `POST /student/login-event` (real sync in M-02). Branch: `task/M-01-mobile-login-offline`. Queue in AsyncStorage; tokens in expo-secure-store; login events mock unless `EXPO_PUBLIC_LOGIN_EVENTS_MODE=live`. GPS miss stored as `locationStatus: unavailable` (no placeholder coordinates). Offline window uses server `offlineSessionMaxMs` else SCHEMA `OFFLINE_SESSION_MAX_MS`. Open questions 25–29 in DECISIONS.md. |
 | M-02 | Attendance, ID check, equipment checklist; **download assigned batch + roster for offline use**; verify real login-event sync against B-06 | mobile | M-01,B-06 | todo | Offline: batch+roster cached; queue drains to live endpoints |
 | M-03 | Student tracking + proctor geo-tag flows | mobile | M-01,B-06 | todo | Offline works |
 | T-01 | Contract + rule tests for Phase 1 backend (B-01..B-09, incl. B-07a/B-07b) | qa | B-05,B-06,B-07a,B-07b,B-08,B-09 | todo | Soft SLA, locks, reassessment, email queue; cross-cutting/e2e (each task still writes its own tests) |

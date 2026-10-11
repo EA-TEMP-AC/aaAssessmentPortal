@@ -5,12 +5,27 @@
     "version": "0.0.1",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
-    "platforms": ["ios", "android"],
+    "platforms": [
+      "ios",
+      "android"
+    ],
     "android": {
       "package": "com.aa.assessor"
     },
     "ios": {
-      "bundleIdentifier": "com.aa.assessor"
-    }
+      "bundleIdentifier": "com.aa.assessor",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "AA Assessor records your location when you sign in or out."
+      }
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "AA Assessor records your location when you sign in or out."
+        }
+      ],
+      "expo-secure-store"
+    ]
   }
 }
