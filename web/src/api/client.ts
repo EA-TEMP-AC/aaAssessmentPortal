@@ -103,7 +103,14 @@ async function readError(response: Response): Promise<ApiError> {
   return new ApiError(response.status, "UNKNOWN", "Request failed.");
 }
 
-export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+export async function apiRequestResult<T>(
+  path: string,
+  options: RequestOptions = {},
+): Promise<{ status: number; body: T }> {
+  return performRequest<T>(path, options);
+}
+
+async function performRequest<T>(path: string, options: RequestOptions): Promise<{ status: number; body: T }> {
   const headers = new Headers();
   if (options.body !== undefined) {
     headers.set("Content-Type", "application/json");
@@ -124,7 +131,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   if (response.status === 401 && options.auth !== false && options.retryOn401 !== false) {
     const refreshed = await refreshSession();
     if (refreshed) {
-      return apiRequest<T>(path, { ...options, retryOn401: false });
+      return performRequest<T>(path, { ...options, retryOn401: false });
     }
     throw new ApiError(401, "UNAUTHORIZED", "Your session has ended. Sign in again.");
   }
@@ -139,8 +146,13 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   }
 
   if (response.status === 204) {
-    return undefined as T;
+    return { status: response.status, body: undefined as T };
   }
 
-  return (await response.json()) as T;
+  return { status: response.status, body: (await response.json()) as T };
+}
+
+export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const result = await apiRequestResult<T>(path, options);
+  return result.body;
 }

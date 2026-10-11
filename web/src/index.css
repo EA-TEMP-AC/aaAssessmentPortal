@@ -15,7 +15,8 @@ a {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -86,7 +87,8 @@ label {
   margin-bottom: 0.25rem;
 }
 
-input {
+input,
+select {
   width: 100%;
   box-sizing: border-box;
   padding: 0.5rem 0.75rem;
@@ -96,6 +98,12 @@ input {
   color: #1b1f24;
 }
 
+input[type="checkbox"],
+input[type="radio"] {
+  width: auto;
+  padding: 0;
+}
+
 .form-error {
   background: #fef2f2;
   color: #7f1d1d;
@@ -103,6 +111,21 @@ input {
   padding: 0.75rem;
   border-radius: 6px;
   margin: 0 0 1rem;
+}
+
+.form-notice {
+  background: #ecfdf3;
+  color: #14532d;
+  border: 1px solid #14532d;
+  padding: 0.75rem;
+  border-radius: 6px;
+  margin: 0 0 1rem;
+}
+
+.form-notice:focus,
+.form-error:focus {
+  outline: 3px solid #0b3a6e;
+  outline-offset: 2px;
 }
 
 .app-shell {
@@ -216,29 +239,37 @@ button.button-quiet {
   color: #0b3a6e;
 }
 
-.audit-filters {
+.audit-filters,
+.users-filters {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
   gap: 0.75rem 1rem;
   margin-bottom: 0.75rem;
 }
 
-.audit-filters .field {
+.audit-filters .field,
+.users-filters .field {
   margin-bottom: 0;
 }
 
 .audit-filter-actions,
-.audit-pager {
+.audit-pager,
+.users-filter-actions,
+.users-pager,
+.dialog-actions,
+.row-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
 }
 
-.audit-filter-actions {
+.audit-filter-actions,
+.users-filter-actions {
   margin-bottom: 1rem;
 }
 
-.audit-summary {
+.audit-summary,
+.users-summary {
   font-weight: 600;
 }
 
@@ -246,14 +277,17 @@ button.button-quiet {
   overflow-x: auto;
 }
 
-.audit-table {
+.audit-table,
+.users-table {
   width: 100%;
   min-width: 52rem;
   border-collapse: collapse;
 }
 
 .audit-table th,
-.audit-table td {
+.audit-table td,
+.users-table th,
+.users-table td {
   text-align: left;
   vertical-align: top;
   padding: 0.5rem 0.75rem;
@@ -261,7 +295,8 @@ button.button-quiet {
   overflow-wrap: anywhere;
 }
 
-.audit-table th {
+.audit-table th,
+.users-table th {
   background: #e8eef5;
   color: #10233f;
 }
@@ -270,8 +305,70 @@ button.button-quiet {
   background: #f8fafc;
 }
 
-.audit-pager {
+.audit-pager,
+.users-pager {
   margin-top: 1rem;
+}
+
+.check-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+}
+
+.field-hint {
+  margin: 0.25rem 0 0;
+  color: #243040;
+}
+
+fieldset {
+  border: 2px solid #d5dbe3;
+  border-radius: 6px;
+  margin: 0 0 1rem;
+  padding: 0.75rem;
+}
+
+legend {
+  font-weight: 700;
+  padding: 0 0.25rem;
+}
+
+.bare-fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-inline-size: 0;
+}
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 2rem 1rem;
+  overflow: auto;
+  background: rgba(16, 35, 63, 0.45);
+}
+
+.dialog-panel {
+  width: min(36rem, 100%);
+  margin: auto;
+  padding: 1.25rem;
+  background: #ffffff;
+  color: #1b1f24;
+  border: 1px solid #d5dbe3;
+  border-radius: 8px;
+}
+
+.dialog-panel h2 {
+  margin-top: 0;
+}
+
+.dialog-actions {
+  margin-top: 0.5rem;
 }
 
 .snapshot-pair {
