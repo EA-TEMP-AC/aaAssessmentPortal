@@ -50,3 +50,24 @@ export const QUALIFICATION_READ_ROLES = Object.freeze([
 ]);
 
 export const LEARNER_READ_ROLES = Object.freeze(["aa_admin", "mis", "candidate", "ncvet_viewer"]);
+
+/**
+ * Batch create. docs/SCHEMA.md §5.
+ * ab_reviewer may create only when abId equals user.abId (enforced in the service).
+ */
+export const BATCH_CREATE_ROLES = Object.freeze(["aa_admin", "ab_reviewer"]);
+
+/**
+ * Batch list, get, and the compliance dashboard stub. docs/SCHEMA.md §5.
+ * sme is denied. candidate is allowed at the route and matches no rows (open question 70).
+ */
+export const BATCH_READ_ROLES = Object.freeze([
+  "aa_admin",
+  "mis",
+  "assessor",
+  "proctor",
+  "candidate",
+  "tp",
+  "ab_reviewer",
+  "ncvet_viewer",
+]);

@@ -1,0 +1,80 @@
+import { z } from "zod";
+import { isCalendarDate } from "../../lib/working-days.js";
+import { BATCH_MODES, BATCH_STATUSES, BATCH_TYPES } from "./batch-transitions.js";
+
+const objectIdSchema = z.string().regex(/^[a-fA-F0-9]{24}$/, "Invalid id");
+
+const blankToUndefined = (value) => (value === "" || value === undefined ? undefined : value);
+
+function queryNumber({ min, max, fallback }) {
+  return z.preprocess((value) => {
+    if (value === undefined || value === "") return fallback;
+    return value;
+  }, z.coerce.number().int().min(min).max(max));
+}
+
+const calendarDate = z.string().refine(isCalendarDate, "Expected YYYY-MM-DD");
+
+const reasonSchema = z.string().trim().min(1).max(2000);
+
+export const BATCH_PAGE_SIZE_DEFAULT = 20;
+export const BATCH_PAGE_SIZE_MAX = 100;
+
+export const batchIdParamSchema = z.object({
+  id: objectIdSchema,
+});
+
+export const createBatchBodySchema = z
+  .object({
+    abId: objectIdSchema,
+    qualificationId: objectIdSchema,
+    type: z.enum(BATCH_TYPES),
+    mode: z.enum(BATCH_MODES),
+    assessmentStartDate: calendarDate,
+    assessmentEndDate: calendarDate,
+    tpId: objectIdSchema,
+    centreId: objectIdSchema,
+    candidateCount: z.number().int().positive(),
+  })
+  .strict()
+  .refine((body) => body.assessmentEndDate >= body.assessmentStartDate, {
+    message: "assessmentEndDate must be on or after assessmentStartDate",
+    path: ["assessmentEndDate"],
+  });
+
+export const acceptBodySchema = z
+  .object({
+    lateReason: reasonSchema.optional(),
+  })
+  .strict();
+
+export const rejectBodySchema = z
+  .object({
+    reason: reasonSchema,
+    lateReason: reasonSchema.optional(),
+  })
+  .strict();
+
+export const reasonBodySchema = z
+  .object({
+    reason: reasonSchema,
+  })
+  .strict();
+
+export const listBatchesQuerySchema = z
+  .object({
+    status: z.preprocess(blankToUndefined, z.enum(BATCH_STATUSES).optional()),
+    from: z.preprocess(blankToUndefined, calendarDate.optional()),
+    to: z.preprocess(blankToUndefined, calendarDate.optional()),
+    tpId: z.preprocess(blankToUndefined, objectIdSchema.optional()),
+    page: queryNumber({ min: 1, max: 1_000_000, fallback: 1 }),
+    pageSize: queryNumber({
+      min: 1,
+      max: BATCH_PAGE_SIZE_MAX,
+      fallback: BATCH_PAGE_SIZE_DEFAULT,
+    }),
+  })
+  .refine((query) => !query.from || !query.to || query.from <= query.to, {
+    message: "from must be on or before to",
+    path: ["from"],
+  });

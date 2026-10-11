@@ -30,6 +30,7 @@ export default [
         afterAll: "readonly",
         beforeEach: "readonly",
         afterEach: "readonly",
+        vi: "readonly",
       },
     },
   },

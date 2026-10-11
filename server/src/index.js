@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import { createApp } from "./app.js";
 import { assertProductionSecrets, env } from "./config/env.js";
+import { startSlaBreachScheduler } from "./modules/batches/sla-breach-job.js";
 import { startEmailWorker } from "./modules/email/email-worker.js";
 import { smtpIsConfigured } from "./modules/email/email-transport.js";
 
@@ -17,6 +18,10 @@ async function main() {
   }
 
   if (env.NODE_ENV !== "test") {
+    if (env.MONGO_URI) {
+      startSlaBreachScheduler();
+      console.log("SLA breach job scheduled");
+    }
     if (smtpIsConfigured()) {
       startEmailWorker();
       console.log("Email queue worker started");

@@ -3,6 +3,8 @@ import { auditMiddleware } from "./middleware/audit.middleware.js";
 import { errorHandler } from "./middleware/error-handler.js";
 import { auditRouter } from "./modules/audit/audit.routes.js";
 import { authRouter } from "./modules/auth/auth.routes.js";
+import { batchesRouter } from "./modules/batches/batch.routes.js";
+import { complianceRouter } from "./modules/compliance/compliance.routes.js";
 import { healthRouter } from "./modules/health/health.routes.js";
 import {
   awardingBodiesRouter,
@@ -35,6 +37,8 @@ export function createApp() {
   app.use("/api/v1/audit-logs", auditRouter);
   app.use("/api/v1/admin/working-day-config", workingDayConfigRouter);
   app.use("/api/v1/admin/holidays", holidaysRouter);
+  app.use("/api/v1/batches", batchesRouter);
+  app.use("/api/v1/compliance", complianceRouter);
 
   app.use((_req, res) => {
     res.status(404).json({

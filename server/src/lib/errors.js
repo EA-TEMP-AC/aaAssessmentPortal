@@ -33,3 +33,15 @@ export function duplicateResource(message = "Unique constraint") {
 export function passMarkInvalid(message, details) {
   return new AppError(400, "RESULT_PASS_MARK_INVALID", message, details);
 }
+
+export function validationError(message = "Request validation failed", details) {
+  return new AppError(400, "VALIDATION_ERROR", message, details);
+}
+
+export function invalidTransition(message = "Illegal status change") {
+  return new AppError(409, "INVALID_TRANSITION", message);
+}
+
+export function slaAcceptExpired(message = "lateReason is required after acceptDueAt") {
+  return new AppError(409, "SLA_ACCEPT_EXPIRED", message);
+}
