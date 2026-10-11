@@ -7,6 +7,7 @@ import { LoginPage } from "./pages/LoginPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import { PasswordGatePage } from "./pages/PasswordGatePage";
 import { AuditLogPage } from "./pages/AuditLogPage";
+import { UsersPage } from "./pages/UsersPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
 import { RoleHomePage } from "./pages/RoleHomePage";
 import { AuthBridge, GuestOnly, RequireAuth, RequireRole, RootRedirect } from "./routing/guards";
@@ -35,6 +36,8 @@ export function AppRoutes() {
                   element={
                     item.id === "audit" ? (
                       <AuditLogPage />
+                    ) : item.id === "users" ? (
+                      <UsersPage />
                     ) : (
                       <PlaceholderPage title={item.label} description={item.description} />
                     )

@@ -117,6 +117,10 @@
 55. **Seed links.** The sample seed sets `ab_reviewer.abId`, `tp.tpId`, and `candidate.linkedProfileId`, and inserts one learner (`TP-REG-10021`) so that link exists. B-01 left those user fields unset. Confirm.
 56. **Learner phone.** SCHEMA §3.3 lists `phone` and `accommodations` and no other personal data. B-07a accepts `phone` as a trimmed string of 1–32 characters and rejects any other key. Confirm that length and that a phone string is not inspected for a national id.
 57. **Unknown centre tpId.** B-07a returns `400 VALIDATION_ERROR` when `tpId` does not match a training partner. Confirm that status rather than `404`.
+58. **F-09 list search.** The users list is supposed to include search. `GET /users` accepts `role`, `active`, `page`, and `pageSize` only. The screen sends those and does not send a name or email search. Should the contract add a search query?
+59. **F-09 reset results.** `newPassword` is a success only on `204` with no body. `sendEmail: true` is a success only when the response is `202` and `emailQueued` is true: the screen says the email is queued and may arrive later. `emailQueued: false` is shown as a problem (the password changed, the email was not queued, the temporary password is not shown). Any other field on that body, including a temporary password, is ignored and not shown. Confirm.
+60. **F-09 user payload.** API_CONTRACT does not list the user object. The screen uses the B-08 public user `{ id, email, name, role, active, mustChangePassword, linkedProfileId, abId, tpId, createdAt, updatedAt }` and `{ page, pageSize, total, items }`. Requests send `page` (default 1) and `pageSize` (default 20; the screen also offers 50 and 100). Please confirm in the contract.
+61. **F-09 blank profile ids.** Edit sends `null` for a blank linked profile, awarding body, or training partner id so B-08 clears it. Create omits a blank id. Confirm.
 
 ## Not mandated by NCVET (TR s29), do not market as compliance features
 Specific language, DB, cloud, server architecture, API style, biometric or face-recognition tech, GPS hardware, payment gateway, CRM, help-desk software.

@@ -28,7 +28,7 @@ Branch format: task/<ID>-<slug>. Agents update only their own rows.
 | F-06 | Master data screens: AB, TP, centres, qualifications, learners | frontend | B-07a | todo | |
 | F-07 | Result entry UI (NOS marks) + incompleteness warnings | frontend | B-05 | todo | |
 | F-08 | AB validate/publish (+ change reason) screens | frontend | B-05 | todo | Scoped to abId |
-| F-09 | Users management (CRUD + password reset UX) | frontend | B-08 | todo | Reset-email UX assumes B-08 queue/SMTP |
+| F-09 | Users management (CRUD + password reset UX) | frontend | B-08 | review | List, create, edit, activate/deactivate, and password reset for aa_admin and mis. Branch: `task/F-09-users-screens`. Typed client uses the B-08 user routes. mis cannot assign aa_admin or edit/reset an existing aa_admin. A reset email is described as queued and may arrive later; the password is not kept after the form closes. Open questions 47–50. |
 | F-10 | Candidate roster + CSV import | frontend | B-07b | todo | |
 | F-11 | Audit-log viewer | frontend | B-01 | review | Scoped per role. Branch: `task/F-11-audit-viewer`. GET /audit-logs via the typed client. Filters: entity, entityId, from/to. Actor is shown, not queried (open question 37). Route and nav use `AUDIT_ROLES`. The page does not treat the list as complete. |
 | F-12 | Holidays / working-day settings | frontend | B-02 | todo | |

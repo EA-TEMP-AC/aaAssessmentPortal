@@ -36,7 +36,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     id: "users",
     label: "Users",
     to: "/users",
-    description: "User administration will be added in a later task.",
+    description: "Create and manage accounts, including password reset.",
     roles: USER_ADMIN_ROLES,
   },
   {
