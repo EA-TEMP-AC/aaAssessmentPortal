@@ -10,6 +10,7 @@ import { AuditLogPage } from "./pages/AuditLogPage";
 import { MasterDataPage } from "./pages/MasterDataPage";
 import { RecognitionPage } from "./pages/RecognitionPage";
 import { UsersPage } from "./pages/UsersPage";
+import { WorkingDaysPage } from "./pages/WorkingDaysPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
 import { RoleHomePage } from "./pages/RoleHomePage";
 import { AuthBridge, GuestOnly, RequireAuth, RequireRole, RootRedirect } from "./routing/guards";
@@ -44,6 +45,8 @@ export function AppRoutes() {
                       <MasterDataPage />
                     ) : item.id === "recognition" ? (
                       <RecognitionPage />
+                    ) : item.id === "working-days" ? (
+                      <WorkingDaysPage />
                     ) : (
                       <PlaceholderPage title={item.label} description={item.description} />
                     )

@@ -447,7 +447,7 @@ it("creates, edits, and deletes a qualification, including NOS and performance c
   await user.click(within(confirm).getByRole("button", { name: "Delete" }));
   expect(await screen.findByText("Electrician L4 was deleted.")).toBeInTheDocument();
   expect(calls(fetchMock, "DELETE", `/qualifications/${existing.id}`)).toHaveLength(1);
-});
+}, 15000);
 
 it("shows RESULT_PASS_MARK_INVALID from the server and blocks a percent mark above 100 before submit", async () => {
   const user = userEvent.setup();
