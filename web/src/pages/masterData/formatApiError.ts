@@ -1,4 +1,5 @@
 import { ApiError } from "../../api/client";
+import { explainBatchRule, joinErrorParts } from "../../api/ruleErrors";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -23,9 +24,12 @@ export function formatMasterDataError(error: unknown): { message: string; field?
     return { message: "Could not reach the server. Try again." };
   }
   const details = detailText(error.details);
-  const message = [error.code, error.message, details.field ? `Field: ${details.field}.` : "", details.extra]
-    .filter((part) => part.length > 0)
-    .join(". ")
-    .replace(/\.\./g, ".");
+  const message = joinErrorParts([
+    error.code,
+    error.message,
+    details.field ? `Field: ${details.field}.` : "",
+    details.extra,
+    explainBatchRule(error.code, error.details) ?? "",
+  ]);
   return { message, field: details.field };
 }

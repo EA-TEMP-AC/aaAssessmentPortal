@@ -1,9 +1,11 @@
+import { isSectorName, isStateName, type SectorName, type StateName } from "./annexure";
 import { ApiError, apiRequest, apiRequestResult } from "./client";
 
 /**
  * Master data. Learner methods are in API_CONTRACT.md. Other paths, fields,
  * and pass-mark checks follow server/src/modules/master-data (B-07a).
- * See DECISIONS.md open questions 47–57 and 62–69.
+ * Qualification sector is an Annexure II name. ratioClass is separate.
+ * Centre state is required. See DECISIONS.md open questions 47–57 and 62–69.
  */
 
 export const MASTER_PAGE_SIZE_DEFAULT = 20;
@@ -11,8 +13,8 @@ export const MASTER_PAGE_SIZE_OPTIONS = [20, 50, 100] as const;
 
 export type MasterPageSize = (typeof MASTER_PAGE_SIZE_OPTIONS)[number];
 
-export const SECTORS = ["manufacturing", "services", "school_education", "other"] as const;
-export type Sector = (typeof SECTORS)[number];
+export const RATIO_CLASSES = ["manufacturing", "services", "school_education", "other"] as const;
+export type RatioClass = (typeof RATIO_CLASSES)[number];
 
 export const BATCH_TYPES = ["STT", "LTT"] as const;
 export type BatchType = (typeof BATCH_TYPES)[number];
@@ -60,6 +62,7 @@ export type Centre = {
   name: string;
   code: string | null;
   tpId: string;
+  state: StateName;
   active: boolean;
   createdAt: string;
   updatedAt: string;
@@ -85,7 +88,8 @@ export type Qualification = {
   id: string;
   code: string;
   name: string;
-  sector: Sector;
+  sector: SectorName;
+  ratioClass: RatioClass;
   defaultBatchType: BatchType | null;
   passCriteriaMode: PassCriteriaMode | null;
   passMarkUnit: PassMarkUnit;
@@ -127,7 +131,7 @@ export type CentreListQuery = ActiveListQuery & {
 };
 
 export type QualificationListQuery = {
-  sector?: Sector;
+  sector?: SectorName;
   page?: number;
   pageSize?: number;
 };
@@ -150,6 +154,7 @@ export type CentreWrite = {
   name: string;
   code?: string | null;
   tpId: string;
+  state: StateName;
   active: boolean;
 };
 
@@ -180,7 +185,8 @@ export type NosWrite = {
 export type QualificationWrite = {
   code: string;
   name: string;
-  sector: Sector;
+  sector: SectorName;
+  ratioClass: RatioClass;
   defaultBatchType?: BatchType | null;
   passCriteriaMode?: PassCriteriaMode | null;
   passMarkUnit: PassMarkUnit;
@@ -194,8 +200,8 @@ export function isMasterPageSize(value: number): value is MasterPageSize {
   return (MASTER_PAGE_SIZE_OPTIONS as readonly number[]).includes(value);
 }
 
-export function isSector(value: string): value is Sector {
-  return (SECTORS as readonly string[]).includes(value);
+export function isRatioClass(value: string): value is RatioClass {
+  return (RATIO_CLASSES as readonly string[]).includes(value);
 }
 
 function responseError(): ApiError {
@@ -311,10 +317,11 @@ export function parseCentre(value: unknown): Centre {
   const name = requiredString(value.name);
   const code = nullableString(value.code);
   const tpId = requiredString(value.tpId);
+  const state = typeof value.state === "string" && isStateName(value.state) ? value.state : null;
   const active = requiredBoolean(value.active);
   const timestamps = parseTimestamps(value);
-  if (!id || !name || code === undefined || !tpId || active === null || !timestamps) throw responseError();
-  return { id, name, code, tpId, active, ...timestamps };
+  if (!id || !name || code === undefined || !tpId || !state || active === null || !timestamps) throw responseError();
+  return { id, name, code, tpId, state, active, ...timestamps };
 }
 
 function parsePc(value: unknown): PerformanceCriterion {
@@ -343,7 +350,8 @@ export function parseQualification(value: unknown): Qualification {
   const id = requiredString(value.id);
   const code = requiredString(value.code);
   const name = requiredString(value.name);
-  const sector = typeof value.sector === "string" && isSector(value.sector) ? value.sector : null;
+  const sector = typeof value.sector === "string" && isSectorName(value.sector) ? value.sector : null;
+  const ratioClass = typeof value.ratioClass === "string" && isRatioClass(value.ratioClass) ? value.ratioClass : null;
   const defaultBatchType =
     value.defaultBatchType === null
       ? null
@@ -364,6 +372,7 @@ export function parseQualification(value: unknown): Qualification {
     !code ||
     !name ||
     !sector ||
+    !ratioClass ||
     defaultBatchType === undefined ||
     passCriteriaMode === undefined ||
     !passMarkUnit ||
@@ -377,6 +386,7 @@ export function parseQualification(value: unknown): Qualification {
     code,
     name,
     sector,
+    ratioClass,
     defaultBatchType,
     passCriteriaMode,
     passMarkUnit,

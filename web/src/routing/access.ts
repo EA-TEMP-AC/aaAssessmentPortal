@@ -78,3 +78,10 @@ export const AUDIT_ROLES: readonly Role[] = ["aa_admin", "mis", "ab_reviewer", "
 
 /** SCHEMA §5 holidays / working-day config. */
 export const WORKING_DAY_ROLES: readonly Role[] = ["aa_admin", "mis"];
+
+/** SCHEMA §5 Recognition GET/PUT. ncvet_viewer is read-only. */
+export const RECOGNITION_ROLES: readonly Role[] = ["aa_admin", "mis", "ncvet_viewer"];
+
+export function canWriteRecognition(role: Role): boolean {
+  return role === "aa_admin" || role === "mis";
+}

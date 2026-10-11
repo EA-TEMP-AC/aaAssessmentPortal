@@ -8,6 +8,7 @@ import { NotFoundPage } from "./pages/NotFoundPage";
 import { PasswordGatePage } from "./pages/PasswordGatePage";
 import { AuditLogPage } from "./pages/AuditLogPage";
 import { MasterDataPage } from "./pages/MasterDataPage";
+import { RecognitionPage } from "./pages/RecognitionPage";
 import { UsersPage } from "./pages/UsersPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
 import { RoleHomePage } from "./pages/RoleHomePage";
@@ -41,6 +42,8 @@ export function AppRoutes() {
                       <UsersPage />
                     ) : item.id === "master-data" ? (
                       <MasterDataPage />
+                    ) : item.id === "recognition" ? (
+                      <RecognitionPage />
                     ) : (
                       <PlaceholderPage title={item.label} description={item.description} />
                     )

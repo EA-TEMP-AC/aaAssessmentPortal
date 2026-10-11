@@ -12,7 +12,8 @@ function draft(overrides: Partial<QualificationDraft> = {}): QualificationDraft 
     ...emptyQualificationDraft(),
     code: "Q-ELEC-L4",
     name: "Electrician L4",
-    sector: "manufacturing",
+    sector: "Electronics",
+    ratioClass: "manufacturing",
     passMarks: { theory: "50", practical: "50", viva: "50" },
     ...overrides,
   };
@@ -123,6 +124,22 @@ it("rejects duplicate NOS and performance criterion identifiers", () => {
   );
   expect(result.ok).toBe(false);
   if (!result.ok) expect(result.message).toContain("nosId values must be unique");
+});
+
+it("requires an Annexure II sector and a separate ratio class", () => {
+  const missing = buildQualification(draft({ sector: "", ratioClass: "" }), "create");
+  expect(missing.ok).toBe(false);
+  if (!missing.ok) {
+    expect(missing.message).toContain("Choose a sector.");
+    expect(missing.message).toContain("Choose a ratio class.");
+    expect(missing.fields).toEqual(["sector", "ratioClass"]);
+  }
+
+  const saved = buildQualification(draft({ sector: "Construction", ratioClass: "services" }), "create");
+  expect(saved.ok).toBe(true);
+  if (!saved.ok) return;
+  expect(saved.body.sector).toBe("Construction");
+  expect(saved.body.ratioClass).toBe("services");
 });
 
 it("clears optional qualification fields on edit and omits them on create", () => {

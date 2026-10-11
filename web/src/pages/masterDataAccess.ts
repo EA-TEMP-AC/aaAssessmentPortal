@@ -44,13 +44,13 @@ export const MASTER_COLLECTION_META: Record<
     title: "Centres",
     one: "centre",
     many: "centres",
-    lede: "Centres belong to a training partner.",
+    lede: "Centres belong to a training partner. State is required.",
   },
   qualifications: {
     title: "Qualifications",
     one: "qualification",
     many: "qualifications",
-    lede: "Qualifications, including NOS, performance criteria, and pass marks.",
+    lede: "Qualifications, including the Annexure II sector, ratio class, NOS, and pass marks.",
   },
   learners: {
     title: "Learners",

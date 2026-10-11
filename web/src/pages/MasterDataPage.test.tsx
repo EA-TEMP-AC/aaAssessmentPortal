@@ -93,7 +93,8 @@ function qualification(overrides: Partial<Qualification> = {}): Qualification {
     id: "66f0000000000000000000q1",
     code: "Q-ELEC-L4",
     name: "Electrician L4",
-    sector: "manufacturing",
+    sector: "Electronics",
+    ratioClass: "manufacturing",
     defaultBatchType: null,
     passCriteriaMode: null,
     passMarkUnit: "percent",
@@ -119,7 +120,8 @@ async function fillQualification(user: ReturnType<typeof userEvent.setup>, withN
   const dialog = screen.getByRole("dialog", { name: "Create qualification" });
   await user.type(within(dialog).getByLabelText("Code"), "Q-ELEC-L4");
   await user.type(within(dialog).getByLabelText("Name"), "Electrician L4");
-  await user.selectOptions(within(dialog).getByLabelText("Sector"), "manufacturing");
+  await user.selectOptions(within(dialog).getByLabelText("Sector"), "Electronics");
+  await user.selectOptions(within(dialog).getByLabelText("Ratio class"), "manufacturing");
   await user.type(within(dialog).getByLabelText("Theory pass mark"), "50");
   await user.type(within(dialog).getByLabelText("Practical pass mark"), "50");
   await user.type(within(dialog).getByLabelText("Viva pass mark"), "50");
@@ -331,6 +333,48 @@ it("shows DUPLICATE_RESOURCE on the awarding body form and restores focus when t
   expect(dialog).not.toBe(null);
 });
 
+it("requires a centre state and sends it with the training partner id", async () => {
+  const user = userEvent.setup();
+  const fetchMock = installFetch(async (_url, init) => {
+    if (methodOf(init) === "POST") {
+      return jsonResponse(201, {
+        id: "66f0000000000000000000c1",
+        name: "Andheri Centre",
+        code: null,
+        tpId: "66f000000000000000000011",
+        state: "Maharashtra",
+        active: true,
+        createdAt: "2026-10-01T09:30:00.000Z",
+        updatedAt: "2026-10-01T09:30:00.000Z",
+      });
+    }
+    return jsonResponse(200, listBody([]));
+  });
+  setSession(sessionFor("aa_admin"));
+  renderApp("/master-data/centres");
+  await screen.findByRole("heading", { name: "Centres" });
+  await user.click(screen.getByRole("button", { name: "Create centre" }));
+  const dialog = screen.getByRole("dialog", { name: "Create centre" });
+  await user.type(within(dialog).getByLabelText("Name"), "Andheri Centre");
+  await user.type(within(dialog).getByLabelText("Training partner id"), "66f000000000000000000011");
+  expect(within(dialog).getByRole("option", { name: "Maharashtra" })).toBeInTheDocument();
+  expect(within(dialog).queryByRole("option", { name: "manufacturing" })).not.toBeInTheDocument();
+  await user.click(within(dialog).getByRole("button", { name: "Create centre" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("Choose a state.");
+  expect(within(dialog).getByLabelText("State")).toHaveFocus();
+  expect(calls(fetchMock, "POST", "/centres")).toHaveLength(0);
+
+  await user.selectOptions(within(dialog).getByLabelText("State"), "Maharashtra");
+  await user.click(within(dialog).getByRole("button", { name: "Create centre" }));
+  expect(await screen.findByText("Andheri Centre was created.")).toBeInTheDocument();
+  expect(requestBody(calls(fetchMock, "POST", "/centres").at(-1)?.[1])).toMatchObject({
+    name: "Andheri Centre",
+    tpId: "66f000000000000000000011",
+    state: "Maharashtra",
+    active: true,
+  });
+});
+
 it("asks a centre writer for a training partner id and only offers that filter to roles who read every centre", async () => {
   const user = userEvent.setup();
   const fetchMock = installFetch(async () => jsonResponse(200, listBody([])));
@@ -363,6 +407,8 @@ it("creates, edits, and deletes a qualification, including NOS and performance c
   setSession(sessionFor("mis"));
   renderApp("/master-data/qualifications");
   expect(await screen.findByRole("cell", { name: "Electrician L4" })).toBeInTheDocument();
+  expect(screen.getByRole("cell", { name: "Electronics" })).toBeInTheDocument();
+  expect(screen.getByRole("cell", { name: "Manufacturing" })).toBeInTheDocument();
 
   await user.click(screen.getByRole("button", { name: "Create qualification" }));
   const dialog = await fillQualification(user);
@@ -371,7 +417,8 @@ it("creates, edits, and deletes a qualification, including NOS and performance c
   expect(requestBody(calls(fetchMock, "POST", "/qualifications").at(-1)?.[1])).toEqual({
     code: "Q-ELEC-L4",
     name: "Electrician L4",
-    sector: "manufacturing",
+    sector: "Electronics",
+    ratioClass: "manufacturing",
     passMarkUnit: "percent",
     passMarks: { theory: 50, practical: 50, viva: 50 },
     nos: [{ nosId: "NOS-01", code: "N01", name: "Safety", pcs: [{ pcId: "PC-01", code: "P1", name: "PPE" }] }],
@@ -456,10 +503,10 @@ it("shows a qualification list error and a sector filter", async () => {
   await user.click(screen.getByRole("button", { name: "Try again" }));
   expect(await screen.findByText("No qualifications are available for your account.")).toBeInTheDocument();
 
-  await user.selectOptions(screen.getByLabelText("Sector"), "manufacturing");
+  await user.selectOptions(screen.getByLabelText("Sector"), "Electronics");
   await user.click(screen.getByRole("button", { name: "Apply filters" }));
   expect(await screen.findByText("No qualifications match these filters.")).toBeInTheDocument();
-  expect(requestUrl(fetchMock.mock.calls.at(-1)?.[0] ?? "").searchParams.get("sector")).toBe("manufacturing");
+  expect(requestUrl(fetchMock.mock.calls.at(-1)?.[0] ?? "").searchParams.get("sector")).toBe("Electronics");
 });
 
 it("keeps learner fields to the schema and does not offer delete or a national identity input", async () => {

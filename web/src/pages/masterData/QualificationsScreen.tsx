@@ -1,20 +1,21 @@
 import { useEffect, useId, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import { SECTOR_NAMES, type SectorName } from "../../api/annexure";
 import {
-  SECTORS,
+  RATIO_CLASSES,
   createQualification,
   deleteQualification,
   listQualifications,
   updateQualification,
   type MasterPageSize,
   type Qualification,
-  type Sector,
+  type RatioClass,
 } from "../../api/masterData";
 import { useSession } from "../../api/session";
 import { MASTER_COLLECTION_META, canReadMasterCollection, canWriteMasterData } from "../masterDataAccess";
 import { Dialog, FormAlert } from "./dialog";
 import { formatMasterDataError } from "./formatApiError";
-import { BATCH_TYPE_LABELS, PASS_CRITERIA_LABELS, PASS_UNIT_LABELS, SECTOR_LABELS } from "./labels";
+import { BATCH_TYPE_LABELS, PASS_CRITERIA_LABELS, PASS_UNIT_LABELS, RATIO_CLASS_LABELS } from "./labels";
 import { ListScaffold, PageSizeField } from "./listScaffold";
 import { READ_ONLY_NOTE, SCOPE_NOTE, emptyListMessage, listSummary } from "./listText";
 import {
@@ -31,7 +32,7 @@ import {
 import { useFormErrorFocus } from "./useFormErrorFocus";
 import { useMasterDialog } from "./useMasterDialog";
 
-type Filters = { sector: Sector | ""; pageSize: MasterPageSize };
+type Filters = { sector: SectorName | ""; pageSize: MasterPageSize };
 type DialogState = { type: "create" } | { type: "edit"; record: Qualification } | { type: "delete"; record: Qualification };
 type FormError = { id: number; message: string; fields: string[] };
 type MarkName = "theory" | "practical" | "viva";
@@ -258,15 +259,42 @@ function QualificationForm({
               value={draft.sector}
               aria-required="true"
               aria-invalid={formError?.fields.includes("sector") || undefined}
-              onChange={(event) => update({ sector: event.target.value as Sector | "" })}
+              aria-describedby={described("sector", `${baseId}-sector-hint`)}
+              onChange={(event) => update({ sector: event.target.value as SectorName | "" })}
             >
               <option value="">Choose a sector</option>
-              {SECTORS.map((sector) => (
+              {SECTOR_NAMES.map((sector) => (
                 <option key={sector} value={sector}>
-                  {SECTOR_LABELS[sector]}
+                  {sector}
                 </option>
               ))}
             </select>
+            <p id={`${baseId}-sector-hint`} className="field-hint">
+              Required. Annexure II sector name.
+            </p>
+          </div>
+          <div className="field">
+            <label htmlFor={`${baseId}-ratio`}>Ratio class</label>
+            <select
+              id={`${baseId}-ratio`}
+              ref={bind("ratioClass")}
+              name="ratioClass"
+              value={draft.ratioClass}
+              aria-required="true"
+              aria-invalid={formError?.fields.includes("ratioClass") || undefined}
+              aria-describedby={described("ratioClass", `${baseId}-ratio-hint`)}
+              onChange={(event) => update({ ratioClass: event.target.value as RatioClass | "" })}
+            >
+              <option value="">Choose a ratio class</option>
+              {RATIO_CLASSES.map((ratioClass) => (
+                <option key={ratioClass} value={ratioClass}>
+                  {RATIO_CLASS_LABELS[ratioClass]}
+                </option>
+              ))}
+            </select>
+            <p id={`${baseId}-ratio-hint`} className="field-hint">
+              Required. Assessor-to-learner class only. It is not the sector.
+            </p>
           </div>
           <div className="field">
             <label htmlFor={`${baseId}-batch`}>Default batch type</label>
@@ -695,7 +723,7 @@ export function QualificationsScreen() {
   }
 
   const result = records.isError ? undefined : records.data;
-  const columns = ["Code", "Name", "Sector", "Pass mark unit", "Pass marks", "NOS", ...(canWrite ? ["Actions"] : [])];
+  const columns = ["Code", "Name", "Sector", "Ratio class", "Pass mark unit", "Pass marks", "NOS", ...(canWrite ? ["Actions"] : [])];
   const notes = [SCOPE_NOTE, canWrite ? "Delete removes a qualification permanently." : READ_ONLY_NOTE];
 
   function openDialog(event: MouseEvent<HTMLButtonElement>, next: DialogState) {
@@ -725,7 +753,8 @@ export function QualificationsScreen() {
       <tr key={record.id}>
         <td>{record.code}</td>
         <td>{record.name}</td>
-        <td>{SECTOR_LABELS[record.sector]}</td>
+        <td>{record.sector}</td>
+        <td>{RATIO_CLASS_LABELS[record.ratioClass]}</td>
         <td>{PASS_UNIT_LABELS[record.passMarkUnit]}</td>
         <td>{passMarkText(record)}</td>
         <td>{record.nos.length}</td>
@@ -762,12 +791,12 @@ export function QualificationsScreen() {
               id={sectorId}
               name="sector"
               value={draftFilters.sector}
-              onChange={(event) => setDraftFilters((current) => ({ ...current, sector: event.target.value as Sector | "" }))}
+              onChange={(event) => setDraftFilters((current) => ({ ...current, sector: event.target.value as SectorName | "" }))}
             >
               <option value="">Any sector</option>
-              {SECTORS.map((sector) => (
+              {SECTOR_NAMES.map((sector) => (
                 <option key={sector} value={sector}>
-                  {SECTOR_LABELS[sector]}
+                  {sector}
                 </option>
               ))}
             </select>

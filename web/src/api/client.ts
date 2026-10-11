@@ -1,4 +1,5 @@
 import { API_BASE_URL } from "../config/app";
+import { explainBatchRule, joinErrorParts } from "./ruleErrors";
 import { clearSession, getAccessToken, getSnapshot, updateSession } from "./session";
 import { parseAuthSession, type ApiErrorBody } from "./types";
 
@@ -17,8 +18,10 @@ export class ApiError extends Error {
 }
 
 export function errorMessage(error: unknown): string {
-  if (error instanceof ApiError) return error.message;
-  return "Could not reach the server. Try again.";
+  if (!(error instanceof ApiError)) return "Could not reach the server. Try again.";
+  const explanation = explainBatchRule(error.code, error.details);
+  if (!explanation) return error.message;
+  return joinErrorParts([error.code, error.message, explanation]);
 }
 
 type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
