@@ -65,7 +65,9 @@ Reassessment = new batch via `POST /batches/:id/reassessments` (not a status). A
 | `UserRole` | `aa_admin`, `mis`, `sme`, `assessor`, `proctor`, `candidate`, `tp`, `ab_reviewer`, `ncvet_viewer` |
 | `BatchType` | `STT`, `LTT` |
 | `BatchMode` | `online`, `offline`, `blended` |
-| `Sector` | `manufacturing`, `services`, `school_education`, `other` |
+| `RatioClass` | `manufacturing`, `services`, `school_education`, `other` |
+| `SectorName` | the 59 Annexure II names in §1.5 |
+| `StateUt` | the 36 Annexure IV names in §1.6 |
 | `LoginActorType` | `assessor`, `proctor`, `student` |
 | `LoginEventType` | `login`, `logout` |
 | `CandidateOutcome` | `Pass`, `Fail`, `Absent` (server-computed) |
@@ -73,6 +75,78 @@ Reassessment = new batch via `POST /batches/:id/reassessments` (not a status). A
 | `EmailQueueStatus` | `pending`, `sending`, `sent`, `failed` |
 | `PassCriteriaMode` | `nos_wise`, `overall` |
 | `PassMarkUnit` | `percent`, `absolute` |
+
+### 1.5 `SectorName` — Guidelines Annexure II (indicative)
+
+Stored and compared as these strings. Abbreviations are the ones printed in the annexure (`Gems/Jewel`, `Musical Inst.`, `Org. Retail`, `Religious Prof.`, `Unorg. Sector`, `Wood & Carp.`, and the others below). Do not expand them.
+
+1. Aerospace and Aviation
+2. Automotive
+3. Agriculture
+4. Apparel
+5. Beauty & Wellness
+6. BFSI
+7. Capital goods
+8. Chemicals and Petrochemicals
+9. Construction
+10. Domestic Worker
+11. Education, Training & Research
+12. Electronics
+13. Environmental Science
+14. Food
+15. Gems/Jewel
+16. Glass & Ceramics
+17. Handicrafts
+18. Healthcare
+19. Hydrocarbon
+20. Infrastructure
+21. Iron & Steel
+22. IT-ITeS
+23. Judiciary
+24. Leather
+25. Legal Services
+26. Legislators
+27. Life Sciences
+28. Media & Entertainment
+29. Mining
+30. Musical Inst.
+31. Office Admin
+32. Optical Products
+33. Org. Retail
+34. Paints & Coatings
+35. Paper & paper products
+36. Plumbing
+37. Postal
+38. Power
+39. Printing
+40. Public Admin
+41. Pvt. Security
+42. PwD
+43. Railways
+44. Real Estate
+45. Religious Prof.
+46. Rubber
+47. Shipping
+48. Sports
+49. Telecom
+50. Textile
+51. Tobacco
+52. Tourism & Hospitality
+53. Transportation, Logistics and Warehousing
+54. Unorg. Sector
+55. Water Supply
+56. Wood & Carp.
+57. Instrumentation
+58. Green Jobs
+59. Management
+
+`RatioClass` is not a sector. It only feeds the assessor-to-learner cap (`RATIO_MAX_*`).
+
+### 1.6 `StateUt` — Guidelines Annexure IV
+
+Stored and compared as these strings, including the printed spellings (`Himachal`, `J and K`, `Chattisgarh`, `Orissa`, `Dadra & Nagar Haveli and Daman & Diu`). Annexure V uses different spellings for some of the same places. Recognition and centres use this list, not Annexure V.
+
+Andaman and Nicobar Islands; Lakshadweep; Dadra & Nagar Haveli and Daman & Diu; Ladakh; Chandigarh; Puducherry; Sikkim; Mizoram; Goa; Arunachal Pradesh; Nagaland; Manipur; Meghalaya; Tripura; Himachal; Uttarakhand; J and K; NCT of Delhi; Chattisgarh; Telangana; Haryana; Kerala; Punjab; Jharkhand; Assam; Orissa; Gujarat; Karnataka; Rajasthan; Tamil Nadu; Madhya Pradesh; Andhra Pradesh; Bihar; West Bengal; Maharashtra; Uttar Pradesh.
 
 ---
 
@@ -85,24 +159,22 @@ Implement in B-02. No magic numbers in feature code.
 | `TIMEZONE` | `Asia/Kolkata` | Project |
 | `WEEKEND_DAYS` | `[6, 0]` | Sat, Sun |
 | `ACCEPT_REJECT_WORKING_DAYS` | `2` | NCVET:FR §F |
-| `ASSIGN_BEFORE_EXAM_WD_STT` | `7` | NCVET:FR §F |
-| `ASSIGN_BEFORE_EXAM_WD_LTT` | `30` | NCVET:FR §F |
-| `ASSIGN_FROM_ACCEPTANCE_WD_STT` | `7` | Alternate; Q12 |
-| `ASSIGN_FROM_ACCEPTANCE_WD_LTT` | `30` | Alternate |
-| `ASSIGN_SLA_MODE` | `before_exam` | |
-| `RESULT_SUBMIT_WD_STT` | `3` | NCVET:FR §F |
-| `RESULT_SUBMIT_WD_LTT` | `5` | NCVET:FR §F |
-| `RESULT_SLA_ANCHOR` | `assessment_end_date` | Open Q16 |
-| `BATCH_ALLOCATE_LEAD_DAYS_STT` | `15` | Project/flow |
+| `ASSIGN_AFTER_ALLOCATION_WD_STT` | `7` | Guidelines Table 7; NCVET:FR §F. Forward from `allocatedAt` |
+| `ASSIGN_BEFORE_EXAM_WD_LTT` | `30` | Guidelines Table 7; NCVET:FR §F. Back from `assessmentStartDate` |
+| `RESULT_SUBMIT_WD_STT` | `3` | Guidelines Table 7; NCVET:FR §F |
+| `RESULT_SUBMIT_WD_LTT` | `5` | Guidelines Table 7; NCVET:FR §F |
+| `RESULT_SLA_ANCHOR_STT` | `assessment_end_date` | `assessmentEndDate` |
+| `RESULT_SLA_ANCHOR_LTT` | `exam_date` | `assessmentStartDate` |
+| `BATCH_ALLOCATE_LEAD_DAYS_STT` | `15` | Guidelines Figure 2; calendar days. Hard check open Q15 |
 | `TOA_VALIDITY_YEARS` | `3` | NCVET:FR §D |
 | `MAX_AAS_PER_ASSESSOR` | `4` | NCVET:FR §D |
 | `RATIO_MAX_MANUFACTURING` | `25` | |
 | `RATIO_MAX_SERVICES` | `35` | |
 | `RATIO_MAX_SCHOOL_EDUCATION` | `60` | |
 | `RATIO_MAX_OTHER` | `null` | Rule not applied |
-| `REASSESS_WINDOW_YEARS` | `1` | From **first** assessment end; NCVET:FR §F |
+| `REASSESS_WINDOW_YEARS` | `1` | Guidelines 4.7; NCVET:FR §F. From the original result `publishedAt` |
 | `EVIDENCE_REQUIRED_FOR_RESULT` | `false` | Phase 1 |
-| `ASSESSOR_REACHABLE_HOURS` | `24` | Soft |
+| `ASSESSOR_REACHABLE_HOURS` | `24` | Guidelines 4.4.e. Not an assign block; open Q82 |
 | `MAX_CLOCK_SKEW_MS` | `300000` | Flag only |
 | `OFFLINE_SESSION_MAX_MS` | `259200000` | 72h |
 | `ACCESS_TOKEN_TTL_MS` | `900000` | 15m |
@@ -121,7 +193,13 @@ Implement in B-02. No magic numbers in feature code.
 
 Example: anchor **Tuesday 06 Oct 2026** IST, N=2, no holidays → day1=Wed 07, day2=Thu 08 → due end of Thu 08 IST.
 
-Example (assign before exam): `assessmentStartDate=2026-11-20`, N=7 WD before → due **end of 2026-11-11 IST** = `2026-11-11T18:29:59.999Z`.
+Example (LTT assign, before the exam): `assessmentStartDate=2026-11-20`, N=30 WD before → due **end of 2026-10-09 IST** = `2026-10-09T18:29:59.999Z`.
+
+Example (STT assign, after allocation): `allocatedAt=2026-10-08T08:00:00.000Z` is Thursday 08 Oct 2026 IST. N=7 WD after → day 7 is Monday 19 Oct → due **end of 2026-10-19 IST** = `2026-10-19T18:29:59.999Z`.
+
+Example (STT result): `assessmentEndDate=2026-11-21` (Saturday). N=3 WD after → due **end of 2026-11-25 IST** = `2026-11-25T18:29:59.999Z`.
+
+Example (LTT result): exam date `assessmentStartDate=2026-11-20`. N=5 WD after → due **end of 2026-11-27 IST** = `2026-11-27T18:29:59.999Z`.
 
 ### 2.2 Soft SLA for `aa_admin`
 
@@ -135,6 +213,17 @@ Accept / assign / submit-result after the relevant due instant:
 Holiday CRUD is audit-logged. **Changing holidays does not retroactively recompute** stored `acceptDueAt` / `assignDueAt` / `resultDueAt` on existing batches.
 
 Unaccepted batches past accept SLA with no action: open Q21.
+
+### 2.3 Per-type assign and result anchors
+
+There is no `ASSIGN_SLA_MODE`. The batch `type` picks the anchor. Guidelines Table 7 (NCVET:FR §F). Assign and result due instants are stored at create, together with the accept due instant. Holiday edits do not rewrite them (§2.2).
+
+| Type | Assign | Result |
+|---|---|---|
+| `STT` | `ASSIGN_AFTER_ALLOCATION_WD_STT` (7) working days **after** `allocatedAt` (receipt from the AB) | `RESULT_SUBMIT_WD_STT` (3) working days after `assessmentEndDate` |
+| `LTT` | `ASSIGN_BEFORE_EXAM_WD_LTT` (30) working days **before** `assessmentStartDate` (the exam date) | `RESULT_SUBMIT_WD_LTT` (5) working days after `assessmentStartDate` |
+
+`BATCH_ALLOCATE_LEAD_DAYS_STT` is 15 **calendar** days. Guidelines Figure 2 says the AB allocates an STT batch at least 15 days in advance. Whether create rejects a shorter lead is open Q15.
 
 ---
 
@@ -204,11 +293,15 @@ Indexes: `{ code: 1 }` sparse unique.
 
 ### 3.5 `assessors` / `proctors` (phase 1)
 
-Unchanged from prior: ToA + undertaking on assessors; proctors without ToA. No Aadhaar.
+ToA + undertaking on assessors; proctors without ToA. No Aadhaar.
+
+Assessors also store `languages: string[]` (may be empty). Each entry is trimmed. Comparison with `batches.assessmentLanguage` is case-insensitive after trim. NCVET:FR §D; Annexure IX(a) Assessment Delivery sub-parameter 4; docs/ERF.md row 04.
 
 ### 3.6 `trainingPartners` / `centres` (phase 1)
 
-Unchanged.
+Training-partner fields other than those below stay as the B-07a proposal (open questions 47–57).
+
+Centres gain `state: StateUt` (required). Recognition checks this value (§4.3). A centre with no `state` cannot be placed on a batch (`400 VALIDATION_ERROR`).
 
 ### 3.7 `qualifications` (phase 1)
 
@@ -216,7 +309,8 @@ Unchanged.
 |---|---|---|---|
 | code | string | Y | unique |
 | name | string | Y | |
-| sector | Sector | Y | |
+| sector | SectorName | Y | Annexure II name. Not the ratio class |
+| ratioClass | RatioClass | Y | Assessor-to-learner cap only |
 | defaultBatchType | BatchType | N | |
 | passCriteriaMode | PassCriteriaMode | N | open Q19 |
 | passMarkUnit | PassMarkUnit | Y | `percent` (default) or `absolute` |
@@ -242,7 +336,12 @@ Indexes: `{ code: 1 }` unique; `{ sector: 1 }`.
 | tpId | ObjectId | Y | |
 | centreId | ObjectId | Y | |
 | candidateCount | number | Y | |
-| sector | Sector | Y | |
+| sector | SectorName | Y | Copied from the qualification. Client cannot set it |
+| ratioClass | RatioClass | Y | Copied from the qualification. Client cannot set it |
+| assessmentLanguage | string | Y | Trimmed, 1–80 characters. Scheduled language of this batch |
+| state | StateUt | Y | Copied from `centres.state` at create |
+| learnerFeedback | { collected: bool, reason: string\|null, recordedBy: ObjectId, recordedAt: Date } \| null | N | Null until recorded. Reason required when `collected` is false, otherwise null. NCVET:FR §J; Annexure IX(a) Governance sub-parameter 4; docs/ERF.md row 26 |
+| recognitionOverride | { byUserId, reason, at, checks: string[] } \| null | N | Set when `aa_admin` overrides §4.3 |
 | status | BatchStatus | Y | |
 | statusVersion | number | Y | |
 | assessorId | ObjectId | N | |
@@ -254,16 +353,16 @@ Indexes: `{ code: 1 }` unique; `{ sector: 1 }`.
 | resultId | ObjectId | N | |
 | isReassessment | bool | Y | |
 | reassessmentOf | ObjectId | N | immediate parent |
-| firstAssessmentBatchId | ObjectId | N | root batch for 1-year window; = self if not reassessment |
+| firstAssessmentBatchId | ObjectId | N | root batch; the 1-year window uses that batch’s result `publishedAt`; = self if not a reassessment |
 | accommodations | string[] | N | |
 | allocatedAt | Date | Y | |
 | acceptedAt | Date | N | |
 | assignedAt | Date | N | |
 | cancelledAt | Date | N | |
 
-Indexes: `{ status: 1, assessmentStartDate: 1 }`; `{ assessorId: 1, assessmentStartDate: 1, assessmentEndDate: 1 }`; `{ tpId: 1 }`; `{ abId: 1 }`; `{ reassessmentOf: 1 }` sparse; `{ firstAssessmentBatchId: 1 }`.
+Indexes: `{ status: 1, assessmentStartDate: 1 }`; `{ assessorId: 1, assessmentStartDate: 1, assessmentEndDate: 1 }`; `{ tpId: 1 }`; `{ abId: 1 }`; `{ sector: 1 }`; `{ reassessmentOf: 1 }` sparse; `{ firstAssessmentBatchId: 1 }`.
 
-**Clash:** overlapping `[start,end]` + different `centreId` → `RULE_ASSESSOR_CLASH` via `assessorDayLocks` txn.
+**Clash:** overlapping `[start,end]` + different `centreId` → `RULE_ASSESSOR_CLASH` via `assessorDayLocks` txn. The same centre on the same day still merges into one lock. Whether two batches at that centre should block, warn, or stay allowed is open Q79 (Annexure IX(a) Assessment Delivery sub-parameter 9).
 
 ### 3.9 `assessorDayLocks` (phase 1)
 
@@ -370,7 +469,43 @@ As before. Holiday writes → audit. No retroactive SLA dueAt recompute.
 
 ### 3.16 Phase 2 / 3 collections
 
-Reserved: `questions`, `tests`, `attempts`, `evidence`; `proctoringSessions`, `proctoringFlags`, `grievances`, `erfScores`, `siteDocuments`, `securityAudits`, `exportCredentials`, `sectors`.
+Reserved: `questions`, `tests`, `attempts`, `evidence`; `proctoringSessions`, `proctoringFlags`, `grievances`, `erfScores`, `siteDocuments`, `securityAudits`, `exportCredentials`.
+
+The old `sectors` placeholder is replaced by `aaRecognition` plus `SectorName` on the qualification (§3.17, §1.5).
+
+### 3.17 `aaRecognition` (phase 1)
+
+One document, `key: "default"`. Guidelines recognition: sectors, geography, and dates.
+
+| Field | Type | Req | Notes |
+|---|---|---|---|
+| key | string | Y | `"default"` only |
+| sectors | SectorName[] | Y | Unique, at least one |
+| panIndia | bool | Y | |
+| states | StateUt[] | Y | Unique. Empty when `panIndia` is true. At least one when `panIndia` is false |
+| startDate | string | Y | `YYYY-MM-DD` IST, inclusive |
+| endDate | string | Y | `YYYY-MM-DD` IST, inclusive, on or after `startDate` |
+| updatedBy | ObjectId | N | |
+
+Index: `{ key: 1 }` unique.
+
+`PUT` replaces the document and writes an audit row. It does not rewrite existing batches.
+
+### 3.18 `assessorPayments` (phase 1) — NCVET:FR §D, §J; Annexure IX(a) Financials 3; docs/ERF.md row 19
+
+One row per batch and assessor. Owned by **B-11**.
+
+| Field | Type | Req | Notes |
+|---|---|---|---|
+| batchId | ObjectId | Y | |
+| assessorId | ObjectId | Y | |
+| amountDue | number | Y | Rupees, ≥ 0, at most 2 decimal places |
+| amountPaid | number | Y | Rupees, ≥ 0, at most 2 decimal places, ≤ `amountDue` |
+| pending | number | Y | Server sets `amountDue - amountPaid` |
+| logisticsNote | string | N | Trimmed, up to 2000 characters. Project field for travel and boarding notes (Guidelines 4.4.d). Not a separate ERF weight |
+| updatedBy | ObjectId | Y | |
+
+Unique `{ batchId: 1, assessorId: 1 }`. A reassigned assessor gets a separate row. The previous row stays.
 
 ---
 
@@ -378,19 +513,36 @@ Reserved: `questions`, `tests`, `attempts`, `evidence`; `proctoringSessions`, `p
 
 ### 4.1 Assignment / ratio / clash
 
-Unchanged hard rules (`RULE_*`). Soft SLA separate (§2.2).
+Hard rules (`RULE_*`) stay, including a different centre on an overlapping range. Soft SLA is separate (§2.2). The ratio cap uses `ratioClass`, never `sector`.
 
-### 4.2 Reassessment — NCVET:FR §F
+**Language (NCVET:FR §D; Annexure IX(a) Assessment Delivery 4):** on assign and reassign, `assessors.languages` must contain `batches.assessmentLanguage` (trim, case-insensitive). If not, `409 RULE_ASSESSOR_LANGUAGE`. `aa_admin` may send `languageOverrideReason` (1–2000 characters), store it on the audit row (`action: assessor_language_override`, `meta.reason`), and the assign proceeds. Any other role cannot override.
+
+### 4.2 Reassessment — Guidelines 4.7; NCVET:FR §F
 
 New batch:
 
 - `isReassessment: true`, `reassessmentOf`, `firstAssessmentBatchId` = root’s id
-- **Inherit** from parent (unless overridden): `abId`, `qualificationId`, `type`, `mode`, `tpId`, `sector`; dates/centre/assessor set in request
-- Candidates: Fail/Absent only; same `learnerId`; copy roster rows
-- Window: `assessmentStartDate` of new batch within `REASSESS_WINDOW_YEARS` of **`firstAssessmentBatchId.assessmentEndDate`** (not the immediate parent’s end if chain)
+- **Inherit** from parent (unless the request overrides a field that the contract allows): `abId`, `qualificationId`, `type`, `mode`, `tpId`, `sector`, `ratioClass`, `assessmentLanguage`; dates and centre are set in the request
+- Candidates: Fail or Absent on the parent batch only; same `learnerId`; copy roster rows
+- Window: `assessmentStartDate` of the new batch is on or before the IST calendar date of the **original** result’s `publishedAt` plus `REASSESS_WINDOW_YEARS`. Original means `firstAssessmentBatchId`, not the immediate parent when there is a chain. The new start must also be on or after that publication date
+- The original result must already be `published`. An unpublished original fails the rule
 - Never on certificates
 - Who initiates (AA vs AB): open Q22
-- `409 REASSESS_NOT_ELIGIBLE` on rule failure
+- `409 REASSESS_NOT_ELIGIBLE` when any of those rules fail. `details.reason` is `not_published`, `window`, `outcome`, or `type`
+
+### 4.3 Recognition scope — Guidelines §§ on sector and geography; Annexure II and IV
+
+Singleton `aaRecognition` (§3.17). On `POST /batches`, after the qualification and centre exist:
+
+1. `qualification.sector` is one of `aaRecognition.sectors`.
+2. `panIndia` is true, or `centres.state` is one of `aaRecognition.states`.
+3. Today’s IST date is on or after `startDate` and on or before `endDate`.
+
+Any miss is `409 RULE_OUTSIDE_RECOGNITION` with `details.checks` containing one or more of `sector`, `state`, `not_started`, `expired`. No recognition row is `unconfigured` in that array. `aa_admin` may send `recognitionOverrideReason` (1–2000 characters) on the same create. The batch then stores `recognitionOverride` (including the checks that failed) and an audit row `action: recognition_override`. `ab_reviewer` cannot override. The check runs again for a reassessment create.
+
+### 4.4 Learner feedback and assessor payments
+
+Schema and contract only. **B-10** writes `learnerFeedback` once the batch is `assessment_completed` or later. **B-11** writes `assessorPayments` once an assessor is assigned. Neither call changes batch status.
 
 ---
 
@@ -413,6 +565,9 @@ New batch:
 | Results PUT | A | D | D | D | D | D | D | D | D | assessment_completed+draft |
 | Audit read | A | A | D | D | D | D | D | R§ | R§ | § scoped |
 | Holidays / working-day | A | A | D | D | D | D | D | D | D | audit on change |
+| Recognition GET/PUT | A | A | D | D | D | D | D | D | R | audit on PUT |
+| Learner feedback write | A | A | D | D | D | D | D | D | D | B-10; batch readers may read it on the batch |
+| Assessor payment read/write | A | A | D | D | D | D | D | R | R | B-11; write is aa_admin and mis; AB and NCVET read own scope |
 
 **Batch row scope:** aa_admin/mis/ncvet_viewer=all; ab=`abId`; tp=`tpId`; assessor=`assessorId`; proctor=`proctorId`; candidate=batches containing their learner’s candidate row.
 
@@ -425,7 +580,11 @@ learners <── candidates.learnerId <── batches
 users.linkedProfileId → learners | assessors | proctors | tp
 awardingBodies.notificationEmails ← emailQueue ← assessor loginEvents
 batches → assessorDayLocks; results; reassessmentOf/firstAssessmentBatchId
+batches.sector + centre.state + aaRecognition → RULE_OUTSIDE_RECOGNITION
+batches.assessmentLanguage + assessors.languages → RULE_ASSESSOR_LANGUAGE
+batches.learnerFeedback; assessorPayments (pending = due − paid)
 workingDayConfig + holidays → SLA dueAts (no retroactive rewrite)
+original result.publishedAt → reassessment window
 sla.breached ← late actions + on-read compute + nightly job
 auditLogs append-only (secrets redacted)
 ```

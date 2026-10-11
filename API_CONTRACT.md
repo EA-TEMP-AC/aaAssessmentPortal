@@ -1,4 +1,4 @@
-# API CONTRACT (owned by Architect). v0.4
+# API CONTRACT (owned by Architect). v0.5
 
 Base: `/api/v1`. JSON (unless multipart/CSV). Auth: `Authorization: Bearer <accessToken>`.
 
@@ -31,12 +31,14 @@ Phase 1 endpoints have examples. Phase 2+ stubs without full examples.
 | `RULE_ASSESSOR_CLASH` | 409 | Overlapping range, different centre |
 | `RULE_TOA_INVALID` | 409 | Missing/expired ToA |
 | `RULE_MAX_AAS` | 409 | >4 AAs |
-| `RULE_RATIO` | 409 | Over ratio without override |
+| `RULE_RATIO` | 409 | Over ratio without override. Uses `ratioClass`, not `sector` |
+| `RULE_OUTSIDE_RECOGNITION` | 409 | Sector, state, or recognition dates fail, and no `aa_admin` override reason |
+| `RULE_ASSESSOR_LANGUAGE` | 409 | Assessor languages omit `assessmentLanguage`, and no `aa_admin` override reason |
 | `RESULT_PASS_MARK_INVALID` | 400 | Marks vs max/pass rules |
 | `RESULT_OUTCOME_MISMATCH` | 400 | Client `outcome` ≠ server |
 | `RESULT_INCOMPLETE` | 409 | Submit missing active roster rows |
 | `EVIDENCE_REQUIRED` | 409 | Flag true (Phase 2) |
-| `REASSESS_NOT_ELIGIBLE` | 409 | Reassessment rules failed |
+| `REASSESS_NOT_ELIGIBLE` | 409 | Reassessment rules failed. `details.reason`: `not_published`, `window`, `outcome`, or `type`. Window is one year from the original result’s publication date (Guidelines 4.7) |
 | `CONFLICT_IDEMPOTENT` | 409 | Same `clientEventId`, different payload |
 
 **Soft SLA:** `aa_admin` may proceed after due with required `lateReason`; server records `sla.breached` + audit. Codes above only when late and reason missing.
@@ -131,7 +133,8 @@ CRUD as v0.3. Qualification create example:
 {
   "code": "Q-ELEC-L4",
   "name": "Electrician L4",
-  "sector": "manufacturing",
+  "sector": "Electronics",
+  "ratioClass": "manufacturing",
   "passCriteriaMode": "nos_wise",
   "passMarkUnit": "percent",
   "passMarks": { "theory": 50, "practical": 50, "viva": 50 },
@@ -149,6 +152,8 @@ CRUD as v0.3. Qualification create example:
 ```
 
 When `passMarkUnit: "absolute"`, supply non-null `maxMarks` (and/or per-NOS `maxMarks`).
+
+`sector` is an Annexure II name (SCHEMA §1.5). `ratioClass` is required and is only the assessor-to-learner class. A centre body includes `state` (Annexure IV, SCHEMA §1.6), required.
 
 ---
 
@@ -169,11 +174,14 @@ Request:
   "assessmentEndDate": "2026-11-21",
   "tpId": "66f0000000000000000000tp",
   "centreId": "66f0000000000000000000c1",
-  "candidateCount": 24
+  "candidateCount": 24,
+  "assessmentLanguage": "Hindi"
 }
 ```
 
-Response `201` (note corrected `assignDueAt`):
+`sector` and `ratioClass` are not accepted on this body. The server copies them from the qualification. `state` is copied from the centre. Optional `recognitionOverrideReason` (1–2000 characters) is honoured only for `aa_admin` when §4.3 of the schema fails; otherwise that failure is `RULE_OUTSIDE_RECOGNITION`.
+
+Response `201` (STT; assign due is 7 working days after allocation, result due is 3 working days after the assessment end):
 ```json
 {
   "id": "66f0000000000000000000b1",
@@ -186,7 +194,12 @@ Response `201` (note corrected `assignDueAt`):
   "tpId": "66f0000000000000000000tp",
   "centreId": "66f0000000000000000000c1",
   "candidateCount": 24,
-  "sector": "manufacturing",
+  "sector": "Electronics",
+  "ratioClass": "manufacturing",
+  "assessmentLanguage": "Hindi",
+  "state": "Maharashtra",
+  "learnerFeedback": null,
+  "recognitionOverride": null,
   "status": "allocated",
   "statusVersion": 1,
   "assessorId": null,
@@ -197,8 +210,8 @@ Response `201` (note corrected `assignDueAt`):
   "firstAssessmentBatchId": "66f0000000000000000000b1",
   "sla": {
     "acceptDueAt": "2026-10-12T18:29:59.999Z",
-    "assignDueAt": "2026-11-11T18:29:59.999Z",
-    "resultDueAt": null,
+    "assignDueAt": "2026-10-19T18:29:59.999Z",
+    "resultDueAt": "2026-11-25T18:29:59.999Z",
     "breached": []
   },
   "allocatedAt": "2026-10-08T08:00:00.000Z",
@@ -207,6 +220,8 @@ Response `201` (note corrected `assignDueAt`):
 ```
 
 `GET` responses recompute `sla.breached` for open steps (plus persisted late-action keys). Nightly job refreshes stored breach flags.
+
+An LTT batch with the same dates would set `assignDueAt` to `2026-10-09T18:29:59.999Z` (30 working days before `2026-11-20`) and `resultDueAt` to `2026-11-27T18:29:59.999Z` (5 working days after that exam date). SCHEMA §2.3.
 
 ### GET /batches?status=&from=&to=&tpId=&page=&pageSize=
 
@@ -235,11 +250,14 @@ Roles: `aa_admin`. Transaction + `assessorDayLocks`.
   "assessorId": "66f0000000000000000000a1",
   "proctorId": "66f0000000000000000000p1",
   "ratioOverrideReason": "AB approved larger cohort",
+  "languageOverrideReason": "AB accepted an assessor briefed by a Hindi-speaking proctor",
   "lateReason": "Assessor travel clearance delayed"
 }
 ```
 
-Errors: `RULE_*` | `SLA_ASSIGN_EXPIRED` | `INVALID_TRANSITION`.
+`languageOverrideReason` is required only when the assessor’s languages do not include `assessmentLanguage`, and only `aa_admin` may send it. Omit it when the language matches.
+
+Errors: `RULE_*` (including `RULE_ASSESSOR_LANGUAGE`) | `SLA_ASSIGN_EXPIRED` | `INVALID_TRANSITION`.
 
 ### POST /batches/:id/reassign
 
@@ -249,9 +267,12 @@ Roles: `aa_admin`. From `assessor_assigned` (or `in_progress` if product allows 
 {
   "assessorId": "66f0000000000000000000a2",
   "proctorId": null,
+  "languageOverrideReason": "Replacement assessor will be paired with a Hindi speaker",
   "lateReason": "Original assessor unavailable"
 }
 ```
+
+Same language rule as assign.
 
 ### POST /batches/:id/cancel
 
@@ -292,7 +313,7 @@ Owned by **B-05**. AB validate/publish; pre-publication dispute/resolve (see SCH
 
 ### POST /batches/:id/reassessments
 
-Roles: `aa_admin` (initiator open Q22). New batch; inherits `abId`, `qualificationId`, `type`, `mode`, `tpId`, `sector` from parent; sets `firstAssessmentBatchId` from root; window from **first** assessment end.
+Roles: `aa_admin` (initiator open Q22). New batch. Inherits `abId`, `qualificationId`, `type`, `mode`, `tpId`, `sector`, `ratioClass`, and `assessmentLanguage` from the parent. The request may set `assessmentLanguage`. Sets `firstAssessmentBatchId` from the root. The window is one year from the **publication** date of the original result (`publishedAt` on the root batch’s result), not from the assessment end. Guidelines 4.7. An unpublished original result is `REASSESS_NOT_ELIGIBLE` with `details.reason: "not_published"`. Recognition (§4.3) runs on this create as well.
 
 ```json
 {
@@ -303,7 +324,62 @@ Roles: `aa_admin` (initiator open Q22). New batch; inherits `abId`, `qualificati
 }
 ```
 
-Response `201` new Batch. Errors: `REASSESS_NOT_ELIGIBLE`.
+Response `201` new Batch. Errors: `REASSESS_NOT_ELIGIBLE`, `RULE_OUTSIDE_RECOGNITION`.
+
+### PUT /batches/:id/learner-feedback
+
+Owned by **B-10**. Roles: `aa_admin` | `mis`. Batch status must be `assessment_completed` or later (not `rejected` or `cancelled`). Does not change status.
+
+```json
+{ "collected": false, "reason": "Learners had left before the form was handed out" }
+```
+
+`collected: true` requires `reason` null or omitted. `collected: false` requires `reason` (1–2000 characters). Response `200`: the batch, with `learnerFeedback` set. Audit-logged. Annexure IX(a) Governance & Manpower sub-parameter 4 (docs/ERF.md row 26).
+
+### PUT /batches/:id/assessor-payment
+
+Owned by **B-11**. Roles: write `aa_admin` | `mis`. The batch must already have `assessorId`. Does not change status.
+
+```json
+{
+  "assessorId": "66f0000000000000000000a1",
+  "amountDue": 4500,
+  "amountPaid": 2000,
+  "logisticsNote": "Rail ticket booked; boarding at the centre guest room"
+}
+```
+
+`assessorId` must be the current or a previous assessor on this batch. Server sets `pending` to `amountDue - amountPaid`. Response `200`:
+
+```json
+{
+  "id": "66f0000000000000000000pay",
+  "batchId": "66f0000000000000000000b1",
+  "assessorId": "66f0000000000000000000a1",
+  "amountDue": 4500,
+  "amountPaid": 2000,
+  "pending": 2500,
+  "logisticsNote": "Rail ticket booked; boarding at the centre guest room"
+}
+```
+
+`GET /batches/:id/assessor-payments` returns `{ "items": [ ... ] }` for `aa_admin`, `mis`, `ncvet_viewer`, and `ab_reviewer` (own `abId` only). Annexure IX(a) Financials sub-parameter 3 (docs/ERF.md row 19).
+
+### GET|PUT /admin/recognition
+
+Roles: write `aa_admin` | `mis`; read those plus `ncvet_viewer`. Audit on `PUT`. Does not rewrite existing batches.
+
+```json
+{
+  "sectors": ["Electronics", "Construction"],
+  "panIndia": false,
+  "states": ["Maharashtra", "Gujarat"],
+  "startDate": "2026-04-01",
+  "endDate": "2029-03-31"
+}
+```
+
+`panIndia: true` requires `states: []`. Response `200` is that object plus `id` after the first `PUT`. `GET` before any `PUT` is `404` (batch create then fails with `RULE_OUTSIDE_RECOGNITION` and `details.checks: ["unconfigured"]`). `sectors` values are Annexure II names (§1.5). `states` values are Annexure IV names (§1.6).
 
 ### Batch child reads
 
@@ -342,7 +418,7 @@ CSV: `name,externalRef` (creates/links learners). Response `{ created, skipped, 
 
 ## Assessors / Proctors
 
-Unchanged CRUD + `GET /assessors/available?from=&to=&languages=&batchId=`.
+CRUD includes `languages: string[]` on assessors (trimmed; may be empty). `GET /assessors/available?from=&to=&languages=&batchId=` is unchanged aside from that field.
 
 ---
 
@@ -445,4 +521,4 @@ Secrets redacted. Append-only.
 
 ## Phase 2+ stubs
 
-Evidence, questions/tests, proctoring, grievances, analytics, public site, accessibility, security, sectors — unchanged intent; see SCHEMA.
+Evidence, questions/tests, proctoring, grievances, analytics, public site, accessibility, security — unchanged intent; see SCHEMA. Recognition and Annexure II sectors are Phase 1 (`/admin/recognition`, `qualifications.sector`). ERF weights are in docs/ERF.md (task C-01). Phase 2 notes that are not endpoints yet: live NCVET monitoring link, geo-tagged photos and videos for offline and blended batches (Guidelines 4.11b), the 24-hour travel rule, theory-only online batches with no assessor, and gender-parity staff reporting (open questions 80–84).

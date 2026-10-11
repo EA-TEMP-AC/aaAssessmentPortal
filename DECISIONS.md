@@ -19,6 +19,28 @@
   - Auth refresh device-bound; `mustChangePassword` on admin-set passwords; login rate-limit constants.
   - Audit read scoped for ab_reviewer; ncvet_viewer read-all monitoring.
   - `RATE_LIMITED` / `DUPLICATE_RESOURCE`; redact `passwordHash`.
+- **A-03 guideline alignment (2026-10-11).** Docs only. Supersedes the A-01 line that the reassessment window runs from the first assessment end, and supersedes the B-02 / B-03 proposed sentences that use `ASSIGN_SLA_MODE`, `from_acceptance`, or a single `RESULT_SLA_ANCHOR`.
+  - **Assign SLA, per batch type (open Q12 resolved).** Guidelines Table 7. No mode switch. STT: `ASSIGN_AFTER_ALLOCATION_WD_STT` = 7 working days after `allocatedAt` (receipt from the AB). LTT: `ASSIGN_BEFORE_EXAM_WD_LTT` = 30 working days before `assessmentStartDate` (the exam date). Drop `ASSIGN_SLA_MODE`, `ASSIGN_BEFORE_EXAM_WD_STT`, and both `ASSIGN_FROM_ACCEPTANCE_WD_*` constants. The contract STT example (allocated `2026-10-08T08:00:00.000Z`, start `2026-11-20`, end `2026-11-21`) stores `assignDueAt` `2026-10-19T18:29:59.999Z`. The same dates as LTT would store `2026-10-09T18:29:59.999Z`.
+  - **Result SLA anchor (open Q16 resolved).** STT: 3 working days after `assessmentEndDate` (`RESULT_SLA_ANCHOR_STT` = `assessment_end_date`). LTT: 5 working days after the exam date `assessmentStartDate` (`RESULT_SLA_ANCHOR_LTT` = `exam_date`). The STT example stores `resultDueAt` `2026-11-25T18:29:59.999Z` at create. LTT with the same start stores `2026-11-27T18:29:59.999Z`. This also resolves open Q69 (the example is not null) and open Q28–Q29 (those alternate enum strings are not part of the contract).
+  - **Reassessment window.** Guidelines 4.7. One year from the IST calendar date of the original result’s `publishedAt` (`firstAssessmentBatchId`, not the immediate parent). The new `assessmentStartDate` must fall on or after that publication date and on or before the anniversary. Unpublished original → `409 REASSESS_NOT_ELIGIBLE` with `details.reason`. SCHEMA §4.2.
+  - **15-day STT lead.** `BATCH_ALLOCATE_LEAD_DAYS_STT` = 15 calendar days, tagged to Guidelines Figure 2 (not project-only). Whether create rejects a shorter lead stays open Q15.
+  - **Recognition.** Singleton `aaRecognition`: `sectors` from the 59 Annexure II names (SCHEMA §1.5, printed abbreviations kept), `panIndia` or `states` from Annexure IV (SCHEMA §1.6), `startDate` and `endDate` inclusive. Qualifications store that real `sector` plus a separate `ratioClass` (`manufacturing` | `services` | `school_education` | `other`). Batches copy both from the qualification and copy `state` from the centre. Create outside sector, state, or the date range returns `409 RULE_OUTSIDE_RECOGNITION` with `details.checks`. `aa_admin` may send `recognitionOverrideReason`; the override is stored and audit-logged (`recognition_override`). `ab_reviewer` cannot override. No recognition row is check `unconfigured`.
+  - **Assessment language.** `batches.assessmentLanguage` is required. Assign or reassign of an assessor whose `languages` do not include it (trim, case-insensitive) returns `409 RULE_ASSESSOR_LANGUAGE`. `aa_admin` may send `languageOverrideReason`; audit action `assessor_language_override`. Annexure IX(a) Assessment Delivery sub-parameter 4; docs/ERF.md row 04.
+  - **Learner feedback and payments.** Schema and contract only. `learnerFeedback` (collected, and a reason when not) is B-10, tagged to Annexure IX(a) Governance & Manpower sub-parameter 4 (docs/ERF.md row 26). `assessorPayments` (`amountDue`, `amountPaid`, server-set `pending`, optional `logisticsNote`) is B-11, tagged to Annexure IX(a) Financials sub-parameter 3 (docs/ERF.md row 19).
+  - **ERF weights.** docs/ERF.md. Annexure IX(b) marks were read from PDF pages 71–72. Rows 17, 18, and 29 are blank. Rows 02 and 20 are 0. The printed marks sum to 100. Macro totals match Table 12 (50 / 10 / 10 / 15 / 10 / 5).
+  - **Affected tasks (code not changed in A-03):**
+    - **B-02:** remove the mode and the from-acceptance constants from `compliance.js` and `working-days.js`. Add the STT-after-allocation helper and the LTT exam-date result helper. Retag the 15-day constant to Figure 2 (calendar days).
+    - **B-03:** store the new due instants (STT example assign `2026-10-19T18:29:59.999Z`, result `2026-11-25T18:29:59.999Z`). Copy Annexure II `sector`, `ratioClass`, and centre `state`. Require `assessmentLanguage`. Enforce `RULE_OUTSIDE_RECOGNITION` with the admin override. The nightly job’s open steps stay the same; the instants change.
+    - **B-04:** persist `assessors.languages`. Enforce `RULE_ASSESSOR_LANGUAGE` with the admin override on assign and reassign. Keep same-centre locks merging until open Q79 is answered.
+    - **B-05:** `publishedAt` on publish is the reassessment anchor. No other result-rule change.
+    - **B-07a:** qualification `sector` becomes an Annexure II name and `ratioClass` is required. Centre `state` is required. Add `GET|PUT /admin/recognition`. Sample seed `Q-ELEC-L4` cannot stay `sector: "manufacturing"`.
+    - **B-09:** window from the original `publishedAt`; inherit `sector`, `ratioClass`, and `assessmentLanguage`; unpublished original is `REASSESS_NOT_ELIGIBLE`.
+    - **F-02:** countdown uses the new instants; forms send `assessmentLanguage`, `recognitionOverrideReason`, and `languageOverrideReason`.
+    - **F-03:** edit assessor languages.
+    - **F-06:** qualification form has sector and ratio class; centre form has state; recognition screen calls `/admin/recognition`.
+    - **C-01:** score from docs/ERF.md (weight × +4/−1/−2/−4). Blank weights add 0. Excellence is not a fixed multiplier. Grades are Table 15, with open Q85 on the shared endpoints.
+    - **T-01:** cover the per-type dues, recognition override, language override, and the publication-date window.
+    - **Q-05:** “sector” for the 5% rule is an Annexure II / recognition sector, not `ratioClass`.
 
 ## Proposed
 - Stack: Node/Express + MongoDB (replica set) + React/Vite + React Native/Expo. Reason: matches existing team skills and tooling.
@@ -29,8 +51,7 @@
 - **B-02 working-day admin (2026-10-10):** SCHEMA §3.15 says workingDayConfig and holidays are "as before" and lists no fields. API_CONTRACT.md has no response bodies. Until open questions 25–30 are confirmed, B-02 uses:
   - `workingDayConfig` singleton `{ key: "default", weekendDays: number[], updatedBy }`. `GET /api/v1/admin/working-day-config` returns `{ weekendDays, timezone }` and includes `id` after the first `PUT`. `timezone` echoes `TIMEZONE` and is not writable. `PUT` body is `{ weekendDays }` (unique integers `0..6`, at most 6, so one weekday remains). The first `GET` does not insert a row.
   - `holidays` `{ date: YYYY-MM-DD, name, region: string|null, createdBy }` with unique `{ date, region }`. `region: null` is AA-wide. `POST` returns `201` `{ id, date, name, region }`. `GET` returns `{ items }` with optional `from`, `to`, and `region`. `DELETE /api/v1/admin/holidays/:id` returns `204`.
-  - `ASSIGN_SLA_MODE` `before_exam` counts back from `assessmentStartDate`. The alternate string is `from_acceptance` (counts forward from `acceptedAt`) because the schema names `ASSIGN_FROM_ACCEPTANCE_*`.
-  - `RESULT_SLA_ANCHOR` `assessment_end_date` counts forward from `assessmentEndDate`. Alternates, from open Q16, are `assessment_start_date` and `assessment_completed` (the completion instant).
+  - A-03 supersedes this pair. `ASSIGN_SLA_MODE` and `RESULT_SLA_ANCHOR` are not the contract. B-02 on `main` still implements them; that branch must change as in the A-03 accepted decision.
   - Due helpers load AA-wide holidays unless the caller passes a region. A regional holiday applies only for that region. Batches have no region field yet.
   - Holiday and weekend writes do not update `batches`.
 - **F-01 web shell (2026-10-10):** React 18, Vite, TypeScript, React Router 6, and TanStack Query. No third-party component library; pages use semantic HTML and CSS in `web/`. Access and refresh tokens stay in memory for the page session. `device.platform` sent to auth is `web`. SME has a landing page because `UserRole` includes `sme`. The candidate route is only a placeholder landing; question 23 still defers a candidate portal.
@@ -61,7 +82,7 @@
 - **B-03 batches (2026-10-11):** Paths under `/api/v1`: `POST /batches`, `GET /batches`, `GET /batches/:id`, `POST /batches/:id/accept|reject|cancel|complete`, and `GET /compliance/dashboard`. The SCHEMA §1.2 table also lists assign, reassign, `login-event`, submit-result, validate, publish, dispute, and resolve-dispute. Those routes are not mounted (`404`). Later tasks should call `resolveTransition` / `isLegalTransition` in `server/src/modules/batches/batch-transitions.js` instead of adding a second table. Until open questions 69–78:
   - Create returns `201`. Transitions return `200`. The batch object is the contract POST example plus `rejectReason`, `cancelReason`, `acceptedAt`, `assignedAt`, `cancelledAt`, `accommodations`, `createdAt`, `updatedAt`, and `sla.lateActions`. Missing optionals are null. `breached` and `lateActions` are always arrays. `sector` is copied from the qualification. `candidateCount` is an integer ≥ 1. `firstAssessmentBatchId` is the new id. `statusVersion` starts at 1 and increments by 1 on each successful transition.
   - List envelope `{ page, pageSize, total, items }`. `page` defaults to 1, `pageSize` to 20, max 100. Sort is `createdAt` descending, then `_id`. `from` and `to` are inclusive `YYYY-MM-DD` bounds on `assessmentStartDate`. `from` after `to` is `400`. A caller cannot widen row scope with `tpId`.
-  - Due instants use the B-02 helpers at creation. With the default `ASSIGN_SLA_MODE` `before_exam` and `RESULT_SLA_ANCHOR` `assessment_end_date`, all three are stored. For the contract example (allocated `2026-10-08T08:00:00.000Z`, start `2026-11-20`, end `2026-11-21`, STT) that is accept `2026-10-12T18:29:59.999Z`, assign `2026-11-11T18:29:59.999Z`, and result `2026-11-25T18:29:59.999Z`. `from_acceptance` leaves `assignDueAt` null until accept. `assessment_completed` leaves `resultDueAt` null until `POST …/complete`. An action at the due instant is on time. After it, `lateReason` is required. Holiday edits do not rewrite stored due instants.
+  - A-03 supersedes the due instants in this bullet. B-03 on `main` still uses `before_exam` (STT assign `2026-11-11T18:29:59.999Z`). The contract example is now accept `2026-10-12T18:29:59.999Z`, STT assign `2026-10-19T18:29:59.999Z`, and STT result `2026-11-25T18:29:59.999Z`, all stored at create. An action at the due instant is on time. After it, `lateReason` is required. Holiday edits do not rewrite stored due instants.
   - Late accept or reject appends breach key `accept` (SlaBreachKey has no reject), pushes `sla.lateActions`, and writes audit `sla_late_accept` or `sla_late_reject` with `meta.reason` and `meta.key`. The request also writes `batch.accept` or `batch.reject`. Cancel and complete require `reason` (1–2000 characters). The complete reason is audit `meta.reason` only. Cancel does not release `assessorDayLocks`.
   - Reads merge persisted `sla.breached` with open steps that are past due. Reads do not write. `markOverdueSlaBreaches` persists those open keys with `$addToSet` and is safe to run twice. `startSlaBreachScheduler` calls it once a day (`SLA_BREACH_JOB_INTERVAL_MS`) when `MONGO_URI` is set and `NODE_ENV` is not `test`. The job does not write an audit row per batch. Open steps: `accept` while `allocated`; `assign` while `allocated` or `accepted`; `result` while `assessment_completed`.
   - Create: `aa_admin`, and `ab_reviewer` only when `abId` equals `user.abId` (otherwise `403`). Accept, reject, cancel, and complete: `aa_admin` only. Any other role is `403`. An illegal status is `409 INVALID_TRANSITION`. The update filters on the current `status` and `statusVersion`.
@@ -73,7 +94,7 @@
 ## Open questions (need human / NCVET / AB)
 1. DEP and SIDH integration: API or file upload? Formats?
 2. Obtain Annexure B (Blended Learning Guidelines) for the full engine feature list.
-3. Obtain Annexure IX(a)/(b) for the 31 ERF sub-parameters and weights.
+3. (Resolved in part, A-03) Annexure IX(a) names and IX(b) marks are in docs/ERF.md, checked against PDF pages 71–72. Annexure B (Blended Learning Guidelines) is still open (question 2).
 4. Is the AA also an AB? (changes separation-of-control requirements)
 5. Is AI proctoring needed at launch? (needs prior approval) Or build own vs. integrate a vendor?
 6. Hosting region and object storage for evidence (DPDP Act 2023 data localisation concerns).
@@ -82,11 +103,11 @@
 9. Registered-office documents and premises proof (TR s22 F,G): public or on request?
 10. (Resolved) Learner repository is in-house; see Accepted.
 11. Mobile OS/API level and build pipeline are project choices (TR s29).
-12. **Assign deadline wording (NCVET:FR §F):** from acceptance vs before exam? `ASSIGN_SLA_MODE` configurable.
+12. (Resolved, A-03) Assign SLA is per batch type. STT is 7 working days after the batch is allocated. LTT is 30 working days before the exam. There is no `ASSIGN_SLA_MODE`. Guidelines Table 7.
 13. Holiday calendar authority.
 14. Q File checklist keys and attendance “minimum criteria” (FR §E).
-15. Enforce `BATCH_ALLOCATE_LEAD_DAYS_STT = 15` as hard create validation?
-16. **Result SLA anchor:** default `assessment_end_date` — confirm vs start or `assessment_completed`.
+15. Enforce `BATCH_ALLOCATE_LEAD_DAYS_STT = 15` (calendar days, Guidelines Figure 2) as a hard check on create?
+16. (Resolved, A-03) Result SLA anchor is the assessment end date for STT and the exam date (`assessmentStartDate`) for LTT. Guidelines Table 7.
 17. **Multi-assessor batches?** Phase 1 single `assessorId`.
 18. **Post-publication disputes?**
 19. **NOS-wise vs overall pass criteria** default / per-batch override?
@@ -98,8 +119,8 @@
 25. **workingDayConfig / holidays fields:** SCHEMA §3.15 does not list them. Are the B-02 fields in Proposed (singleton `key`, `weekendDays`, `updatedBy`; holiday `date`, `name`, `region`, `createdBy`) the ones to fold into the schema?
 26. **DELETE /admin/holidays:** the contract has no id segment. B-02 implements `DELETE /api/v1/admin/holidays/:id` and returns `204`. Is that the path?
 27. **Holiday region:** AA-wide (`region: null`) always counts. A non-null region counts only when the due-date caller passes that region. Batches have no region. Is that the match rule, and where does a batch's region come from?
-28. **ASSIGN_SLA_MODE alternate:** B-02 uses the string `from_acceptance`. Is that the enum value?
-29. **RESULT_SLA_ANCHOR alternates:** B-02 uses `assessment_start_date` and `assessment_completed` in addition to `assessment_end_date` (open Q16). Are those the enum strings?
+28. (Resolved, A-03) `from_acceptance` is not an enum value. The mode was removed. STT counts forward from `allocatedAt`, not from `acceptedAt`.
+29. (Resolved, A-03) There is no single `RESULT_SLA_ANCHOR` enum. STT uses `assessment_end_date`. LTT uses `exam_date` (`assessmentStartDate`). `assessment_completed` is not a result anchor.
 30. **GET working-day-config:** B-02 does not insert a row on read, so the calculator uses `WEEKEND_DAYS` until the first `PUT`. Should the first read create the singleton instead?
 31. **Self-service password change:** `POST /auth/login` returns `mustChangePassword`, but Phase 1 has no endpoint for the signed-in user to set a new password. `POST /users/:id/password-reset` is an administrator action. F-01 blocks the shell and offers sign-out until the flag is false. A contract endpoint is needed before the gate can collect a new password.
 32. **M-01 login-event request body.** API_CONTRACT says POST `/assessor/login-event` is "as v0.3", and this repo's contract has no v0.3 body. The app sends `clientEventId`, `batchId` (nullable), `type` (`login`|`logout`), `capturedAt`, `device`, and either `lat`+`lng` with `locationStatus: "captured"` or `locationStatus: "unavailable"` plus `locationUnavailableReason` (no coordinates). It does not send server-owned fields (`receivedAt`, `lateSync`, `clockSkewMs`, `clockSkewFlag`, `replayed`, `syncedAt`, `abEmailQueuedAt`, `abEmailSentAt`). Please add the request example to API_CONTRACT.
@@ -139,7 +160,7 @@
 66. **F-06 centre training partner.** The `tpId` filter is shown to `aa_admin`, `mis`, and `ncvet_viewer`. A training-partner user does not see it, because the server ignores `tpId` unless the role reads every centre. The centre form asks for a training partner id rather than a dropdown, because a dropdown would only contain the current page. Confirm.
 67. **F-06 blank qualification optionals.** Create omits a blank `defaultBatchType`, `passCriteriaMode`, and `maxMarks`. Edit sends `null` for those blanks so B-07a clears them. A blank NOS `maxMarks` object is omitted. A blank PC `passMark` or `maxMark` is omitted. Confirm.
 68. **F-06 learner blanks.** Edit sends `null` for a blank `externalRef` or `phone`, and sends `accommodations` including an empty array. Create omits blank optional fields. The form has no national-identity field. Confirm.
-69. **resultDueAt on create.** The POST /batches example has `resultDueAt: null`. The default `RESULT_SLA_ANCHOR` is `assessment_end_date`, so B-03 stores a due instant at creation (for the example dates, `2026-11-25T18:29:59.999Z`). `assessment_completed` leaves it null until `POST /batches/:id/complete`. Should the example stay null?
+69. (Resolved, A-03) The STT example stores `resultDueAt` at create (`2026-11-25T18:29:59.999Z` for end date `2026-11-21`). It is not left null until complete.
 70. **Candidate batch reads.** SCHEMA §5 says a candidate sees batches that contain their learner's candidate row. B-03 has no roster (B-07b). This task says the candidate sees none. The list is empty and `GET /batches/:id` of an existing batch is `403` (unknown id is `404`). Should B-07b switch that to the roster scope?
 71. **GET /batches `from` and `to`.** The contract does not say which field they bound. B-03 treats them as inclusive `YYYY-MM-DD` limits on `assessmentStartDate`. Confirm.
 72. **GET /compliance/dashboard.** The contract names the path only. B-03 returns `{ statusCounts, overdue }` for the batch read roles, scoped like the list. `overdue` counts batches whose accept, assign, or result step is still open and past due. Confirm the shape and the roles.
@@ -149,6 +170,13 @@
 76. **Cancel and assessorDayLocks.** The contract says cancel releases locks. The lock collection is B-04, and B-09 also names lock release on cancel. B-03 only sets `cancelled`, `cancelReason`, and `cancelledAt`. Confirm that lock release waits.
 77. **Inactive master data.** Existence checks do not require `active: true`. An inactive training partner can still be placed on a batch. Confirm.
 78. **ab_reviewer create scope.** A reviewer may create a batch only when `abId` equals `user.abId`. A different id is `403`, including when that awarding body exists. Confirm.
+79. **Same assessor, same day, same centre, two batches.** Block, warn, or allow? Annexure IX(a) Assessment Delivery sub-parameter 9 (docs/ERF.md row 09, marks 8): high risk when one assessor assesses two batches at the same location in a day and each batch has fewer than 10 candidates; medium risk for two batches at different locations; the compliance cell is one batch per assessor per day. Phase 1 still blocks a different centre (`RULE_ASSESSOR_CLASH`) and merges the same centre. Do not add a same-centre block until this is answered.
+80. **Live NCVET monitoring link** for online assessments (Guidelines 4.11b). Phase 2. No endpoint in v0.5.
+81. **Geo-tagged, time-stamped photos and videos** for offline and blended batches (Guidelines 4.11b). Phase 2 evidence (V-01).
+82. **Assessor 24-hour travel** (Guidelines 4.4.e, `ASSESSOR_REACHABLE_HOURS`). Phase 2: record travel time, warn, or only report. Not a Phase 1 assign block.
+83. **Theory-only online batches with no assessor** (Guidelines Figure 3). Phase 2. Phase 1 still requires an assessor to leave `accepted`.
+84. **Gender-parity staff reporting** for staff, including assessors and proctors (Guidelines PDF page 34, printed page 22). Phase 2. No Phase 1 field.
+85. **ERF grade endpoints.** Table 15 prints A as 324–400 and B as 171–324, and B as 171–324 and C as 18–171. A score of exactly 324 or 171 is in two bands. Which grade those scores take is not decided here. 18 is in C; D is below 18.
 
 ## Not mandated by NCVET (TR s29), do not market as compliance features
 Specific language, DB, cloud, server architecture, API style, biometric or face-recognition tech, GPS hardware, payment gateway, CRM, help-desk software.

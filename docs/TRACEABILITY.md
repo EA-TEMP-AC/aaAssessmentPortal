@@ -22,5 +22,26 @@ Rule: only items in this table may be labelled "NCVET-mandated" in code, UI or d
 | 22 | Public website: team, organogram, assessor/proctor details + quals + experience, sample papers, industry linkages, grievance/POSH, registered-office docs, premises proof | Public site | W-01, W-02 | GAP |
 | 23 | PwD: disability-based content, trained proctors/assessors, ICT tools, accessible result publishing | Accessibility | X-01..X-03 | GAP (only noted) |
 | 24 | Simulators/tools for blended mode where applicable | Engine | E-06 | partial |
-| 27 | ERF tech parameters: DPDP storage, video evidence, offline assessment by certified assessor, result TAT, no same-day two-location assessor | Compliance | C-01, B-02, B-04 | covered |
+| 27 | ERF tech parameters: DPDP storage, video evidence, offline assessment by certified assessor, result TAT, no same-day two-location assessor | Compliance | C-01, B-02, B-04, B-05 | partial (weights now in docs/ERF.md; same-centre same-day is open Q79) |
 | 29 | No mandated language/DB/cloud/API/biometric/GPS hardware | all | DECISIONS.md | covered |
+
+## Guidelines 2025 (NCVET:FR) added in A-03
+
+These rows are from the AA Guidelines (June 2025) and docs/FEATURE_REPORT.md. They are not TECH_REQUIREMENTS.pdf sections. Tag them `NCVET:FR`, not `NCVET:TR`.
+
+| Guideline | Requirement | Tasks |
+|---|---|---|
+| Table 7 / FR §F | STT assign: 7 working days after the AB allocates the batch. LTT assign: 30 working days before the exam | B-02, B-03 |
+| Table 7 / FR §F | STT result: 3 working days from assessment end. LTT result: 5 working days from the exam date | B-02, B-03, B-05 |
+| Figure 2 / FR §F | STT batch allocated at least 15 calendar days ahead. Hard check is open Q15 | B-02, B-03 |
+| §4.7 / FR §F | Reassessment within one year of publication of the original result; Fail or Absent; STT/LTT; not on certificates | B-09 |
+| Annexure II, recognition sections | Real sector from the 59-name list; states or PAN India; recognition start and end. Separate from the 4-value ratio class | B-07a, B-03, F-06 |
+| Figure 2, §4.4.f, Annexure IX(a) Delivery 4 | Assessor proficient in the batch assessment language. Blockable, with `aa_admin` override | B-04, F-02, F-03 |
+| Annexure IX(a) Governance 4 / IX(b) row 26 | Learner feedback collected or not, with a reason when not | B-10 |
+| Annexure IX(a) Financials 3 / IX(b) row 19 | Assessor payment amounts due, paid, and pending | B-11 |
+| Annexure IX(b) | 31 sub-parameter marks, checked on PDF pages 71–72 | C-01, docs/ERF.md |
+| Annexure IX(a) Delivery 9 | Same assessor, two batches, same day. Different location is already a clash. Same centre is open Q79 | B-04 |
+| §4.11b | Live NCVET monitoring link (online). Geo-tagged photos and videos (offline and blended). Phase 2, open Q80–Q81 | P-02, V-01 |
+| §4.4.e | Assessor reachable within 24 hours of travel. Not a Phase 1 block. Open Q82 | — |
+| Figure 3 | Theory-only online path with no assessor. Phase 2. Open Q83 | — |
+| PDF p.34 (printed p.22) | Gender parity for staff, including assessors and proctors. Phase 2. Open Q84 | — |

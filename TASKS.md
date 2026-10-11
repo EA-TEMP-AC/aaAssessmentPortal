@@ -7,25 +7,28 @@ Branch format: task/<ID>-<slug>. Agents update only their own rows.
 |---|---|---|---|---|---|
 | A-01 | Full Mongo schema, indexes, enums, permission matrix; expand API_CONTRACT for Phase 1 | architect | - | done | Schema + Phase 1 contract examples. Branch: `task/A-01-schema-contract` |
 | A-02 | Refresh Phase 1 task graph, waves, ownership; add POST /batches/:id/complete | architect | A-01 | review | TASKS waves + deps; contract + schema for complete. Branch: `task/A-02-tasks-refresh` |
+| A-03 | Guideline alignment: per-type SLA, recognition, assessment language, ERF weights | architect | A-02 | review | Docs only (no server/web/mobile). Branch: `task/A-03-guideline-alignment`. Contract v0.5. Open Q12 and Q16 resolved. Weights in docs/ERF.md. Affected code tasks and the required changes are in the A-03 accepted decision in DECISIONS.md. |
 | D-01 | Monorepo scaffold, lint, env examples, CI | backend | A-01 | done | Workspaces server/web/mobile/tests; health GET /api/v1/health; docker-compose Mongo replica set; CI lint+test. Branch: `task/D-01-monorepo-scaffold` |
 
 ## Phase 1: Batch workflow and assessor
 | ID | Task | Owner | Depends | Status | Acceptance |
 |---|---|---|---|---|---|
 | B-01 | Auth (login/refresh/logout), roles, mustChangePassword, login rate limits, audit middleware (redact secrets); GET /audit-logs; **dev seed (users only)** | backend | D-01 | review | Login/refresh works; every write logged; passwordHash never in audit; seed: **one user per role only**. Later tasks extend seed with their own sample data. Branch: `task/B-01-auth-audit`. Seed password: `SEED_PASSWORD` or documented default `Dev-Password-1` (seed users keep `mustChangePassword` false). Auth constants are in `compliance.js` for B-02 to extend. Audit field list is proposed in DECISIONS.md. Review 2026-10-10 items addressed (status remains review): production startup requires JWT_ACCESS_SECRET of at least 32 characters, BCRYPT_COST comes from the environment, a reused refresh token revokes active tokens for that user and device, and login/refresh failures are audited with secrets redacted. Re-review 2026-10-10 bcrypt item addressed (status remains review): a test sets BCRYPT_COST to 5 while NODE_ENV=test and checks the hash cost factor, and invalid costs fail config load. Second re-review 2026-10-10: APPROVE. The cost-5 hash test fails if rounds are hardcoded (4 or 10), and Prettier `endOfLine: auto` matches the LF blobs (no `.gitattributes` eol rule), so Linux CI `prettier --check` passes. |
-| B-02 | compliance.js constants + working-day calculator; GET\|PUT /admin/working-day-config; GET\|POST\|DELETE /admin/holidays | backend | D-01 | review | Unit tests incl. holidays; SCHEMA §2.1 counting; non-retroactive holiday edits. Branch: `task/B-02-compliance-workingdays`. Response shapes proposed in DECISIONS.md (SCHEMA §3.15 has no field list). |
-| B-03 | Batch CRUD + status machine (incl. cancelled) + soft SLA lateReason + CAS; **POST /batches/:id/complete**; **nightly sla.breached job**; GET /compliance/dashboard stub | backend | B-01,B-02,B-07a,B-08 | review | Illegal transitions 409; late without reason → SLA_*; with reason → breach+audit; complete(reason) → assessment_completed + audit. Branch: `task/B-03-batches`. Response shape, dashboard stub, from/to, and candidate scope are proposed in DECISIONS.md. Open questions 69–78. |
-| B-04 | Assessor/proctor registry + ToA + assign/reassign + assessorDayLocks txn; seed sample assessor/proctor | backend | B-03 | todo | Clash/max-AAs/ratio/override tested; POST /batches/:id/reassign releases/takes locks |
-| B-05 | Results PUT/submit + server outcome + change log + RESULT_INCOMPLETE; **POST validate/publish/dispute/resolve-dispute** | backend | B-03,B-06,B-07b | todo | PUT only assessment_completed+draft; Absent from attendance; passMarkUnit; AB validate/publish + dispute flows |
+| B-02 | compliance.js constants + working-day calculator; GET\|PUT /admin/working-day-config; GET\|POST\|DELETE /admin/holidays | backend | D-01 | review | Unit tests incl. holidays; SCHEMA §2.1 counting; non-retroactive holiday edits. Branch: `task/B-02-compliance-workingdays`. Response shapes proposed in DECISIONS.md (SCHEMA §3.15 has no field list). A-03: drop `ASSIGN_SLA_MODE` and the from-acceptance constants; STT assign is 7 working days after `allocatedAt`; LTT assign stays 30 working days before `assessmentStartDate`; result anchor is `assessmentEndDate` for STT and `assessmentStartDate` for LTT. |
+| B-03 | Batch CRUD + status machine (incl. cancelled) + soft SLA lateReason + CAS; **POST /batches/:id/complete**; **nightly sla.breached job**; GET /compliance/dashboard stub | backend | B-01,B-02,B-07a,B-08 | review | Illegal transitions 409; late without reason → SLA_*; with reason → breach+audit; complete(reason) → assessment_completed + audit. Branch: `task/B-03-batches`. Response shape, dashboard stub, from/to, and candidate scope are proposed in DECISIONS.md. Open questions 70–78 (69 resolved). A-03: STT example assign due `2026-10-19T18:29:59.999Z` and result due `2026-11-25T18:29:59.999Z`; copy Annexure II sector, ratioClass, and centre state; require assessmentLanguage; `RULE_OUTSIDE_RECOGNITION` with aa_admin override. |
+| B-04 | Assessor/proctor registry + ToA + assign/reassign + assessorDayLocks txn; seed sample assessor/proctor | backend | B-03 | todo | Clash/max-AAs/ratio/override tested; POST /batches/:id/reassign releases/takes locks. A-03: store assessor languages; `RULE_ASSESSOR_LANGUAGE` with aa_admin override. Same-centre same-day stays merged until open Q79. |
+| B-05 | Results PUT/submit + server outcome + change log + RESULT_INCOMPLETE; **POST validate/publish/dispute/resolve-dispute** | backend | B-03,B-06,B-07b | todo | PUT only assessment_completed+draft; Absent from attendance; passMarkUnit; AB validate/publish + dispute flows. A-03: publish sets `publishedAt`, which is the reassessment window anchor. |
 | B-06 | Login-events (assessor/proctor/student) offline-safe; **enqueue** AB login mail only (worker in B-08); GET batch login-events/attendance/checklist; **POST assessor attendance + checklist**; auto `assessor_assigned`→`in_progress` and checklist→`assessment_completed` | backend | B-03,B-04,B-07b,B-08 | todo | NCVET:TR s9,s26; enqueue never fails login; capturedAt in mail payload; no SMTP/worker ownership |
-| B-07a | Master data APIs: awardingBodies, TP, centres, qualifications, learners; seed sample master data | backend | B-01 | review | CRUD + contract examples. Branch: `task/B-07a-master-data`. Paths, TP/centre fields, and pass-mark checks are proposed in DECISIONS.md. Open questions 47–57. |
+| B-07a | Master data APIs: awardingBodies, TP, centres, qualifications, learners; seed sample master data | backend | B-01 | review | CRUD + contract examples. Branch: `task/B-07a-master-data`. Paths, TP/centre fields, and pass-mark checks are proposed in DECISIONS.md. Open questions 47–57. A-03: qualification sector is an Annexure II name and ratioClass is required; centre state is required; GET\|PUT /admin/recognition; seed sector can no longer be `manufacturing`. |
 | B-07b | Candidates POST/GET/PATCH/CSV + learner linking; seed sample roster | backend | B-03 | todo | CSV import links learners; deactivate candidate |
 | B-08 | Users CRUD + password reset (mustChangePassword); **emailQueue + worker + retries + SMTP env config** | backend | B-01 | review | Reset emails send via queue; SMTP via `.env.example`; no passwordHash in responses/audit. Branch: `task/B-08-users-emailqueue`. Response and queue shapes proposed in DECISIONS.md (SCHEMA §3.12 has no field list). Open questions 37–43. |
-| B-09 | Reassessment endpoint + cancel endpoint (lock release) | backend | B-03,B-04,B-05,B-07b | todo | REASSESS_NOT_ELIGIBLE; window from first assessment; inherit fields |
+| B-09 | Reassessment endpoint + cancel endpoint (lock release) | backend | B-03,B-04,B-05,B-07b | todo | REASSESS_NOT_ELIGIBLE; window is one year from the original result `publishedAt` (Guidelines 4.7), not the assessment end; inherit sector, ratioClass, and assessmentLanguage. Unpublished original fails the rule. |
+| B-10 | Batch learner feedback (collected or not, reason if not) | backend | B-03 | todo | PUT /batches/:id/learner-feedback. Schema §3.8. Audit. Annexure IX(a) Governance sub-parameter 4; docs/ERF.md row 26. Does not change batch status. |
+| B-11 | Assessor payments and logistics tracker (amount due, paid, pending) | backend | B-04 | todo | PUT /batches/:id/assessor-payment and GET the list. pending = due − paid. Schema §3.18. Annexure IX(a) Financials sub-parameter 3; docs/ERF.md row 19. |
 | F-01 | Web shell, login, mustChangePassword gate, role routing | frontend | B-01 | review | Shell, in-memory session, role guards for every SCHEMA Phase 1 role (including sme), typed API client, Vitest. Branch: `task/F-01-web-shell`. Password gate blocks the shell; collecting a new password is open question 25 (no self-service endpoint). |
-| F-02 | Batch list/detail: SLA countdown, accept/reject/assign/reassign/cancel/complete, lateReason UX | frontend | B-03,B-04,B-07a | todo | |
-| F-03 | Assessor/proctor registry screens | frontend | B-04 | todo | |
-| F-06 | Master data screens: AB, TP, centres, qualifications, learners | frontend | B-07a | review | List, create, edit, and delete where the server allows it. Branch: `task/F-06-master-data-screens`. aa_admin and mis write. ncvet_viewer, ab_reviewer, tp, and candidate see read-only lists for the collections B-07a lets them read. Learners use SCHEMA §3.3 fields only. Open questions 62–68. |
+| F-02 | Batch list/detail: SLA countdown, accept/reject/assign/reassign/cancel/complete, lateReason UX | frontend | B-03,B-04,B-07a | todo | A-03: countdown uses the per-type due instants. Create sends assessmentLanguage. Show recognition and language rule errors and the aa_admin override reason fields. |
+| F-03 | Assessor/proctor registry screens | frontend | B-04 | todo | A-03: edit the assessor language list. |
+| F-06 | Master data screens: AB, TP, centres, qualifications, learners | frontend | B-07a | review | List, create, edit, and delete where the server allows it. Branch: `task/F-06-master-data-screens`. aa_admin and mis write. ncvet_viewer, ab_reviewer, tp, and candidate see read-only lists for the collections B-07a lets them read. Learners use SCHEMA §3.3 fields only. Open questions 62–68. A-03: qualification form has Annexure II sector and ratioClass; centre form has state; recognition screen calls GET\|PUT /admin/recognition. |
 | F-07 | Result entry UI (NOS marks) + incompleteness warnings | frontend | B-05 | todo | |
 | F-08 | AB validate/publish (+ change reason) screens | frontend | B-05 | todo | Scoped to abId |
 | F-09 | Users management (CRUD + password reset UX) | frontend | B-08 | review | List, create, edit, activate/deactivate, and password reset for aa_admin and mis. Branch: `task/F-09-users-screens`. Typed client uses the B-08 user routes. mis cannot assign aa_admin or edit/reset an existing aa_admin. A reset email is described as queued and may arrive later; the password is not kept after the form closes. Open questions 47–50. |
@@ -35,7 +38,7 @@ Branch format: task/<ID>-<slug>. Agents update only their own rows.
 | M-01 | Mobile login, offline queue, geo login/logout, lateSync against **mocked** login-event APIs | mobile | B-01 | review | Airplane mode; queue persists; mocks: `POST /assessor/login-event`, `POST /proctor/login-event`, `POST /student/login-event` (real sync in M-02). Branch: `task/M-01-mobile-login-offline`. Queue in AsyncStorage; tokens in expo-secure-store; login events mock unless `EXPO_PUBLIC_LOGIN_EVENTS_MODE=live`. GPS miss stored as `locationStatus: unavailable` (no placeholder coordinates). Offline window uses server `offlineSessionMaxMs` else SCHEMA `OFFLINE_SESSION_MAX_MS`. Open questions 25–29 in DECISIONS.md. |
 | M-02 | Attendance, ID check, equipment checklist; **download assigned batch + roster for offline use**; verify real login-event sync against B-06 | mobile | M-01,B-06 | todo | Offline: batch+roster cached; queue drains to live endpoints |
 | M-03 | Student tracking + proctor geo-tag flows | mobile | M-01,B-06 | todo | Offline works |
-| T-01 | Contract + rule tests for Phase 1 backend (B-01..B-09, incl. B-07a/B-07b) | qa | B-05,B-06,B-07a,B-07b,B-08,B-09 | todo | Soft SLA, locks, reassessment, email queue; cross-cutting/e2e (each task still writes its own tests) |
+| T-01 | Contract + rule tests for Phase 1 backend (B-01..B-11, incl. B-07a/B-07b) | qa | B-05,B-06,B-07a,B-07b,B-08,B-09,B-10,B-11 | todo | Soft SLA, per-type dues, recognition and language overrides, locks, reassessment from publication date, learner feedback, assessor payments, email queue; cross-cutting/e2e (each task still writes its own tests) |
 | R-01 | Review each Phase 1 branch before merge | reviewer | each | todo | |
 
 ## Suggested run order (Phase 1)
@@ -55,9 +58,14 @@ At most **one in-flight task per folder** (`server/`, `web/`, `mobile/`, `tests/
 | W9 | B-06, F-03 |
 | W10 | B-05, F-10, M-02 |
 | W11 | B-09, F-07, M-03 |
-| W12 | F-08, T-01 |
+| W12 | F-08 |
+| W13 | B-10 |
+| W14 | B-11 |
+| W15 | T-01 |
 
-Phase 2+ follow the Depends column with the same one-folder-at-a-time rule.
+Phase 2+ follow the Depends column with the same one-folder-at-a-time rule. B-10 and B-11 are both server tasks, so they are separate waves after the batch workflow.
+
+A-03 Phase 2 notes (not Phase 1 scope): live NCVET monitoring link for online assessments (Guidelines 4.11b, open Q80); geo-tagged photos and videos for offline and blended batches (Guidelines 4.11b, V-01, open Q81); assessor reachable within 24 hours (Guidelines 4.4.e, open Q82); theory-only online batches with no assessor (Figure 3, open Q83); gender-parity staff reporting (open Q84). Same assessor, same day, same centre is open Q79.
 
 ## Phase 2: Question bank, engine, evidence (NCVET:TR s4-s5, s13-s17)
 | ID | Task | Owner | Depends | Status | Acceptance |
@@ -66,14 +74,14 @@ Phase 2+ follow the Depends column with the same one-folder-at-a-time rule.
 | Q-02 | Auto difficulty classification (easy/medium/tough) from attempt data + per-question usage report | backend | Q-01,E-03 | todo | TR s13 |
 | Q-03 | Flag mostly-wrong questions + notify AB/TP | backend | Q-02 | todo | |
 | Q-04 | Review cycles with AB + periodic upgrade reminders | backend | Q-01 | todo | |
-| Q-05 | Per-sector coverage check (>=5% of NQR qualifications), sector config + NQR CSV import | backend | Q-01 | todo | One row per sector applied for |
+| Q-05 | Per-sector coverage check (>=5% of NQR qualifications), sector config + NQR CSV import | backend | Q-01 | todo | One row per Annexure II sector on the recognition record. ratioClass is not this sector. |
 | E-01 | Auto test generator: qualification>NOS>PC, random selection | backend | Q-01 | todo | Seeded randomness for audit |
 | E-02 | Difficulty + Bloom weight config per assessment (set with AB) | backend | E-01 | todo | Weights stored, versioned |
 | E-03 | Attempt engine: deliver, answer, submit, score | backend | E-01 | todo | |
 | E-04 | Content refresh mechanism (retire/replace questions, version tests) | backend | E-03 | todo | |
 | E-05 | Offline assessment package: download, answer offline, sync | mobile | E-03 | todo | TR s12 |
 | E-06 | Simulator integration hook for blended mode (interface only) | backend | E-03 | todo | Only if required by qualification |
-| V-01 | Evidence vault: upload with sha256, GPS, timestamp, index by candidate/batch/date/location | backend | B-03 | todo | |
+| V-01 | Evidence vault: upload with sha256, GPS, timestamp, index by candidate/batch/date/location | backend | B-03 | todo | A-03: offline and blended batches need geo-tagged, time-stamped photos and videos (Guidelines 4.11b, open Q81). |
 | V-02 | Evidence browser UI | frontend | V-01 | todo | |
 | F-04 | Question bank screens, coverage, usage report | frontend | Q-01..Q-03 | todo | |
 | F-05 | Test builder + attempt UI (candidate) | frontend | E-03 | todo | |
@@ -92,7 +100,7 @@ Phase 2+ follow the Depends column with the same one-folder-at-a-time rule.
 | P-08 | Human review queue + decisions (dismiss/warn/invalidate) + candidate warnings | backend+frontend | P-04 | todo | No auto-invalidation; all decisions audit logged |
 | P-04 | Malpractice detection hooks, record + flag, proctor report | backend | P-01 | todo | TR s7 |
 | N-01 | Analytics API + graphs: assessor, TP, job role, state, date range | backend+frontend | B-05 | todo | TR s10 |
-| C-01 | ERF score tracker (+4/-1/-2/-4, max 400, grades) and risk plan | backend | B-05 | todo | Full sub-parameters need Annexure IX |
+| C-01 | ERF score tracker (+4/-1/-2/-4, max 400, grades) and risk plan | backend | B-05 | todo | Use the 31 Annexure IX(b) marks in docs/ERF.md (blank marks add 0; rows 02 and 20 are 0). Score is weight × category points. Excellence has no fixed multiplier. Grades are Table 15; scores 324 and 171 are open Q85. Grade B, C, or D starts the risk plan. |
 | C-02 | DEP export | backend | C-01 | todo | Blocked until format known |
 | W-01 | Public site data model + admin CRUD (team, organogram, assessors, proctors, sample papers, industry linkages, grievance, POSH, office docs) | backend | B-04 | todo | TR s22 |
 | W-02 | Public website frontend + monthly calendar | frontend | W-01 | todo | |
