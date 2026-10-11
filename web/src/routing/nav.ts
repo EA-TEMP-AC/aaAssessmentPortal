@@ -57,7 +57,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     id: "audit",
     label: "Audit log",
     to: "/audit-logs",
-    description: "The audit log viewer will be added in a later task.",
+    description: "Audit entries your account is allowed to read.",
     roles: AUDIT_ROLES,
   },
   {

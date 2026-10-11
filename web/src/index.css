@@ -211,6 +211,98 @@ input {
   }
 }
 
+button.button-quiet {
+  background: #ffffff;
+  color: #0b3a6e;
+}
+
+.audit-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 0.75rem 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.audit-filters .field {
+  margin-bottom: 0;
+}
+
+.audit-filter-actions,
+.audit-pager {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.audit-filter-actions {
+  margin-bottom: 1rem;
+}
+
+.audit-summary {
+  font-weight: 600;
+}
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+.audit-table {
+  width: 100%;
+  min-width: 52rem;
+  border-collapse: collapse;
+}
+
+.audit-table th,
+.audit-table td {
+  text-align: left;
+  vertical-align: top;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid #d5dbe3;
+  overflow-wrap: anywhere;
+}
+
+.audit-table th {
+  background: #e8eef5;
+  color: #10233f;
+}
+
+.audit-changes {
+  background: #f8fafc;
+}
+
+.audit-pager {
+  margin-top: 1rem;
+}
+
+.snapshot-pair {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 1rem;
+}
+
+.snapshot-list {
+  margin: 0;
+}
+
+.snapshot-list > div {
+  margin-bottom: 0.75rem;
+}
+
+.snapshot-list dt {
+  font-weight: 700;
+}
+
+.snapshot-list dd,
+.snapshot-value {
+  margin: 0.25rem 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.snapshot-value {
+  font-family: ui-monospace, Consolas, monospace;
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     scroll-behavior: auto;

@@ -91,6 +91,9 @@
 41. **Queue insert failure.** When the insert fails, B-08 still returns `202` `{ emailQueued: false }` after the password has already changed, so the API does not fail. The temporary password is not returned. Confirm.
 42. **Profile id existence.** B-08 checks that `linkedProfileId`, `abId`, and `tpId` are ObjectIds. It does not check that the learner, assessor, proctor, awarding body, or training partner row exists (those collections belong to later tasks).
 43. **Stuck `sending` jobs.** A worker that crashes after the claim leaves the job in `sending`. B-08 does not reclaim it. Should a stale claim return to `pending`?
+44. **F-11 actor filter.** The viewer was asked to filter by actor. `GET /audit-logs` in API_CONTRACT accepts `entity`, `entityId`, `from`, `to`, and `page` only. The page shows `actorId` and `actorRole` on each row and does not send an actor query. Should the contract add `actorId` and/or `actorRole` filters?
+45. **F-11 `from` / `to`.** The contract does not say whether those values are calendar dates or instants, or which timezone bounds a date. The viewer treats each date input as a local calendar day: `from` is the start of that day and `to` is the end of that day, sent as ISO-8601 instants. Is that the intended range, or should the bounds be IST (`TIMEZONE`)?
+46. **F-11 audit item shape.** API_CONTRACT does not list fields on `items[]`. The viewer renders the B-01 proposed row: `id`, `actorId`, `actorRole`, `action`, `entity`, `entityId`, `abId`, `batchId`, `before`, `after`, `meta`, `ip`, `createdAt`, plus the list envelope `{ page, pageSize, total, items }`. Please confirm that item list in the contract.
 
 ## Not mandated by NCVET (TR s29), do not market as compliance features
 Specific language, DB, cloud, server architecture, API style, biometric or face-recognition tech, GPS hardware, payment gateway, CRM, help-desk software.
