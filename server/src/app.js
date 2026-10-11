@@ -4,6 +4,7 @@ import { errorHandler } from "./middleware/error-handler.js";
 import { auditRouter } from "./modules/audit/audit.routes.js";
 import { authRouter } from "./modules/auth/auth.routes.js";
 import { healthRouter } from "./modules/health/health.routes.js";
+import { usersRouter } from "./modules/users/users.routes.js";
 import {
   holidaysRouter,
   workingDayConfigRouter,
@@ -18,6 +19,7 @@ export function createApp() {
 
   app.use("/api/v1/health", healthRouter);
   app.use("/api/v1/auth", authRouter);
+  app.use("/api/v1/users", usersRouter);
   app.use("/api/v1/audit-logs", auditRouter);
   app.use("/api/v1/admin/working-day-config", workingDayConfigRouter);
   app.use("/api/v1/admin/holidays", holidaysRouter);

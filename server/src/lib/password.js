@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { env } from "../config/env.js";
 
@@ -10,4 +11,12 @@ export function hashPassword(plain) {
 
 export function verifyPassword(plain, passwordHash) {
   return bcrypt.compare(plain, passwordHash);
+}
+
+/**
+ * Admin email reset password. Random, not logged. The caller hashes it before storage
+ * and may place the plaintext only in an email queue body.
+ */
+export function generateTemporaryPassword() {
+  return `Tmp-${randomBytes(18).toString("base64url")}`;
 }

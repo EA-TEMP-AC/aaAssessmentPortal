@@ -44,6 +44,11 @@ function refreshError(auditAction, existing, user) {
   return err;
 }
 
+/** Revoke every active refresh token for a user (all devices). */
+export async function revokeAllRefreshTokens(userId, now = new Date()) {
+  await RefreshToken.updateMany({ userId, revokedAt: null }, { $set: { revokedAt: now } });
+}
+
 async function revokeActiveRefreshTokens(userId, deviceId, now) {
   await RefreshToken.updateMany(
     { userId, deviceId, revokedAt: null, expiresAt: { $gt: now } },

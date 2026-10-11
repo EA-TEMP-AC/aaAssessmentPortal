@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { isSecretKey } from "../lib/redact.js";
 import { USER_ROLES } from "./roles.js";
 
 const userSchema = new mongoose.Schema(
@@ -23,8 +24,9 @@ userSchema.index({ role: 1, active: 1 });
 
 userSchema.set("toJSON", {
   transform(_doc, ret) {
-    delete ret.passwordHash;
-    delete ret.passwordResetTokenHash;
+    for (const key of Object.keys(ret)) {
+      if (isSecretKey(key)) delete ret[key];
+    }
     delete ret.__v;
     return ret;
   },

@@ -9,14 +9,19 @@ const SECRET_KEYS = new Set([
   "newpassword",
   "currentpassword",
   "oldpassword",
+  "temporarypassword",
+  "plainpassword",
+  "smtppassword",
+  "smtppass",
   "refreshtoken",
   "tokenhash",
   "passwordresettoken",
   "passwordresettokenhash",
   "resettoken",
+  "accesstoken",
 ]);
 
-function isSecretKey(key) {
+export function isSecretKey(key) {
   return SECRET_KEYS.has(String(key).replace(/[_-]/g, "").toLowerCase());
 }
 
