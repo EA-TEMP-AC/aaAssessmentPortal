@@ -33,6 +33,7 @@
   - `RESULT_SLA_ANCHOR` `assessment_end_date` counts forward from `assessmentEndDate`. Alternates, from open Q16, are `assessment_start_date` and `assessment_completed` (the completion instant).
   - Due helpers load AA-wide holidays unless the caller passes a region. A regional holiday applies only for that region. Batches have no region field yet.
   - Holiday and weekend writes do not update `batches`.
+- **F-01 web shell (2026-10-10):** React 18, Vite, TypeScript, React Router 6, and TanStack Query. No third-party component library; pages use semantic HTML and CSS in `web/`. Access and refresh tokens stay in memory for the page session. `device.platform` sent to auth is `web`. SME has a landing page because `UserRole` includes `sme`. The candidate route is only a placeholder landing; question 23 still defers a candidate portal.
 
 ## Open questions (need human / NCVET / AB)
 1. DEP and SIDH integration: API or file upload? Formats?
@@ -65,6 +66,7 @@
 28. **ASSIGN_SLA_MODE alternate:** B-02 uses the string `from_acceptance`. Is that the enum value?
 29. **RESULT_SLA_ANCHOR alternates:** B-02 uses `assessment_start_date` and `assessment_completed` in addition to `assessment_end_date` (open Q16). Are those the enum strings?
 30. **GET working-day-config:** B-02 does not insert a row on read, so the calculator uses `WEEKEND_DAYS` until the first `PUT`. Should the first read create the singleton instead?
+31. **Self-service password change:** `POST /auth/login` returns `mustChangePassword`, but Phase 1 has no endpoint for the signed-in user to set a new password. `POST /users/:id/password-reset` is an administrator action. F-01 blocks the shell and offers sign-out until the flag is false. A contract endpoint is needed before the gate can collect a new password.
 
 ## Not mandated by NCVET (TR s29), do not market as compliance features
 Specific language, DB, cloud, server architecture, API style, biometric or face-recognition tech, GPS hardware, payment gateway, CRM, help-desk software.

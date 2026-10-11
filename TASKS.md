@@ -22,7 +22,7 @@ Branch format: task/<ID>-<slug>. Agents update only their own rows.
 | B-07b | Candidates POST/GET/PATCH/CSV + learner linking; seed sample roster | backend | B-03 | todo | CSV import links learners; deactivate candidate |
 | B-08 | Users CRUD + password reset (mustChangePassword); **emailQueue + worker + retries + SMTP env config** | backend | B-01 | todo | Reset emails send via queue; SMTP via `.env.example`; no passwordHash in responses/audit |
 | B-09 | Reassessment endpoint + cancel endpoint (lock release) | backend | B-03,B-04,B-05,B-07b | todo | REASSESS_NOT_ELIGIBLE; window from first assessment; inherit fields |
-| F-01 | Web shell, login, mustChangePassword gate, role routing | frontend | B-01 | todo | |
+| F-01 | Web shell, login, mustChangePassword gate, role routing | frontend | B-01 | review | Shell, in-memory session, role guards for every SCHEMA Phase 1 role (including sme), typed API client, Vitest. Branch: `task/F-01-web-shell`. Password gate blocks the shell; collecting a new password is open question 25 (no self-service endpoint). |
 | F-02 | Batch list/detail: SLA countdown, accept/reject/assign/reassign/cancel/complete, lateReason UX | frontend | B-03,B-04,B-07a | todo | |
 | F-03 | Assessor/proctor registry screens | frontend | B-04 | todo | |
 | F-06 | Master data screens: AB, TP, centres, qualifications, learners | frontend | B-07a | todo | |
