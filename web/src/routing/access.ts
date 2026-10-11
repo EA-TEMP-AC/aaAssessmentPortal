@@ -45,6 +45,12 @@ export const BATCH_ROLES: readonly Role[] = [
   "ncvet_viewer",
 ];
 
+/** SCHEMA §5 batch create. ab_reviewer is limited to their own abId on the server. */
+export const BATCH_CREATE_ROLES: readonly Role[] = ["aa_admin", "ab_reviewer"];
+
+/** SCHEMA §1.2 accept/reject/assign/reassign/cancel/complete. */
+export const BATCH_ACTION_ROLES: readonly Role[] = ["aa_admin"];
+
 /** SCHEMA §5 users CRUD. */
 export const USER_ADMIN_ROLES: readonly Role[] = ["aa_admin", "mis"];
 
