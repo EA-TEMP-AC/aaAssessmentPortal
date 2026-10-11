@@ -48,8 +48,19 @@ export const BATCH_ROLES: readonly Role[] = [
 /** SCHEMA §5 users CRUD. */
 export const USER_ADMIN_ROLES: readonly Role[] = ["aa_admin", "mis"];
 
-/** SCHEMA §5 learners / master data. AB reviewer and NCVET viewer are read-only. */
-export const MASTER_DATA_ROLES: readonly Role[] = ["aa_admin", "mis", "ab_reviewer", "ncvet_viewer"];
+/**
+ * SCHEMA §5: aa_admin and mis write master data; ab_reviewer and ncvet_viewer read.
+ * B-07a also lets tp and candidate read the rows the server scopes to them.
+ * See DECISIONS.md open question 63.
+ */
+export const MASTER_DATA_ROLES: readonly Role[] = [
+  "aa_admin",
+  "mis",
+  "ab_reviewer",
+  "ncvet_viewer",
+  "tp",
+  "candidate",
+];
 
 /** SCHEMA §5 results read. Proctor and SME are denied. */
 export const RESULTS_ROLES: readonly Role[] = [

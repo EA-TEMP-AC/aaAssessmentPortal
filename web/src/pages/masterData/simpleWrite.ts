@@ -1,0 +1,155 @@
+import type { AwardingBodyWrite, CentreWrite, LearnerWrite, TrainingPartnerWrite } from "../../api/masterData";
+import type { MasterCollection } from "../masterDataAccess";
+
+const OBJECT_ID = /^[a-fA-F0-9]{24}$/;
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export function isObjectId(value: string): boolean {
+  return OBJECT_ID.test(value);
+}
+
+export type SimpleDraft = {
+  name: string;
+  code: string;
+  email: string;
+  tpId: string;
+  active: boolean;
+  notificationEmails: string[];
+  externalRef: string;
+  phone: string;
+  accommodations: string[];
+};
+
+export type SimpleWrite = AwardingBodyWrite | TrainingPartnerWrite | CentreWrite | LearnerWrite;
+
+export type SimpleResult = { ok: true; body: SimpleWrite } | { ok: false; message: string; fields: string[] };
+
+export function emptySimpleDraft(): SimpleDraft {
+  return {
+    name: "",
+    code: "",
+    email: "",
+    tpId: "",
+    active: true,
+    notificationEmails: [""],
+    externalRef: "",
+    phone: "",
+    accommodations: [],
+  };
+}
+
+function fail(messages: string[], fields: string[]): SimpleResult {
+  return { ok: false, message: messages.join(" "), fields };
+}
+
+function bounded(value: string, max: number, label: string, field: string, messages: string[], fields: string[]): boolean {
+  if (value.length > max) {
+    messages.push(`${label} must be ${max} characters or fewer.`);
+    fields.push(field);
+    return false;
+  }
+  return true;
+}
+
+export function simpleFieldOrder(collection: MasterCollection, draft: SimpleDraft): string[] {
+  if (collection === "awarding-bodies") {
+    return ["name", "code", ...draft.notificationEmails.map((_, index) => `notificationEmails.${index}`)];
+  }
+  if (collection === "training-partners") return ["name", "code", "email"];
+  if (collection === "centres") return ["name", "code", "tpId"];
+  return ["name", "externalRef", "phone", ...draft.accommodations.map((_, index) => `accommodations.${index}`)];
+}
+
+export function buildSimpleWrite(collection: MasterCollection, draft: SimpleDraft, mode: "create" | "edit"): SimpleResult {
+  const messages: string[] = [];
+  const fields: string[] = [];
+  const name = draft.name.trim();
+  const code = draft.code.trim();
+  if (!name) {
+    messages.push("Name is required.");
+    fields.push("name");
+  } else bounded(name, 200, "Name", "name", messages, fields);
+  if (code) bounded(code, 64, "Code", "code", messages, fields);
+
+  if (collection === "awarding-bodies") {
+    const emails: string[] = [];
+    const seen = new Set<string>();
+    draft.notificationEmails.forEach((value, index) => {
+      const trimmed = value.trim().toLowerCase();
+      if (!trimmed) return;
+      const field = `notificationEmails.${index}`;
+      if (trimmed.length > 320 || !EMAIL.test(trimmed)) {
+        messages.push("Enter a valid notification email.");
+        fields.push(field);
+        return;
+      }
+      if (seen.has(trimmed)) {
+        messages.push("Notification emails must be unique.");
+        fields.push(field);
+        return;
+      }
+      seen.add(trimmed);
+      emails.push(trimmed);
+    });
+    if (emails.length === 0 && !fields.some((field) => field.startsWith("notificationEmails"))) {
+      messages.push("Enter at least one notification email.");
+      fields.push("notificationEmails.0");
+    }
+    if (messages.length > 0) return fail(messages, fields);
+    const body: AwardingBodyWrite = { name, notificationEmails: emails, active: draft.active };
+    if (code) body.code = code;
+    else if (mode === "edit") body.code = null;
+    return { ok: true, body };
+  }
+
+  if (collection === "training-partners") {
+    const email = draft.email.trim().toLowerCase();
+    if (email && (email.length > 320 || !EMAIL.test(email))) {
+      messages.push("Enter a valid email address.");
+      fields.push("email");
+    }
+    if (messages.length > 0) return fail(messages, fields);
+    const body: TrainingPartnerWrite = { name, active: draft.active };
+    if (code) body.code = code;
+    else if (mode === "edit") body.code = null;
+    if (email) body.email = email;
+    else if (mode === "edit") body.email = null;
+    return { ok: true, body };
+  }
+
+  if (collection === "centres") {
+    const tpId = draft.tpId.trim();
+    if (!tpId) {
+      messages.push("Training partner id is required.");
+      fields.push("tpId");
+    } else if (!OBJECT_ID.test(tpId)) {
+      messages.push("Training partner id must be a 24-character id.");
+      fields.push("tpId");
+    }
+    if (messages.length > 0) return fail(messages, fields);
+    const body: CentreWrite = { name, tpId, active: draft.active };
+    if (code) body.code = code;
+    else if (mode === "edit") body.code = null;
+    return { ok: true, body };
+  }
+
+  const externalRef = draft.externalRef.trim();
+  const phone = draft.phone.trim();
+  if (externalRef) bounded(externalRef, 64, "External reference", "externalRef", messages, fields);
+  if (phone) bounded(phone, 32, "Phone", "phone", messages, fields);
+  const accommodations: string[] = [];
+  draft.accommodations.forEach((value, index) => {
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    if (!bounded(trimmed, 100, "Accommodation", `accommodations.${index}`, messages, fields)) return;
+    accommodations.push(trimmed);
+  });
+  if (messages.length > 0) return fail(messages, fields);
+  const body: LearnerWrite = { name, active: draft.active };
+  if (externalRef) body.externalRef = externalRef;
+  else if (mode === "edit") body.externalRef = null;
+  if (phone) body.phone = phone;
+  else if (mode === "edit") body.phone = null;
+  if (accommodations.length > 0 || mode === "edit") body.accommodations = accommodations;
+  return { ok: true, body };
+}

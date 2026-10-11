@@ -240,7 +240,8 @@ button.button-quiet {
 }
 
 .audit-filters,
-.users-filters {
+.users-filters,
+.master-filters {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
   gap: 0.75rem 1rem;
@@ -248,7 +249,8 @@ button.button-quiet {
 }
 
 .audit-filters .field,
-.users-filters .field {
+.users-filters .field,
+.master-filters .field {
   margin-bottom: 0;
 }
 
@@ -256,6 +258,8 @@ button.button-quiet {
 .audit-pager,
 .users-filter-actions,
 .users-pager,
+.master-filter-actions,
+.master-pager,
 .dialog-actions,
 .row-actions {
   display: flex;
@@ -264,12 +268,14 @@ button.button-quiet {
 }
 
 .audit-filter-actions,
-.users-filter-actions {
+.users-filter-actions,
+.master-filter-actions {
   margin-bottom: 1rem;
 }
 
 .audit-summary,
-.users-summary {
+.users-summary,
+.master-summary {
   font-weight: 600;
 }
 
@@ -278,7 +284,8 @@ button.button-quiet {
 }
 
 .audit-table,
-.users-table {
+.users-table,
+.master-table {
   width: 100%;
   min-width: 52rem;
   border-collapse: collapse;
@@ -287,7 +294,9 @@ button.button-quiet {
 .audit-table th,
 .audit-table td,
 .users-table th,
-.users-table td {
+.users-table td,
+.master-table th,
+.master-table td {
   text-align: left;
   vertical-align: top;
   padding: 0.5rem 0.75rem;
@@ -296,7 +305,8 @@ button.button-quiet {
 }
 
 .audit-table th,
-.users-table th {
+.users-table th,
+.master-table th {
   background: #e8eef5;
   color: #10233f;
 }
@@ -306,7 +316,8 @@ button.button-quiet {
 }
 
 .audit-pager,
-.users-pager {
+.users-pager,
+.master-pager {
   margin-top: 1rem;
 }
 
@@ -361,6 +372,53 @@ legend {
   color: #1b1f24;
   border: 1px solid #d5dbe3;
   border-radius: 8px;
+}
+
+.dialog-panel-wide {
+  width: min(56rem, 100%);
+}
+
+.master-subnav {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0;
+  margin: 0 0 1.25rem;
+}
+
+.master-subnav a {
+  display: inline-block;
+  padding: 0.35rem 0.6rem;
+  border-radius: 6px;
+}
+
+.master-subnav a[aria-current="page"] {
+  background: #e8eef5;
+  font-weight: 700;
+}
+
+.mark-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+  gap: 0.75rem;
+}
+
+.repeat-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.repeat-row .field {
+  flex: 1 1 12rem;
+  margin-bottom: 0;
+}
+
+.nos-block {
+  margin-top: 0.75rem;
 }
 
 .dialog-panel h2 {

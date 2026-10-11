@@ -25,7 +25,7 @@ Branch format: task/<ID>-<slug>. Agents update only their own rows.
 | F-01 | Web shell, login, mustChangePassword gate, role routing | frontend | B-01 | review | Shell, in-memory session, role guards for every SCHEMA Phase 1 role (including sme), typed API client, Vitest. Branch: `task/F-01-web-shell`. Password gate blocks the shell; collecting a new password is open question 25 (no self-service endpoint). |
 | F-02 | Batch list/detail: SLA countdown, accept/reject/assign/reassign/cancel/complete, lateReason UX | frontend | B-03,B-04,B-07a | todo | |
 | F-03 | Assessor/proctor registry screens | frontend | B-04 | todo | |
-| F-06 | Master data screens: AB, TP, centres, qualifications, learners | frontend | B-07a | todo | |
+| F-06 | Master data screens: AB, TP, centres, qualifications, learners | frontend | B-07a | review | List, create, edit, and delete where the server allows it. Branch: `task/F-06-master-data-screens`. aa_admin and mis write. ncvet_viewer, ab_reviewer, tp, and candidate see read-only lists for the collections B-07a lets them read. Learners use SCHEMA §3.3 fields only. Open questions 62–68. |
 | F-07 | Result entry UI (NOS marks) + incompleteness warnings | frontend | B-05 | todo | |
 | F-08 | AB validate/publish (+ change reason) screens | frontend | B-05 | todo | Scoped to abId |
 | F-09 | Users management (CRUD + password reset UX) | frontend | B-08 | review | List, create, edit, activate/deactivate, and password reset for aa_admin and mis. Branch: `task/F-09-users-screens`. Typed client uses the B-08 user routes. mis cannot assign aa_admin or edit/reset an existing aa_admin. A reset email is described as queued and may arrive later; the password is not kept after the form closes. Open questions 47–50. |
