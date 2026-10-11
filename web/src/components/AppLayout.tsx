@@ -52,7 +52,7 @@ export function AppLayout() {
             <ul className="nav-list">
               {items.map((item) => (
                 <li key={item.id}>
-                  <NavLink to={item.to} end>
+                  <NavLink to={item.to} end={item.id !== "master-data"}>
                     {item.label}
                   </NavLink>
                 </li>

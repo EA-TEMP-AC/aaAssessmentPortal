@@ -43,7 +43,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     id: "master-data",
     label: "Master data",
     to: "/master-data",
-    description: "Awarding bodies, training partners, centres, qualifications, and learners will be added in a later task.",
+    description: "Awarding bodies, training partners, centres, qualifications, and learners your account is allowed to read.",
     roles: MASTER_DATA_ROLES,
   },
   {

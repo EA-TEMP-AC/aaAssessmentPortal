@@ -11,8 +11,8 @@ const VISIBLE: Record<Role, readonly string[]> = {
   sme: ["Home"],
   assessor: ["Home", "Batches", "Results"],
   proctor: ["Home", "Batches"],
-  candidate: ["Home", "Batches", "Results"],
-  tp: ["Home", "Batches", "Results"],
+  candidate: ["Home", "Batches", "Master data", "Results"],
+  tp: ["Home", "Batches", "Master data", "Results"],
   ab_reviewer: ["Home", "Batches", "Master data", "Results", "Audit log"],
   ncvet_viewer: ["Home", "Batches", "Master data", "Results", "Audit log"],
 };

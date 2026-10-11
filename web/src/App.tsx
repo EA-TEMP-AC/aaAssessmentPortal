@@ -7,6 +7,7 @@ import { LoginPage } from "./pages/LoginPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import { PasswordGatePage } from "./pages/PasswordGatePage";
 import { AuditLogPage } from "./pages/AuditLogPage";
+import { MasterDataPage } from "./pages/MasterDataPage";
 import { UsersPage } from "./pages/UsersPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
 import { RoleHomePage } from "./pages/RoleHomePage";
@@ -32,12 +33,14 @@ export function AppRoutes() {
             {sections.map((item) => (
               <Route key={item.id} element={<RequireRole roles={item.roles} />}>
                 <Route
-                  path={item.to}
+                  path={item.id === "master-data" ? "/master-data/*" : item.to}
                   element={
                     item.id === "audit" ? (
                       <AuditLogPage />
                     ) : item.id === "users" ? (
                       <UsersPage />
+                    ) : item.id === "master-data" ? (
+                      <MasterDataPage />
                     ) : (
                       <PlaceholderPage title={item.label} description={item.description} />
                     )
