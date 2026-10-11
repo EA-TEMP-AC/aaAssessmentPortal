@@ -81,7 +81,10 @@ export async function processNextEmail(transport, now = new Date()) {
     await transport.send({ to: job.to, subject: job.subject, text: job.text });
     await EmailQueue.updateOne(
       { _id: job._id, status: "sending" },
-      { $set: { status: "sent", sentAt: now, lastError: null } },
+      {
+        $set: { status: "sent", sentAt: now, lastError: null },
+        $unset: { text: "" },
+      },
     );
     return { claimed: true, status: "sent", id };
   } catch (err) {
@@ -91,7 +94,7 @@ export async function processNextEmail(transport, now = new Date()) {
       if (attempts >= EMAIL_MAX_ATTEMPTS) {
         await EmailQueue.updateOne(
           { _id: job._id, status: "sending" },
-          { $set: { status: "failed", lastError } },
+          { $set: { status: "failed", lastError }, $unset: { text: "" } },
         );
         console.error(`email job ${id} failed`, safeErrorCode(err, "SEND_FAILED"));
         return { claimed: true, status: "failed", id, attempts };

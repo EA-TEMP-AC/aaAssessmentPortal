@@ -129,6 +129,95 @@ describe("email queue", () => {
     expect(logged).not.toContain("Tmp-secret-body");
   });
 
+  it("clears text after send and keeps the job metadata", async () => {
+    const now = new Date("2026-10-11T03:30:00.000Z");
+    const secret = "Tmp-clear-after-send";
+    await queueJob({
+      nextAttemptAt: now,
+      kind: "password_reset",
+      subject: "Your assessment portal password was reset",
+      text: `Temporary password: ${secret}`,
+    });
+    const logged = [];
+    const errorSpy = vi.spyOn(console, "error").mockImplementation((...args) => {
+      logged.push(args.map(String).join(" "));
+    });
+    const logSpy = vi.spyOn(console, "log").mockImplementation((...args) => {
+      logged.push(args.map(String).join(" "));
+    });
+
+    try {
+      const result = await processNextEmail(
+        {
+          async send(message) {
+            expect(message.text).toContain(secret);
+          },
+        },
+        now,
+      );
+      expect(result.status).toBe("sent");
+    } finally {
+      errorSpy.mockRestore();
+      logSpy.mockRestore();
+    }
+
+    const job = await EmailQueue.findOne().lean();
+    expect(job.status).toBe("sent");
+    expect(job.attempts).toBe(1);
+    expect(job.kind).toBe("password_reset");
+    expect(job.subject).toBe("Your assessment portal password was reset");
+    expect(job.text).toBeUndefined();
+    expect(JSON.stringify(job)).not.toContain(secret);
+    expect(logged.join("\n")).not.toContain(secret);
+  });
+
+  it("clears text after the attempt cap and does not log the plaintext", async () => {
+    const now = new Date("2026-10-11T03:40:00.000Z");
+    const secret = "Tmp-clear-after-fail";
+    await queueJob({
+      nextAttemptAt: now,
+      kind: "password_reset",
+      subject: "Your assessment portal password was reset",
+      text: `Temporary password: ${secret}`,
+    });
+    const logged = [];
+    const errorSpy = vi.spyOn(console, "error").mockImplementation((...args) => {
+      logged.push(args.map(String).join(" "));
+    });
+    const logSpy = vi.spyOn(console, "log").mockImplementation((...args) => {
+      logged.push(args.map(String).join(" "));
+    });
+
+    try {
+      let cursor = now;
+      for (let attempt = 1; attempt <= EMAIL_MAX_ATTEMPTS; attempt += 1) {
+        const result = await processNextEmail(failingTransport(), cursor);
+        expect(result.claimed).toBe(true);
+        expect(result.attempts).toBe(attempt);
+        if (attempt < EMAIL_MAX_ATTEMPTS) {
+          const pending = await EmailQueue.findOne().lean();
+          expect(pending.status).toBe("pending");
+          expect(pending.text).toContain(secret);
+          cursor = new Date(cursor.getTime() + result.delayMs);
+        } else {
+          expect(result.status).toBe("failed");
+        }
+      }
+    } finally {
+      errorSpy.mockRestore();
+      logSpy.mockRestore();
+    }
+
+    const job = await EmailQueue.findOne().lean();
+    expect(job.status).toBe("failed");
+    expect(job.attempts).toBe(EMAIL_MAX_ATTEMPTS);
+    expect(job.kind).toBe("password_reset");
+    expect(job.subject).toBe("Your assessment portal password was reset");
+    expect(job.text).toBeUndefined();
+    expect(JSON.stringify(job)).not.toContain(secret);
+    expect(logged.join("\n")).not.toContain(secret);
+  });
+
   it("sends once and marks the job sent", async () => {
     const now = new Date("2026-10-11T03:00:00.000Z");
     await queueJob({ nextAttemptAt: now });

@@ -481,6 +481,56 @@ describe("users", () => {
     expect(next.body.user.mustChangePassword).toBe(true);
   });
 
+  it("drops the reset password from the queue, audit rows, and logs after send", async () => {
+    const admin = await sessionFor("aa_admin", { email: "scrub-admin@aa.example" });
+    const target = await sessionFor("assessor", { email: "scrub-assessor@aa.example" });
+    const logged = [];
+    const errorSpy = vi.spyOn(console, "error").mockImplementation((...args) => {
+      logged.push(args.map(String).join(" "));
+    });
+    const logSpy = vi.spyOn(console, "log").mockImplementation((...args) => {
+      logged.push(args.map(String).join(" "));
+    });
+
+    try {
+      const res = await request(app)
+        .post(`/api/v1/users/${target.userId}/password-reset`)
+        .set(bearer(admin.token))
+        .send({ sendEmail: true });
+      expect(res.status).toBe(202);
+
+      const queued = await EmailQueue.findOne({ kind: "password_reset" }).lean();
+      const temporaryPassword = temporaryPasswordFrom(queued.text);
+      expect(JSON.stringify(res.body)).not.toContain(temporaryPassword);
+
+      const delivery = await processNextEmail(
+        {
+          async send(message) {
+            expect(message.text).toContain(temporaryPassword);
+          },
+        },
+        new Date(),
+      );
+      expect(delivery.status).toBe("sent");
+
+      const job = await EmailQueue.findById(queued._id).lean();
+      expect(job.status).toBe("sent");
+      expect(job.attempts).toBe(1);
+      expect(job.kind).toBe("password_reset");
+      expect(job.subject).toBe("Your assessment portal password was reset");
+      expect(job.text).toBeUndefined();
+      expect(JSON.stringify(job)).not.toContain(temporaryPassword);
+
+      const audit = await AuditLog.find().lean();
+      expect(audit.length).toBeGreaterThan(0);
+      expect(JSON.stringify(audit)).not.toContain(temporaryPassword);
+      expect(logged.join("\n")).not.toContain(temporaryPassword);
+    } finally {
+      errorSpy.mockRestore();
+      logSpy.mockRestore();
+    }
+  });
+
   it("keeps the reset response successful when the queue insert fails", async () => {
     const admin = await sessionFor("aa_admin");
     const target = await sessionFor("tp", { email: "tp-1@aa.example" });
