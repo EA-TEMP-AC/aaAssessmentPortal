@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { RATIO_CLASSES, SECTOR_NAMES, STATE_UTS } from "../../config/annexure.js";
 
 const objectIdSchema = z.string().regex(/^[a-fA-F0-9]{24}$/, "Invalid id");
 
@@ -39,7 +40,13 @@ const emailSchema = z
   .max(320)
   .transform((value) => value.toLowerCase());
 
-const SECTORS = ["manufacturing", "services", "school_education", "other"];
+const sectorName = z.string().refine((value) => SECTOR_NAMES.includes(value), {
+  message: "Expected an Annexure II sector",
+});
+const stateName = z.string().refine((value) => STATE_UTS.includes(value), {
+  message: "Expected an Annexure IV state",
+});
+const ratioClass = z.enum(RATIO_CLASSES);
 const BATCH_TYPES = ["STT", "LTT"];
 const PASS_CRITERIA_MODES = ["nos_wise", "overall"];
 const PASS_MARK_UNITS = ["percent", "absolute"];
@@ -203,6 +210,7 @@ export const createCentreSchema = z
     name: nameSchema,
     code: codeSchema.optional(),
     tpId: objectIdSchema,
+    state: stateName,
     active: z.boolean().optional(),
   })
   .strict();
@@ -212,6 +220,7 @@ export const patchCentreSchema = z
     name: nameSchema.optional(),
     code: z.union([codeSchema, z.null()]).optional(),
     tpId: objectIdSchema.optional(),
+    state: stateName.optional(),
     active: z.boolean().optional(),
   })
   .strict()
@@ -227,7 +236,8 @@ export const createQualificationSchema = z
   .object({
     code: codeSchema,
     name: nameSchema,
-    sector: z.enum(SECTORS),
+    sector: sectorName,
+    ratioClass,
     defaultBatchType: z.enum(BATCH_TYPES).optional(),
     passCriteriaMode: z.enum(PASS_CRITERIA_MODES).optional(),
     passMarkUnit: z.enum(PASS_MARK_UNITS).optional(),
@@ -243,7 +253,8 @@ export const patchQualificationSchema = z
   .object({
     code: codeSchema.optional(),
     name: nameSchema.optional(),
-    sector: z.enum(SECTORS).optional(),
+    sector: sectorName.optional(),
+    ratioClass: ratioClass.optional(),
     defaultBatchType: z.union([z.enum(BATCH_TYPES), z.null()]).optional(),
     passCriteriaMode: z.union([z.enum(PASS_CRITERIA_MODES), z.null()]).optional(),
     passMarkUnit: z.enum(PASS_MARK_UNITS).optional(),
@@ -258,7 +269,7 @@ export const patchQualificationSchema = z
 
 export const listQualificationsQuerySchema = z.object({
   ...pageQuery,
-  sector: z.preprocess(blankToUndefined, z.enum(SECTORS).optional()),
+  sector: z.preprocess(blankToUndefined, sectorName.optional()),
 });
 
 const phoneSchema = z.string().trim().min(1).max(32);

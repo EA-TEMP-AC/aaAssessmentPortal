@@ -1,5 +1,4 @@
 import mongoose from "mongoose";
-import { compliance } from "../../config/compliance.js";
 import {
   forbidden,
   invalidTransition,
@@ -15,7 +14,8 @@ import { Qualification } from "../../models/qualification.model.js";
 import { TrainingPartner } from "../../models/training-partner.model.js";
 import { Batch } from "../../models/batch.model.js";
 import { BATCH_STATUSES, resolveTransition, rolesForAction } from "./batch-transitions.js";
-import { assignDueAfterAccept, resultDueAfterComplete, slaDueAtCreation } from "./batch-sla.js";
+import { slaDueAtCreation } from "./batch-sla.js";
+import { recognitionDecision } from "../recognition/recognition.service.js";
 import { mergedBreachKeys, OPEN_SLA_STEPS, overdueCondition } from "./sla-breach-job.js";
 
 const ACCEPT_SLA_ACTIONS = new Set(["accept", "reject"]);
@@ -99,6 +99,12 @@ export function presentBatch(doc, { now = new Date(), recompute = true } = {}) {
     centreId: idOf(doc.centreId),
     candidateCount: doc.candidateCount,
     sector: doc.sector,
+    ratioClass: doc.ratioClass,
+    assessmentLanguage: doc.assessmentLanguage,
+    state: doc.state,
+    // B-10 writes learnerFeedback. The contract example is null until then.
+    learnerFeedback: null,
+    recognitionOverride: presentRecognitionOverride(doc.recognitionOverride),
     status: doc.status,
     statusVersion: doc.statusVersion,
     assessorId: idOf(doc.assessorId),
@@ -134,26 +140,45 @@ export function presentBatch(doc, { now = new Date(), recompute = true } = {}) {
   };
 }
 
-async function loadSector(input) {
+async function loadBatchSources(input) {
   const [ab, qualification, tp, centre] = await Promise.all([
     AwardingBody.findById(input.abId).select("_id").lean(),
-    Qualification.findById(input.qualificationId).select("sector").lean(),
+    Qualification.findById(input.qualificationId).select("sector ratioClass").lean(),
     TrainingPartner.findById(input.tpId).select("_id").lean(),
-    Centre.findById(input.centreId).select("tpId").lean(),
+    Centre.findById(input.centreId).select("tpId state").lean(),
   ]);
 
   const details = {};
   if (!ab) details.abId = ["Does not exist"];
   if (!qualification) details.qualificationId = ["Does not exist"];
+  else if (!qualification.sector || !qualification.ratioClass) {
+    details.qualificationId = ["Qualification is missing sector or ratioClass"];
+  }
   if (!tp) details.tpId = ["Does not exist"];
   if (!centre) details.centreId = ["Does not exist"];
   else if (String(centre.tpId) !== String(input.tpId)) {
     details.centreId = ["Centre does not belong to this training partner"];
+  } else if (!centre.state) {
+    details.centreId = ["Centre has no state"];
   }
   if (Object.keys(details).length > 0) {
     throw validationError("Unknown or inconsistent reference", details);
   }
-  return qualification.sector;
+  return {
+    sector: qualification.sector,
+    ratioClass: qualification.ratioClass,
+    state: centre.state,
+  };
+}
+
+function presentRecognitionOverride(value) {
+  if (!value) return null;
+  return {
+    byUserId: idOf(value.byUserId),
+    reason: value.reason,
+    at: iso(value.at),
+    checks: [...(value.checks ?? [])],
+  };
 }
 
 function acceptIsLate(batch, now) {
@@ -168,7 +193,14 @@ function acceptIsLate(batch, now) {
 export async function createBatch(user, input, context = {}) {
   const now = context.now ?? new Date();
   assertCreator(user, input.abId);
-  const sector = await loadSector(input);
+  const copied = await loadBatchSources(input);
+  const override = await recognitionDecision({
+    sector: copied.sector,
+    state: copied.state,
+    now,
+    user,
+    overrideReason: input.recognitionOverrideReason,
+  });
   const due = await slaDueAtCreation({
     type: input.type,
     assessmentStartDate: input.assessmentStartDate,
@@ -188,7 +220,11 @@ export async function createBatch(user, input, context = {}) {
     tpId: input.tpId,
     centreId: input.centreId,
     candidateCount: input.candidateCount,
-    sector,
+    sector: copied.sector,
+    ratioClass: copied.ratioClass,
+    assessmentLanguage: input.assessmentLanguage,
+    state: copied.state,
+    recognitionOverride: override,
     status: "allocated",
     statusVersion: 1,
     isReassessment: false,
@@ -203,6 +239,20 @@ export async function createBatch(user, input, context = {}) {
     accommodations: [],
     allocatedAt: now,
   });
+  if (override) {
+    await recordAudit({
+      actorId: user._id,
+      actorRole: user.role,
+      action: "recognition_override",
+      entity: "batch",
+      entityId: String(created._id),
+      abId: created.abId,
+      batchId: created._id,
+      meta: { reason: override.reason, checks: [...override.checks] },
+      ip: context.ip,
+    });
+  }
+
   const plain = created.toObject();
   return {
     batch: presentBatch(plain, { now, recompute: true }),
@@ -252,25 +302,6 @@ export async function transitionBatch(user, id, action, body = {}, context = {})
   const lateReason = typeof body.lateReason === "string" ? body.lateReason.trim() : "";
   if (late && !lateReason) throw slaAcceptExpired();
 
-  const assignDue =
-    action === "accept"
-      ? await assignDueAfterAccept({
-          mode: compliance.ASSIGN_SLA_MODE,
-          type: existing.type,
-          acceptedAt: now,
-          already: existing.sla?.assignDueAt ?? null,
-        })
-      : null;
-  const resultDue =
-    action === "complete"
-      ? await resultDueAfterComplete({
-          anchor: compliance.RESULT_SLA_ANCHOR,
-          type: existing.type,
-          completedAt: now,
-          already: existing.sla?.resultDueAt ?? null,
-        })
-      : null;
-
   const $set = { status: next.to };
   if (action === "accept") $set.acceptedAt = now;
   if (action === "reject") $set.rejectReason = body.reason;
@@ -278,8 +309,6 @@ export async function transitionBatch(user, id, action, body = {}, context = {})
     $set.cancelReason = body.reason;
     $set.cancelledAt = now;
   }
-  if (assignDue) $set["sla.assignDueAt"] = assignDue;
-  if (resultDue) $set["sla.resultDueAt"] = resultDue;
 
   const update = { $set, $inc: { statusVersion: 1 } };
   if (late) {

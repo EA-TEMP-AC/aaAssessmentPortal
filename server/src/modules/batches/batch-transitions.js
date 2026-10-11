@@ -25,8 +25,6 @@ export const BATCH_TYPES = Object.freeze(["STT", "LTT"]);
 
 export const BATCH_MODES = Object.freeze(["online", "offline", "blended"]);
 
-export const SECTORS = Object.freeze(["manufacturing", "services", "school_education", "other"]);
-
 /** SlaBreachKey. docs/SCHEMA.md §1.4. */
 export const SLA_BREACH_KEYS = Object.freeze(["accept", "assign", "result"]);
 

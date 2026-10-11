@@ -11,23 +11,19 @@ export const compliance = Object.freeze({
   WEEKEND_DAYS: Object.freeze([6, 0]),
   /** NCVET:FR §F. SCHEMA §2. Accept or reject within this many working days. */
   ACCEPT_REJECT_WORKING_DAYS: 2,
-  /** NCVET:FR §F. SCHEMA §2. Assign this many working days before a short-term exam. */
-  ASSIGN_BEFORE_EXAM_WD_STT: 7,
-  /** NCVET:FR §F. SCHEMA §2. Assign this many working days before a long-term exam. */
+  /** Guidelines Table 7; NCVET:FR §F. SCHEMA §2. Working days after allocatedAt for an STT assign due. */
+  ASSIGN_AFTER_ALLOCATION_WD_STT: 7,
+  /** Guidelines Table 7; NCVET:FR §F. SCHEMA §2. Working days before assessmentStartDate for an LTT assign due. */
   ASSIGN_BEFORE_EXAM_WD_LTT: 30,
-  /** project. SCHEMA §2. Alternate assign window from acceptance (open Q12). */
-  ASSIGN_FROM_ACCEPTANCE_WD_STT: 7,
-  /** project. SCHEMA §2. Alternate assign window from acceptance (open Q12). */
-  ASSIGN_FROM_ACCEPTANCE_WD_LTT: 30,
-  /** project. SCHEMA §2. `before_exam` (default) or `from_acceptance`. */
-  ASSIGN_SLA_MODE: "before_exam",
-  /** NCVET:FR §F. SCHEMA §2. Result submission window for short-term batches. */
+  /** Guidelines Table 7; NCVET:FR §F. SCHEMA §2. Result window for short-term batches, after assessmentEndDate. */
   RESULT_SUBMIT_WD_STT: 3,
-  /** NCVET:FR §F. SCHEMA §2. Result submission window for long-term batches. */
+  /** Guidelines Table 7; NCVET:FR §F. SCHEMA §2. Result window for long-term batches, after the exam date. */
   RESULT_SUBMIT_WD_LTT: 5,
-  /** project. SCHEMA §2. Default result anchor (open Q16). */
-  RESULT_SLA_ANCHOR: "assessment_end_date",
-  /** project. SCHEMA §2. Allocation lead for short-term batches. */
+  /** Guidelines Table 7; NCVET:FR §F. SCHEMA §2. STT result counts from assessmentEndDate. */
+  RESULT_SLA_ANCHOR_STT: "assessment_end_date",
+  /** Guidelines Table 7; NCVET:FR §F. SCHEMA §2. LTT result counts from the exam date (assessmentStartDate). */
+  RESULT_SLA_ANCHOR_LTT: "exam_date",
+  /** Guidelines Figure 2; NCVET:FR §F. SCHEMA §2. STT allocation lead in calendar days. Hard check is open Q15. */
   BATCH_ALLOCATE_LEAD_DAYS_STT: 15,
   /** NCVET:FR §D. SCHEMA §2. ToA certificate validity. */
   TOA_VALIDITY_YEARS: 3,
@@ -41,7 +37,7 @@ export const compliance = Object.freeze({
   RATIO_MAX_SCHOOL_EDUCATION: 60,
   /** project. SCHEMA §2. Ratio rule is not applied. */
   RATIO_MAX_OTHER: null,
-  /** NCVET:FR §F. SCHEMA §2. Reassessment window from the first assessment end. */
+  /** Guidelines 4.7; NCVET:FR §F. SCHEMA §2. Reassessment window from the original result publishedAt. */
   REASSESS_WINDOW_YEARS: 1,
   /** project. SCHEMA §2. Evidence vault is not required for Phase 1 results. */
   EVIDENCE_REQUIRED_FOR_RESULT: false,

@@ -27,6 +27,7 @@ export const SEED_TRAINING_PARTNER = Object.freeze({
 export const SEED_CENTRE = Object.freeze({
   code: "CTR-SAMPLE",
   name: "Sample Centre",
+  state: "Maharashtra",
   active: true,
 });
 
@@ -34,7 +35,8 @@ export const SEED_CENTRE = Object.freeze({
 export const SEED_QUALIFICATION_PERCENT = Object.freeze({
   code: "Q-ELEC-L4",
   name: "Electrician L4",
-  sector: "manufacturing",
+  sector: "Electronics",
+  ratioClass: "manufacturing",
   passCriteriaMode: "nos_wise",
   passMarkUnit: "percent",
   passMarks: Object.freeze({ theory: 50, practical: 50, viva: 50 }),
@@ -55,7 +57,8 @@ export const SEED_QUALIFICATION_PERCENT = Object.freeze({
 export const SEED_QUALIFICATION_ABSOLUTE = Object.freeze({
   code: "Q-WELD-L3",
   name: "Welder L3",
-  sector: "manufacturing",
+  sector: "Iron & Steel",
+  ratioClass: "manufacturing",
   passCriteriaMode: "overall",
   passMarkUnit: "absolute",
   passMarks: Object.freeze({ theory: 20, practical: 30, viva: 10 }),

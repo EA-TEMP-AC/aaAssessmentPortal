@@ -51,7 +51,7 @@ batchesRouter.post(
   requireRoles(...BATCH_CREATE_ROLES),
   asyncHandler(async (req, res) => {
     const body = createBatchBodySchema.parse(req.body);
-    const saved = await createBatch(req.user, body);
+    const saved = await createBatch(req.user, body, { ip: clientIp(req) });
     setAudit(req, {
       action: "batch.create",
       entity: "batch",

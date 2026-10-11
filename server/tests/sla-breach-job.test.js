@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import { Batch } from "../src/models/batch.model.js";
 import {
   markOverdueSlaBreaches,
+  openBreachKeys,
   SLA_BREACH_JOB_INTERVAL_MS,
   startSlaBreachScheduler,
 } from "../src/modules/batches/sla-breach-job.js";
@@ -15,7 +16,7 @@ function sla(overrides) {
   return {
     acceptDueAt: future,
     assignDueAt: future,
-    resultDueAt: null,
+    resultDueAt: future,
     breached: [],
     lateActions: [],
     ...overrides,
@@ -36,7 +37,10 @@ async function insertBatch(overrides = {}) {
     tpId: new mongoose.Types.ObjectId(),
     centreId: new mongoose.Types.ObjectId(),
     candidateCount: 10,
-    sector: "manufacturing",
+    sector: "Electronics",
+    ratioClass: "manufacturing",
+    assessmentLanguage: "Hindi",
+    state: "Maharashtra",
     status: "allocated",
     statusVersion: 1,
     isReassessment: false,
@@ -59,6 +63,18 @@ describe("nightly SLA breach job", () => {
 
   beforeEach(async () => {
     await clearCollections();
+  });
+
+  it("does not treat a missing due instant as already breached", () => {
+    expect(
+      openBreachKeys(
+        { status: "assessment_completed", sla: { acceptDueAt: past, resultDueAt: null } },
+        now,
+      ),
+    ).toEqual([]);
+    expect(
+      openBreachKeys({ status: "accepted", sla: { assignDueAt: past, resultDueAt: past } }, now),
+    ).toEqual(["assign"]);
   });
 
   it("flags only open steps that are past due, and a second run changes nothing", async () => {

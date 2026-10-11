@@ -3,6 +3,7 @@ import request from "supertest";
 import { createApp } from "../src/app.js";
 import { assignDueAt } from "../src/lib/working-days.js";
 import { AuditLog } from "../src/models/audit-log.model.js";
+import { AaRecognition } from "../src/models/aa-recognition.model.js";
 import { AwardingBody } from "../src/models/awarding-body.model.js";
 import { Batch } from "../src/models/batch.model.js";
 import { Centre } from "../src/models/centre.model.js";
@@ -36,6 +37,7 @@ const batchKeys = [
   "accommodations",
   "allocatedAt",
   "assessmentEndDate",
+  "assessmentLanguage",
   "assessmentStartDate",
   "assessorId",
   "cancelReason",
@@ -46,15 +48,19 @@ const batchKeys = [
   "firstAssessmentBatchId",
   "id",
   "isReassessment",
+  "learnerFeedback",
   "mode",
   "proctorId",
   "qualificationId",
+  "ratioClass",
   "ratioOverride",
+  "recognitionOverride",
   "reassessmentOf",
   "rejectReason",
   "resultId",
   "sector",
   "sla",
+  "state",
   "status",
   "statusVersion",
   "tpId",
@@ -110,18 +116,21 @@ async function masters() {
     name: "Centre One",
     code: "C-01",
     tpId: tp._id,
+    state: "Maharashtra",
     active: true,
   });
   const otherCentre = await Centre.create({
     name: "Centre Two",
     code: "C-02",
     tpId: otherTp._id,
+    state: "Maharashtra",
     active: true,
   });
   const qualification = await Qualification.create({
     code: "Q-ELEC-L4",
     name: "Electrician L4",
-    sector: "manufacturing",
+    sector: "Electronics",
+    ratioClass: "manufacturing",
     passMarkUnit: "percent",
     passMarks: { theory: 50, practical: 50, viva: 50 },
     nos: [
@@ -132,6 +141,13 @@ async function masters() {
         pcs: [{ pcId: "PC-01", code: "P1", name: "PPE" }],
       },
     ],
+  });
+  await AaRecognition.create({
+    sectors: ["Electronics"],
+    panIndia: false,
+    states: ["Maharashtra"],
+    startDate: "2020-01-01",
+    endDate: "2099-12-31",
   });
   return { ab, otherAb, tp, otherTp, centre, otherCentre, qualification };
 }
@@ -147,6 +163,7 @@ function batchBody(m, overrides = {}) {
     tpId: String(m.tp._id),
     centreId: String(m.centre._id),
     candidateCount: 24,
+    assessmentLanguage: "Hindi",
     ...overrides,
   };
 }
@@ -188,6 +205,7 @@ describe("batches", () => {
     expect(indexes.map((index) => index.key)).toEqual(
       expect.arrayContaining([
         { _id: 1 },
+        { sector: 1 },
         { status: 1, assessmentStartDate: 1 },
         { assessorId: 1, assessmentStartDate: 1, assessmentEndDate: 1 },
         { tpId: 1 },
@@ -211,16 +229,23 @@ describe("batches", () => {
     };
     const created = await createBatch(adminUser, batchBody(m, example), { now });
     expect(created.batch.sla.acceptDueAt).toBe("2026-10-12T18:29:59.999Z");
-    expect(created.batch.sla.assignDueAt).toBe("2026-11-11T18:29:59.999Z");
+    expect(created.batch.sla.assignDueAt).toBe("2026-10-19T18:29:59.999Z");
     expect(created.batch.sla.resultDueAt).toBe("2026-11-25T18:29:59.999Z");
     expect(created.batch.allocatedAt).toBe(now.toISOString());
-    expect(created.batch.sector).toBe("manufacturing");
+    expect(created.batch.sector).toBe("Electronics");
+    expect(created.batch.ratioClass).toBe("manufacturing");
+    expect(created.batch.assessmentLanguage).toBe("Hindi");
+    expect(created.batch.state).toBe("Maharashtra");
+    expect(created.batch.learnerFeedback).toBeNull();
+    expect(created.batch.recognitionOverride).toBeNull();
     expect(created.batch.firstAssessmentBatchId).toBe(created.batch.id);
     expect(created.stored.sla.breached).toEqual([]);
 
     const ltt = await createBatch(adminUser, batchBody(m, { ...example, type: "LTT" }), { now });
     const lttAssign = await assignDueAt({ type: "LTT", assessmentStartDate: "2026-11-20" });
     expect(ltt.batch.sla.assignDueAt).toBe(lttAssign.toISOString());
+    expect(ltt.batch.sla.assignDueAt).toBe("2026-10-09T18:29:59.999Z");
+    expect(ltt.batch.sla.resultDueAt).toBe("2026-11-27T18:29:59.999Z");
 
     await Holiday.create({
       date: "2026-10-09",
@@ -230,8 +255,11 @@ describe("batches", () => {
     });
     const shifted = await createBatch(adminUser, batchBody(m, example), { now });
     expect(shifted.batch.sla.acceptDueAt).toBe("2026-10-13T18:29:59.999Z");
+    expect(shifted.batch.sla.assignDueAt).toBe("2026-10-20T18:29:59.999Z");
+    expect(shifted.batch.sla.resultDueAt).toBe("2026-11-25T18:29:59.999Z");
     const stored = await Batch.findById(created.batch.id).lean();
     expect(stored.sla.acceptDueAt.toISOString()).toBe("2026-10-12T18:29:59.999Z");
+    expect(stored.sla.assignDueAt.toISOString()).toBe("2026-10-19T18:29:59.999Z");
   });
 
   it("creates, lists, and reads a batch for aa_admin", async () => {
@@ -252,7 +280,12 @@ describe("batches", () => {
       tpId: String(m.tp._id),
       centreId: String(m.centre._id),
       candidateCount: 24,
-      sector: "manufacturing",
+      sector: "Electronics",
+      ratioClass: "manufacturing",
+      assessmentLanguage: "Hindi",
+      state: "Maharashtra",
+      learnerFeedback: null,
+      recognitionOverride: null,
       status: "allocated",
       statusVersion: 1,
       assessorId: null,
@@ -290,7 +323,7 @@ describe("batches", () => {
     expect(audit).toMatchObject({
       actorRole: "aa_admin",
       entity: "batch",
-      after: { status: "allocated", sector: "manufacturing" },
+      after: { status: "allocated", sector: "Electronics" },
     });
     expect(String(audit.batchId)).toBe(created.id);
     expect(String(audit.abId)).toBe(created.abId);
@@ -326,8 +359,21 @@ describe("batches", () => {
     const extra = await request(app)
       .post("/api/v1/batches")
       .set(auth)
-      .send(batchBody(m, { sector: "manufacturing" }));
+      .send(batchBody(m, { sector: "Electronics", ratioClass: "manufacturing" }));
     expectError(extra, 400, "VALIDATION_ERROR");
+
+    const withoutLanguage = batchBody(m);
+    delete withoutLanguage.assessmentLanguage;
+    const missingLanguage = await request(app)
+      .post("/api/v1/batches")
+      .set(auth)
+      .send(withoutLanguage);
+    expectError(missingLanguage, 400, "VALIDATION_ERROR");
+    const blankLanguage = await request(app)
+      .post("/api/v1/batches")
+      .set(auth)
+      .send(batchBody(m, { assessmentLanguage: "   " }));
+    expectError(blankLanguage, 400, "VALIDATION_ERROR");
 
     const mode = await request(app)
       .post("/api/v1/batches")
@@ -406,7 +452,7 @@ describe("batches", () => {
     });
     const own = await createOne(reviewer.token, m);
     expect(own.abId).toBe(String(m.ab._id));
-    expect(own.sector).toBe("manufacturing");
+    expect(own.sector).toBe("Electronics");
 
     const other = await request(app)
       .post("/api/v1/batches")
@@ -828,5 +874,104 @@ describe("batches", () => {
       expect(res.status, action).toBe(404);
       expect(res.body.error.code).toBe("NOT_FOUND");
     }
+  });
+
+  it("blocks a batch outside recognition and lets aa_admin override with a reason", async () => {
+    const m = await masters();
+    const admin = await sessionFor("aa_admin");
+    const reviewer = await sessionFor("ab_reviewer", {
+      abId: m.ab._id,
+      email: "reviewer-recog@aa.example",
+    });
+    const auth = bearer(admin.token);
+
+    await AaRecognition.deleteMany({});
+    const unconfigured = await request(app).post("/api/v1/batches").set(auth).send(batchBody(m));
+    expectError(unconfigured, 409, "RULE_OUTSIDE_RECOGNITION");
+    expect(unconfigured.body.error.details.checks).toEqual(["unconfigured"]);
+    expect(await Batch.countDocuments()).toBe(0);
+
+    const overridden = await request(app)
+      .post("/api/v1/batches")
+      .set(auth)
+      .send(batchBody(m, { recognitionOverrideReason: "Recognition letter is in transit" }));
+    expect(overridden.status, JSON.stringify(overridden.body)).toBe(201);
+    expect(overridden.body.recognitionOverride.checks).toEqual(["unconfigured"]);
+    expect(overridden.body.recognitionOverride.reason).toBe("Recognition letter is in transit");
+    expect(overridden.body.recognitionOverride.byUserId).toBe(admin.userId);
+    const overrideAudit = await AuditLog.findOne({
+      action: "recognition_override",
+      entityId: overridden.body.id,
+    }).lean();
+    expect(overrideAudit.meta.reason).toBe("Recognition letter is in transit");
+    expect(overrideAudit.meta.checks).toEqual(["unconfigured"]);
+
+    await AaRecognition.create({
+      sectors: ["Construction"],
+      panIndia: false,
+      states: ["Gujarat"],
+      startDate: "2020-01-01",
+      endDate: "2099-12-31",
+    });
+    const outside = await request(app).post("/api/v1/batches").set(auth).send(batchBody(m));
+    expectError(outside, 409, "RULE_OUTSIDE_RECOGNITION");
+    expect(outside.body.error.details.checks).toEqual(["sector", "state"]);
+
+    const reviewerOverride = await request(app)
+      .post("/api/v1/batches")
+      .set(bearer(reviewer.token))
+      .send(batchBody(m, { recognitionOverrideReason: "Reviewer cannot override" }));
+    expectError(reviewerOverride, 409, "RULE_OUTSIDE_RECOGNITION");
+    expect(reviewerOverride.body.error.details.checks).toEqual(["sector", "state"]);
+
+    await AaRecognition.updateOne(
+      {},
+      { $set: { sectors: ["Electronics"], states: ["Maharashtra"], endDate: "2020-12-31" } },
+    );
+    const expired = await request(app).post("/api/v1/batches").set(auth).send(batchBody(m));
+    expectError(expired, 409, "RULE_OUTSIDE_RECOGNITION");
+    expect(expired.body.error.details.checks).toEqual(["expired"]);
+
+    await AaRecognition.updateOne({}, { $set: { startDate: "2090-01-01", endDate: "2099-12-31" } });
+    const notStarted = await request(app).post("/api/v1/batches").set(auth).send(batchBody(m));
+    expectError(notStarted, 409, "RULE_OUTSIDE_RECOGNITION");
+    expect(notStarted.body.error.details.checks).toEqual(["not_started"]);
+    expect(await Batch.countDocuments()).toBe(1);
+
+    const gujarat = await Centre.create({
+      name: "Gujarat Centre",
+      tpId: m.tp._id,
+      state: "Gujarat",
+      active: true,
+    });
+    await AaRecognition.updateOne(
+      {},
+      {
+        $set: {
+          sectors: ["Electronics"],
+          panIndia: true,
+          states: [],
+          startDate: "2020-01-01",
+          endDate: "2099-12-31",
+        },
+      },
+    );
+    const panIndia = await createOne(admin.token, m, { centreId: String(gujarat._id) });
+    expect(panIndia.state).toBe("Gujarat");
+    expect(panIndia.recognitionOverride).toBeNull();
+
+    const statelessId = new mongoose.Types.ObjectId();
+    await Centre.collection.insertOne({
+      _id: statelessId,
+      name: "No state",
+      tpId: m.tp._id,
+      active: true,
+    });
+    const noState = await request(app)
+      .post("/api/v1/batches")
+      .set(auth)
+      .send(batchBody(m, { centreId: String(statelessId) }));
+    expectError(noState, 400, "VALIDATION_ERROR");
+    expect(noState.body.error.details.centreId).toEqual(["Centre has no state"]);
   });
 });

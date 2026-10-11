@@ -76,6 +76,11 @@ describe("master data seed", () => {
     );
 
     await AwardingBody.updateOne({ code: SEED_AWARDING_BODY.code }, { $set: { name: "Changed" } });
+    await Centre.updateOne({ code: SEED_CENTRE.code }, { $set: { state: "Gujarat" } });
+    await Qualification.updateOne(
+      { code: "Q-ELEC-L4" },
+      { $set: { sector: "Construction", ratioClass: "services" } },
+    );
     const second = await seedMasterData();
     expect(second.abCode).toBe(first.abCode);
 
@@ -91,6 +96,17 @@ describe("master data seed", () => {
     const centre = await Centre.findOne({ code: SEED_CENTRE.code }).lean();
     const partner = await TrainingPartner.findOne({ code: SEED_TRAINING_PARTNER.code }).lean();
     expect(String(centre.tpId)).toBe(String(partner._id));
+    expect(centre.state).toBe(SEED_CENTRE.state);
+
+    const electrician = await Qualification.findOne({ code: "Q-ELEC-L4" }).lean();
+    const welder = await Qualification.findOne({ code: "Q-WELD-L3" }).lean();
+    expect(electrician.sector).toBe("Electronics");
+    expect(electrician.ratioClass).toBe("manufacturing");
+    expect(welder.sector).toBe("Iron & Steel");
+    expect(welder.ratioClass).toBe("manufacturing");
+    const ratioClasses = ["manufacturing", "services", "school_education", "other"];
+    const sectors = await Qualification.distinct("sector");
+    expect(sectors.every((sector) => !ratioClasses.includes(sector))).toBe(true);
 
     const reviewer = await User.findOne({ email: "ab.reviewer@aa.example" }).lean();
     const tp = await User.findOne({ email: "tp@aa.example" }).lean();

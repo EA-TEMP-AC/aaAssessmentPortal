@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { RATIO_CLASSES, SECTOR_NAMES } from "../config/annexure.js";
 
 /**
  * qualifications. docs/SCHEMA.md §3.7. NCVET:FR §F (theory, practical, viva pass marks).
@@ -49,11 +50,8 @@ const qualificationSchema = new mongoose.Schema(
   {
     code: { type: String, required: true, trim: true, maxlength: 64 },
     name: { type: String, required: true, trim: true, maxlength: 200 },
-    sector: {
-      type: String,
-      required: true,
-      enum: ["manufacturing", "services", "school_education", "other"],
-    },
+    sector: { type: String, required: true, enum: SECTOR_NAMES },
+    ratioClass: { type: String, required: true, enum: RATIO_CLASSES },
     defaultBatchType: { type: String, enum: ["STT", "LTT"] },
     passCriteriaMode: { type: String, enum: ["nos_wise", "overall"] },
     passMarkUnit: { type: String, required: true, enum: ["percent", "absolute"] },

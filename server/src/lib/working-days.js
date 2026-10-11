@@ -18,17 +18,6 @@ import { WORKING_DAY_CONFIG_KEY, WorkingDayConfig } from "../models/working-day-
  */
 const MAX_CALENDAR_SPAN_DAYS = 4000;
 
-const ASSIGN_DAYS = {
-  before_exam: {
-    STT: () => compliance.ASSIGN_BEFORE_EXAM_WD_STT,
-    LTT: () => compliance.ASSIGN_BEFORE_EXAM_WD_LTT,
-  },
-  from_acceptance: {
-    STT: () => compliance.ASSIGN_FROM_ACCEPTANCE_WD_STT,
-    LTT: () => compliance.ASSIGN_FROM_ACCEPTANCE_WD_LTT,
-  },
-};
-
 const istDateFormatter = new Intl.DateTimeFormat("en-US", {
   timeZone: compliance.TIMEZONE,
   year: "numeric",
@@ -109,71 +98,65 @@ export async function acceptDueAt(allocatedAt, calendar) {
 }
 
 /**
- * Assign due instant. NCVET:FR §F. `mode` defaults to ASSIGN_SLA_MODE.
- * `before_exam` counts back from assessmentStartDate.
- * `from_acceptance` counts forward from acceptedAt.
- * @param {{ type: "STT"|"LTT", mode?: string, assessmentStartDate?: string, acceptedAt?: Date|string, region?: string|null }} input
+ * Assign due instant. Guidelines Table 7; NCVET:FR §F. docs/SCHEMA.md §2.3.
+ * STT counts forward from `allocatedAt`. LTT counts back from `assessmentStartDate`.
+ * @param {{ type: "STT"|"LTT", allocatedAt?: Date|string, assessmentStartDate?: string, region?: string|null }} input
  * @param {object} [calendar] when omitted, loaded for `input.region` (AA-wide if unset)
  */
 export async function assignDueAt(input, calendar) {
-  const mode = input?.mode ?? compliance.ASSIGN_SLA_MODE;
-  const days = assignDayCount(input?.type, mode);
   const cal = await resolveCalendar(calendar, input?.region);
-  if (mode === "before_exam") {
-    if (!input?.assessmentStartDate) {
-      throw new TypeError("assessmentStartDate is required when ASSIGN_SLA_MODE is before_exam");
+  if (input?.type === "STT") {
+    if (!input.allocatedAt) throw new TypeError("allocatedAt is required for an STT assign due");
+    return moveWorkingDays(input.allocatedAt, compliance.ASSIGN_AFTER_ALLOCATION_WD_STT, cal, 1);
+  }
+  if (input?.type === "LTT") {
+    if (!input.assessmentStartDate) {
+      throw new TypeError("assessmentStartDate is required for an LTT assign due");
     }
-    return moveWorkingDays(input.assessmentStartDate, days, cal, -1);
+    return moveWorkingDays(
+      input.assessmentStartDate,
+      compliance.ASSIGN_BEFORE_EXAM_WD_LTT,
+      cal,
+      -1,
+    );
   }
-  if (!input?.acceptedAt) {
-    throw new TypeError("acceptedAt is required when ASSIGN_SLA_MODE is from_acceptance");
-  }
-  return moveWorkingDays(input.acceptedAt, days, cal, 1);
+  throw new TypeError(`Unknown batch type: ${input?.type}`);
 }
 
 /**
- * Result submission due instant. NCVET:FR §F. `anchor` defaults to RESULT_SLA_ANCHOR.
- * `assessment_end_date` and `assessment_start_date` are civil dates.
- * `assessment_completed` is the completion instant.
- * @param {{ type: "STT"|"LTT", anchor?: string, assessmentEndDate?: string, assessmentStartDate?: string, assessmentCompletedAt?: Date|string, region?: string|null }} input
+ * Result submission due instant. Guidelines Table 7; NCVET:FR §F. docs/SCHEMA.md §2.3.
+ * STT counts forward from `assessmentEndDate`. LTT counts forward from the exam date
+ * (`assessmentStartDate`). There is no single anchor switch.
+ * @param {{ type: "STT"|"LTT", assessmentEndDate?: string, assessmentStartDate?: string, region?: string|null }} input
  * @param {object} [calendar]
  */
 export async function resultDueAt(input, calendar) {
-  const anchor = input?.anchor ?? compliance.RESULT_SLA_ANCHOR;
-  const days = resultDayCount(input?.type);
   const cal = await resolveCalendar(calendar, input?.region);
-  if (anchor === "assessment_end_date") {
-    if (!input?.assessmentEndDate) throw new TypeError("assessmentEndDate is required");
-    return moveWorkingDays(input.assessmentEndDate, days, cal, 1);
+  if (input?.type === "STT") {
+    if (!input.assessmentEndDate) {
+      throw new TypeError("assessmentEndDate is required for an STT result due");
+    }
+    return moveWorkingDays(input.assessmentEndDate, compliance.RESULT_SUBMIT_WD_STT, cal, 1);
   }
-  if (anchor === "assessment_start_date") {
-    if (!input?.assessmentStartDate) throw new TypeError("assessmentStartDate is required");
-    return moveWorkingDays(input.assessmentStartDate, days, cal, 1);
+  if (input?.type === "LTT") {
+    if (!input.assessmentStartDate) {
+      throw new TypeError("assessmentStartDate is required for an LTT result due");
+    }
+    return moveWorkingDays(input.assessmentStartDate, compliance.RESULT_SUBMIT_WD_LTT, cal, 1);
   }
-  if (anchor === "assessment_completed") {
-    if (!input?.assessmentCompletedAt) throw new TypeError("assessmentCompletedAt is required");
-    return moveWorkingDays(input.assessmentCompletedAt, days, cal, 1);
-  }
-  throw new TypeError(`Unknown RESULT_SLA_ANCHOR: ${anchor}`);
+  throw new TypeError(`Unknown batch type: ${input?.type}`);
+}
+
+/** IST civil date (`YYYY-MM-DD`) of an instant. docs/SCHEMA.md §2.1 step 1. */
+export function istCalendarDate(instant) {
+  const date = instant instanceof Date ? instant : new Date(instant);
+  if (Number.isNaN(date.getTime())) throw new TypeError("Invalid anchor instant");
+  return istCivilDate(date);
 }
 
 async function resolveCalendar(calendar, region) {
   if (calendar) return calendar;
   return loadWorkingCalendar({ region: region ?? null });
-}
-
-function assignDayCount(type, mode) {
-  const byType = ASSIGN_DAYS[mode];
-  if (!byType) throw new TypeError(`Unknown ASSIGN_SLA_MODE: ${mode}`);
-  const pick = byType[type];
-  if (!pick) throw new TypeError(`Unknown batch type: ${type}`);
-  return pick();
-}
-
-function resultDayCount(type) {
-  if (type === "STT") return compliance.RESULT_SUBMIT_WD_STT;
-  if (type === "LTT") return compliance.RESULT_SUBMIT_WD_LTT;
-  throw new TypeError(`Unknown batch type: ${type}`);
 }
 
 function moveWorkingDays(anchor, workingDays, calendar, direction) {

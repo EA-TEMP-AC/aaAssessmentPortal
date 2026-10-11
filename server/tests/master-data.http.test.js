@@ -35,7 +35,8 @@ const learnerKeys = [
 const percentQualification = {
   code: "Q-ELEC-L4",
   name: "Electrician L4",
-  sector: "manufacturing",
+  sector: "Electronics",
+  ratioClass: "manufacturing",
   passCriteriaMode: "nos_wise",
   passMarkUnit: "percent",
   passMarks: { theory: 50, practical: 50, viva: 50 },
@@ -133,9 +134,17 @@ describe("master data", () => {
       name: "North Centre",
       code: "CTR-01",
       tpId: tp.body.id,
+      state: "Maharashtra",
     });
     expect(centre.status).toBe(201);
     expect(centre.body.tpId).toBe(tp.body.id);
+    expect(centre.body.state).toBe("Maharashtra");
+    const moved = await request(app)
+      .patch(`/api/v1/centres/${centre.body.id}`)
+      .set(bearer(mis.token))
+      .send({ state: "Gujarat" });
+    expect(moved.status).toBe(200);
+    expect(moved.body.state).toBe("Gujarat");
 
     const qualification = await request(app)
       .post("/api/v1/qualifications")
@@ -380,8 +389,27 @@ describe("master data", () => {
       .send({
         name: "Orphan",
         tpId: "66f0000000000000000000aa",
+        state: "Maharashtra",
       });
     expectError(missingPartner, 400, "VALIDATION_ERROR");
+
+    const oldSector = await request(app)
+      .post("/api/v1/qualifications")
+      .set(bearer(admin.token))
+      .send({ ...percentQualification, code: "Q-OLD", sector: "manufacturing" });
+    expectError(oldSector, 400, "VALIDATION_ERROR");
+    const withoutRatio = { ...percentQualification, code: "Q-NO-RATIO" };
+    delete withoutRatio.ratioClass;
+    const missingRatio = await request(app)
+      .post("/api/v1/qualifications")
+      .set(bearer(admin.token))
+      .send(withoutRatio);
+    expectError(missingRatio, 400, "VALIDATION_ERROR");
+    const missingState = await request(app)
+      .post("/api/v1/centres")
+      .set(bearer(admin.token))
+      .send({ name: "No state", tpId: "66f0000000000000000000aa" });
+    expectError(missingState, 400, "VALIDATION_ERROR");
   });
 
   it("forbids roles that the matrix does not allow to read or write", async () => {
@@ -456,11 +484,13 @@ describe("master data", () => {
       name: "Own Centre",
       code: "CTR-OWN",
       tpId: ownTp.body.id,
+      state: "Maharashtra",
     });
     const otherCentre = await request(app).post("/api/v1/centres").set(bearer(admin.token)).send({
       name: "Other Centre",
       code: "CTR-OTHER",
       tpId: otherTp.body.id,
+      state: "Gujarat",
     });
     const ownLearner = await request(app)
       .post("/api/v1/learners")
@@ -562,7 +592,7 @@ describe("master data", () => {
     const centre = await request(app)
       .post("/api/v1/centres")
       .set(bearer(admin.token))
-      .send({ name: "Centre", tpId: tp.body.id });
+      .send({ name: "Centre", tpId: tp.body.id, state: "Maharashtra" });
     const qualification = await request(app)
       .post("/api/v1/qualifications")
       .set(bearer(admin.token))

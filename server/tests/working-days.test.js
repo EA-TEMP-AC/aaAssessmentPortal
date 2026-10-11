@@ -29,14 +29,12 @@ describe("compliance constants", () => {
       TIMEZONE: "Asia/Kolkata",
       WEEKEND_DAYS: [6, 0],
       ACCEPT_REJECT_WORKING_DAYS: 2,
-      ASSIGN_BEFORE_EXAM_WD_STT: 7,
+      ASSIGN_AFTER_ALLOCATION_WD_STT: 7,
       ASSIGN_BEFORE_EXAM_WD_LTT: 30,
-      ASSIGN_FROM_ACCEPTANCE_WD_STT: 7,
-      ASSIGN_FROM_ACCEPTANCE_WD_LTT: 30,
-      ASSIGN_SLA_MODE: "before_exam",
       RESULT_SUBMIT_WD_STT: 3,
       RESULT_SUBMIT_WD_LTT: 5,
-      RESULT_SLA_ANCHOR: "assessment_end_date",
+      RESULT_SLA_ANCHOR_STT: "assessment_end_date",
+      RESULT_SLA_ANCHOR_LTT: "exam_date",
       BATCH_ALLOCATE_LEAD_DAYS_STT: 15,
       TOA_VALIDITY_YEARS: 3,
       MAX_AAS_PER_ASSESSOR: 4,
@@ -119,18 +117,12 @@ describe("working-day calculator", () => {
     expect(iso(await addWorkingDays(afterMidnight, 2, satSun))).toBe("2026-10-09T18:29:59.999Z");
     expect(iso(await acceptDueAt(beforeMidnight, satSun))).toBe("2026-10-08T18:29:59.999Z");
     expect(iso(await acceptDueAt(afterMidnight, satSun))).toBe("2026-10-09T18:29:59.999Z");
-    expect(
-      iso(
-        await resultDueAt(
-          {
-            type: "STT",
-            anchor: "assessment_completed",
-            assessmentCompletedAt: afterMidnight,
-          },
-          satSun,
-        ),
-      ),
-    ).toBe("2026-10-12T18:29:59.999Z");
+    expect(iso(await assignDueAt({ type: "STT", allocatedAt: beforeMidnight }, satSun))).toBe(
+      "2026-10-15T18:29:59.999Z",
+    );
+    expect(iso(await assignDueAt({ type: "STT", allocatedAt: afterMidnight }, satSun))).toBe(
+      "2026-10-16T18:29:59.999Z",
+    );
   });
 
   it("reads weekendDays from the calendar instead of a fixed Saturday-Sunday set", async () => {
@@ -166,92 +158,40 @@ describe("working-day calculator", () => {
 });
 
 describe("SLA due helpers", () => {
-  it("assignDueAt respects both ASSIGN_SLA_MODE values", async () => {
-    const beforeExam = await assignDueAt(
-      { type: "STT", mode: "before_exam", assessmentStartDate: "2026-11-20" },
-      satSun,
-    );
-    expect(iso(beforeExam)).toBe("2026-11-11T18:29:59.999Z");
+  it("stores the contract STT and LTT assign and result examples", async () => {
+    const allocatedAt = new Date("2026-10-08T08:00:00.000Z");
+    const sttAssign = await assignDueAt({ type: "STT", allocatedAt }, satSun);
+    const lttAssign = await assignDueAt({ type: "LTT", assessmentStartDate: "2026-11-20" }, satSun);
+    expect(iso(sttAssign)).toBe("2026-10-19T18:29:59.999Z");
+    expect(iso(lttAssign)).toBe("2026-10-09T18:29:59.999Z");
 
-    const beforeExamLong = await assignDueAt(
-      { type: "LTT", mode: "before_exam", assessmentStartDate: "2026-11-20" },
-      satSun,
-    );
-    expect(iso(beforeExamLong)).toBe("2026-10-09T18:29:59.999Z");
-
-    const fromAcceptance = await assignDueAt(
-      {
-        type: "STT",
-        mode: "from_acceptance",
-        acceptedAt: new Date("2026-10-06T04:30:00.000Z"),
-      },
-      satSun,
-    );
-    expect(iso(fromAcceptance)).toBe("2026-10-15T18:29:59.999Z");
-
-    const fromAcceptanceLong = await assignDueAt(
-      { type: "LTT", mode: "from_acceptance", acceptedAt: "2026-10-06" },
-      satSun,
-    );
-    expect(iso(fromAcceptanceLong)).toBe("2026-11-17T18:29:59.999Z");
-
-    const defaultMode = await assignDueAt(
-      { type: "STT", assessmentStartDate: "2026-11-20" },
-      satSun,
-    );
-    expect(iso(defaultMode)).toBe(iso(beforeExam));
-    expect(compliance.ASSIGN_SLA_MODE).toBe("before_exam");
-
-    await expect(assignDueAt({ type: "STT", mode: "before_exam" }, satSun)).rejects.toThrow(
-      /assessmentStartDate/,
-    );
-    await expect(assignDueAt({ type: "STT", mode: "from_acceptance" }, satSun)).rejects.toThrow(
-      /acceptedAt/,
-    );
-    await expect(
-      assignDueAt({ type: "STT", mode: "after_alloc", assessmentStartDate: "2026-11-20" }, satSun),
-    ).rejects.toThrow(/ASSIGN_SLA_MODE/);
+    const sttResult = await resultDueAt({ type: "STT", assessmentEndDate: "2026-11-21" }, satSun);
+    const lttResult = await resultDueAt({ type: "LTT", assessmentStartDate: "2026-11-20" }, satSun);
+    expect(iso(sttResult)).toBe("2026-11-25T18:29:59.999Z");
+    expect(iso(lttResult)).toBe("2026-11-27T18:29:59.999Z");
+    expect(compliance.RESULT_SLA_ANCHOR_STT).toBe("assessment_end_date");
+    expect(compliance.RESULT_SLA_ANCHOR_LTT).toBe("exam_date");
+    expect(compliance.ASSIGN_SLA_MODE).toBeUndefined();
+    expect(compliance.RESULT_SLA_ANCHOR).toBeUndefined();
   });
 
-  it("resultDueAt respects RESULT_SLA_ANCHOR values", async () => {
-    const fromEnd = await resultDueAt(
-      { type: "STT", anchor: "assessment_end_date", assessmentEndDate: "2026-10-08" },
-      satSun,
-    );
-    expect(iso(fromEnd)).toBe("2026-10-13T18:29:59.999Z");
-
-    const fromEndLong = await resultDueAt(
-      { type: "LTT", anchor: "assessment_end_date", assessmentEndDate: "2026-10-08" },
-      satSun,
-    );
-    expect(iso(fromEndLong)).toBe("2026-10-15T18:29:59.999Z");
-
-    const fromStart = await resultDueAt(
-      { type: "STT", anchor: "assessment_start_date", assessmentStartDate: "2026-10-06" },
-      satSun,
-    );
-    expect(iso(fromStart)).toBe("2026-10-09T18:29:59.999Z");
-
-    const fromCompleted = await resultDueAt(
-      {
-        type: "STT",
-        anchor: "assessment_completed",
-        assessmentCompletedAt: new Date("2026-10-09T06:30:00.000Z"),
-      },
-      satSun,
-    );
-    expect(iso(fromCompleted)).toBe("2026-10-14T18:29:59.999Z");
-
-    const defaultAnchor = await resultDueAt(
-      { type: "STT", assessmentEndDate: "2026-10-08" },
-      satSun,
-    );
-    expect(iso(defaultAnchor)).toBe(iso(fromEnd));
-    expect(compliance.RESULT_SLA_ANCHOR).toBe("assessment_end_date");
-
+  it("rejects a missing anchor or an unknown batch type", async () => {
+    await expect(assignDueAt({ type: "STT" }, satSun)).rejects.toThrow(/allocatedAt/);
     await expect(
-      resultDueAt({ type: "STT", anchor: "published", assessmentEndDate: "2026-10-08" }, satSun),
-    ).rejects.toThrow(/RESULT_SLA_ANCHOR/);
+      assignDueAt({ type: "LTT", allocatedAt: new Date("2026-10-08T08:00:00.000Z") }, satSun),
+    ).rejects.toThrow(/assessmentStartDate/);
+    await expect(
+      assignDueAt({ type: "RPL", assessmentStartDate: "2026-11-20" }, satSun),
+    ).rejects.toThrow(/Unknown batch type/);
+    await expect(
+      resultDueAt({ type: "STT", assessmentStartDate: "2026-11-20" }, satSun),
+    ).rejects.toThrow(/assessmentEndDate/);
+    await expect(
+      resultDueAt({ type: "LTT", assessmentEndDate: "2026-11-21" }, satSun),
+    ).rejects.toThrow(/assessmentStartDate/);
+    await expect(
+      resultDueAt({ type: "RPL", assessmentEndDate: "2026-11-21" }, satSun),
+    ).rejects.toThrow(/Unknown batch type/);
   });
 });
 

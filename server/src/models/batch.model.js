@@ -1,9 +1,9 @@
 import mongoose from "mongoose";
+import { RATIO_CLASSES, RECOGNITION_CHECKS, SECTOR_NAMES, STATE_UTS } from "../config/annexure.js";
 import {
   BATCH_MODES,
   BATCH_STATUSES,
   BATCH_TYPES,
-  SECTORS,
   SLA_BREACH_KEYS,
 } from "../modules/batches/batch-transitions.js";
 
@@ -26,10 +26,23 @@ const lateActionSchema = new mongoose.Schema(
 const slaSchema = new mongoose.Schema(
   {
     acceptDueAt: { type: Date, required: true },
-    assignDueAt: { type: Date, default: null },
-    resultDueAt: { type: Date, default: null },
+    assignDueAt: { type: Date, required: true },
+    resultDueAt: { type: Date, required: true },
     breached: { type: [{ type: String, enum: SLA_BREACH_KEYS }], default: [] },
     lateActions: { type: [lateActionSchema], default: [] },
+  },
+  { _id: false },
+);
+
+const recognitionOverrideSchema = new mongoose.Schema(
+  {
+    byUserId: { type: mongoose.Schema.Types.ObjectId, required: true },
+    reason: { type: String, required: true, maxlength: 2000 },
+    at: { type: Date, required: true },
+    checks: {
+      type: [{ type: String, enum: RECOGNITION_CHECKS }],
+      required: true,
+    },
   },
   { _id: false },
 );
@@ -58,7 +71,11 @@ const batchSchema = new mongoose.Schema(
     tpId: { type: mongoose.Schema.Types.ObjectId, required: true, ref: "TrainingPartner" },
     centreId: { type: mongoose.Schema.Types.ObjectId, required: true, ref: "Centre" },
     candidateCount: { type: Number, required: true, min: 1 },
-    sector: { type: String, required: true, enum: SECTORS },
+    sector: { type: String, required: true, enum: SECTOR_NAMES },
+    ratioClass: { type: String, required: true, enum: RATIO_CLASSES },
+    assessmentLanguage: { type: String, required: true, trim: true, minlength: 1, maxlength: 80 },
+    state: { type: String, required: true, enum: STATE_UTS },
+    recognitionOverride: { type: recognitionOverrideSchema, default: null },
     status: { type: String, required: true, enum: BATCH_STATUSES },
     statusVersion: { type: Number, required: true, min: 1 },
     assessorId: { type: mongoose.Schema.Types.ObjectId, default: null },
@@ -84,6 +101,7 @@ batchSchema.index({ status: 1, assessmentStartDate: 1 });
 batchSchema.index({ assessorId: 1, assessmentStartDate: 1, assessmentEndDate: 1 });
 batchSchema.index({ tpId: 1 });
 batchSchema.index({ abId: 1 });
+batchSchema.index({ sector: 1 });
 batchSchema.index({ reassessmentOf: 1 }, { sparse: true });
 batchSchema.index({ firstAssessmentBatchId: 1 });
 

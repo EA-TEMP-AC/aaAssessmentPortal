@@ -139,6 +139,7 @@ function presentCentre(doc) {
     name: doc.name,
     code: doc.code ?? null,
     tpId: idOf(doc.tpId),
+    state: doc.state,
     active: doc.active,
     createdAt: iso(doc.createdAt),
     updatedAt: iso(doc.updatedAt),
@@ -180,6 +181,7 @@ function presentQualification(doc) {
     code: doc.code,
     name: doc.name,
     sector: doc.sector,
+    ratioClass: doc.ratioClass,
     defaultBatchType: doc.defaultBatchType ?? null,
     passCriteriaMode: doc.passCriteriaMode ?? null,
     passMarkUnit: doc.passMarkUnit,
@@ -322,7 +324,7 @@ async function assertTrainingPartnerExists(tpId) {
 export async function createCentre(body) {
   await assertTrainingPartnerExists(body.tpId);
   const doc = withOptionalCode(
-    { name: body.name, tpId: body.tpId, active: body.active ?? true },
+    { name: body.name, tpId: body.tpId, state: body.state, active: body.active ?? true },
     body,
   );
   try {
@@ -355,6 +357,7 @@ export async function updateCentre(id, body) {
   const unset = {};
   if (body.name !== undefined) set.name = body.name;
   if (body.tpId !== undefined) set.tpId = body.tpId;
+  if (body.state !== undefined) set.state = body.state;
   if (body.active !== undefined) set.active = body.active;
   assignClearable(set, unset, "code", body.code);
   const updated = await applyUpdate(Centre, existing._id, updateDoc(set, unset));
@@ -373,6 +376,7 @@ function qualificationDraft(body, defaults = {}) {
     code: body.code ?? defaults.code,
     name: body.name ?? defaults.name,
     sector: body.sector ?? defaults.sector,
+    ratioClass: body.ratioClass ?? defaults.ratioClass,
     defaultBatchType:
       body.defaultBatchType === undefined
         ? (defaults.defaultBatchType ?? null)
@@ -394,6 +398,7 @@ function qualificationWrite(draft) {
     code: draft.code,
     name: draft.name,
     sector: draft.sector,
+    ratioClass: draft.ratioClass,
     passMarkUnit: draft.passMarkUnit,
     passMarks: draft.passMarks,
     maxMarks: draft.maxMarks,

@@ -2,10 +2,10 @@ import { safeErrorCode } from "../../lib/safe-error.js";
 import { Batch } from "../../models/batch.model.js";
 
 /**
- * Open SLA steps. docs/SCHEMA.md §2.2.
- * A step is open only while the action is still possible.
- * The nightly job and batch reads share this list.
- * Persisted late-action keys are never removed.
+ * Open SLA steps. docs/SCHEMA.md §2.2 and §2.3.
+ * Assign and result due instants are stored at create for both STT and LTT.
+ * A missing due instant is not flagged. The nightly job and batch reads share this list.
+ * Persisted late-action keys are never removed. The job does not write an audit row.
  */
 export const OPEN_SLA_STEPS = Object.freeze([
   Object.freeze({

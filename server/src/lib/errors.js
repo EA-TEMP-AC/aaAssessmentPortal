@@ -45,3 +45,9 @@ export function invalidTransition(message = "Illegal status change") {
 export function slaAcceptExpired(message = "lateReason is required after acceptDueAt") {
   return new AppError(409, "SLA_ACCEPT_EXPIRED", message);
 }
+
+export function outsideRecognition(checks) {
+  return new AppError(409, "RULE_OUTSIDE_RECOGNITION", "Outside AA recognition", {
+    checks,
+  });
+}

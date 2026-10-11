@@ -35,6 +35,8 @@ export const createBatchBodySchema = z
     tpId: objectIdSchema,
     centreId: objectIdSchema,
     candidateCount: z.number().int().positive(),
+    assessmentLanguage: z.string().trim().min(1).max(80),
+    recognitionOverrideReason: reasonSchema.optional(),
   })
   .strict()
   .refine((body) => body.assessmentEndDate >= body.assessmentStartDate, {
