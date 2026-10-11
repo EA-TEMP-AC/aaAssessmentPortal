@@ -24,7 +24,7 @@ function iso(date) {
 }
 
 describe("compliance constants", () => {
-  it("matches SCHEMA §2 names and values", () => {
+  it("matches SCHEMA §2 names and values, plus pass-mark bounds", () => {
     expect(compliance).toEqual({
       TIMEZONE: "Asia/Kolkata",
       WEEKEND_DAYS: [6, 0],
@@ -54,6 +54,8 @@ describe("compliance constants", () => {
       LOGIN_RATE_LIMIT_WINDOW_MS: 900_000,
       LOGIN_RATE_LIMIT_MAX: 20,
       DEFAULT_PASS_MARK_UNIT: "percent",
+      PASS_MARK_MIN: 0,
+      PASS_MARK_PERCENT_MAX: 100,
     });
     expect(Object.isFrozen(compliance)).toBe(true);
     expect(Object.isFrozen(compliance.WEEKEND_DAYS)).toBe(true);

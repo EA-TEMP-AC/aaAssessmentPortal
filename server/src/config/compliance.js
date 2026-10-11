@@ -61,4 +61,13 @@ export const compliance = Object.freeze({
   LOGIN_RATE_LIMIT_MAX: 20,
   /** project. SCHEMA §2. Qualification pass-mark unit unless overridden. */
   DEFAULT_PASS_MARK_UNIT: "percent",
+  /**
+   * project. Lowest allowed pass mark or raw ceiling (theory, practical, viva, or PC).
+   * A negative threshold cannot be scored.
+   */
+  PASS_MARK_MIN: 0,
+  /**
+   * project. Highest percent pass mark. Percent thresholds are not compared to raw maxMarks.
+   */
+  PASS_MARK_PERCENT_MAX: 100,
 });

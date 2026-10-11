@@ -12,7 +12,10 @@ import { User } from "../models/user.model.js";
  */
 export const DEFAULT_SEED_PASSWORD = "Dev-Password-1";
 
-/** One user per role. Later tasks add their own sample data; do not add it here. */
+/**
+ * One user per role. Master-data sample rows live in seed-master-data.js.
+ * `npm run seed` runs src/scripts/seed.js, which calls both.
+ */
 export const SEED_USERS = Object.freeze([
   { role: "aa_admin", email: "admin@aa.example", name: "AA Admin" },
   { role: "mis", email: "mis@aa.example", name: "MIS User" },

@@ -12,7 +12,7 @@
     "lint": "eslint src tests && prettier --check src tests",
     "format": "prettier --write src tests",
     "test": "vitest run",
-    "seed": "node src/scripts/seed-users.js"
+    "seed": "node src/scripts/seed.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

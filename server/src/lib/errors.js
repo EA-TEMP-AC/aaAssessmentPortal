@@ -29,3 +29,7 @@ export function notFound(message = "Unknown id") {
 export function duplicateResource(message = "Unique constraint") {
   return new AppError(409, "DUPLICATE_RESOURCE", message);
 }
+
+export function passMarkInvalid(message, details) {
+  return new AppError(400, "RESULT_PASS_MARK_INVALID", message, details);
+}
