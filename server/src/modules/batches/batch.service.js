@@ -17,6 +17,7 @@ import { TrainingPartner } from "../../models/training-partner.model.js";
 import { Batch } from "../../models/batch.model.js";
 import { BATCH_STATUSES, resolveTransition, rolesForAction } from "./batch-transitions.js";
 import { slaDueAtCreation } from "./batch-sla.js";
+import { findBatchIdsForLearner, learnerIsOnBatch } from "../candidates/candidate-scope.js";
 import { recognitionDecision } from "../recognition/recognition.service.js";
 import { mergedBreachKeys, OPEN_SLA_STEPS, overdueCondition } from "./sla-breach-job.js";
 
@@ -37,16 +38,21 @@ function idOf(value) {
 }
 
 /**
- * Candidate matches nothing until B-07b has a roster (open question 70).
+ * Candidate sees batches whose roster contains their learner (Q70).
  * Other roles use the SCHEMA §5 row scope.
  */
-function readScope(user) {
-  if (user?.role === "candidate") return { _id: { $in: [] } };
+async function readScope(user) {
+  if (user?.role === "candidate") {
+    const ids = await findBatchIdsForLearner(user.linkedProfileId);
+    return batchQueryFilter(user, { candidateBatchIds: ids });
+  }
   return batchQueryFilter(user);
 }
 
-function canReadBatch(user, batch) {
-  if (user?.role === "candidate") return false;
+async function canReadBatch(user, batch) {
+  if (user?.role === "candidate") {
+    return learnerIsOnBatch(user.linkedProfileId, batch._id);
+  }
   return isInBatchScope(user, batch);
 }
 
@@ -63,8 +69,8 @@ function assertReason(action, reason) {
   }
 }
 
-function listFilter(user, query) {
-  const scope = readScope(user);
+async function listFilter(user, query) {
+  const scope = await readScope(user);
   if (scope._id?.$in && scope._id.$in.length === 0) return scope;
 
   const filter = { ...scope };
@@ -263,7 +269,7 @@ export async function createBatch(user, input, context = {}) {
 }
 
 export async function listBatches(user, query, now = new Date()) {
-  const filter = listFilter(user, query);
+  const filter = await listFilter(user, query);
   const skip = (query.page - 1) * query.pageSize;
   const [total, docs] = await Promise.all([
     Batch.countDocuments(filter),
@@ -280,7 +286,7 @@ export async function listBatches(user, query, now = new Date()) {
 export async function getBatch(user, id, now = new Date()) {
   const doc = await Batch.findById(id).lean();
   if (!doc) throw notFound();
-  if (!canReadBatch(user, doc)) throw forbidden();
+  if (!(await canReadBatch(user, doc))) throw forbidden();
   return presentBatch(doc, { now });
 }
 
@@ -376,7 +382,7 @@ export async function transitionBatch(user, id, action, body = {}, context = {})
 }
 
 export async function complianceDashboard(user, now = new Date()) {
-  const scope = readScope(user);
+  const scope = await readScope(user);
   const statusCounts = Object.fromEntries(BATCH_STATUSES.map((status) => [status, 0]));
   const grouped = await Batch.aggregate([
     { $match: scope },

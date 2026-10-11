@@ -34,6 +34,7 @@ async function main() {
     );
     console.log(`Seeded qualifications ${qualifications}, learner ${master.learnerExternalRef}`);
     console.log(`Seeded assessor ${master.assessorCode}, proctor ${master.proctorCode}`);
+    console.log(`Seeded sample batch ${master.batchId} with ${master.rosterSize} candidates`);
   } finally {
     await mongoose.disconnect();
   }

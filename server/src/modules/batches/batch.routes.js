@@ -15,6 +15,7 @@ import {
   reassignBodySchema,
   rejectBodySchema,
 } from "./batch.schemas.js";
+import { mountCandidateRoutes } from "../candidates/candidate.routes.js";
 import { assignAssessor, reassignAssessor } from "./assign.service.js";
 import { createBatch, getBatch, listBatches, transitionBatch } from "./batch.service.js";
 
@@ -115,3 +116,5 @@ function postAssignment(action, schema, handler) {
 
 postAssignment("assign", assignBodySchema, assignAssessor);
 postAssignment("reassign", reassignBodySchema, reassignAssessor);
+
+mountCandidateRoutes(batchesRouter);

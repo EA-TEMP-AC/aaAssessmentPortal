@@ -1,5 +1,8 @@
+import mongoose from "mongoose";
 import { AwardingBody } from "../models/awarding-body.model.js";
 import { Assessor } from "../models/assessor.model.js";
+import { Batch } from "../models/batch.model.js";
+import { Candidate } from "../models/candidate.model.js";
 import { Centre } from "../models/centre.model.js";
 import { Learner } from "../models/learner.model.js";
 import { Proctor } from "../models/proctor.model.js";
@@ -7,6 +10,7 @@ import { Qualification } from "../models/qualification.model.js";
 import { TrainingPartner } from "../models/training-partner.model.js";
 import { User } from "../models/user.model.js";
 import { env } from "../config/env.js";
+import { slaDueAtCreation } from "../modules/batches/batch-sla.js";
 import { assertQualificationPassMarks } from "../modules/master-data/pass-marks.js";
 
 /** Sample awarding body. Idempotent on `code`. */
@@ -121,6 +125,36 @@ export const SEED_LEARNER = Object.freeze({
   active: true,
 });
 
+/** Extra roster learners for the sample batch. Idempotent on `externalRef`. */
+export const SEED_ROSTER_LEARNERS = Object.freeze([
+  Object.freeze({
+    name: "Asha Devi",
+    externalRef: "TP-REG-10022",
+    phone: "9000000002",
+    accommodations: Object.freeze([]),
+    active: true,
+  }),
+  Object.freeze({
+    name: "Ravi Kumar",
+    externalRef: "TP-REG-10023",
+    phone: "9000000003",
+    accommodations: Object.freeze([]),
+    active: true,
+  }),
+]);
+
+/** Stable sample batch id so seed is idempotent. Contract example dates. */
+export const SEED_BATCH_ID = new mongoose.Types.ObjectId("66f0b07b0000000000000001");
+
+export const SEED_BATCH = Object.freeze({
+  type: "STT",
+  mode: "offline",
+  assessmentStartDate: "2026-11-20",
+  assessmentEndDate: "2026-11-21",
+  assessmentLanguage: "Hindi",
+  allocatedAt: "2026-10-08T08:00:00.000Z",
+});
+
 export function assertSeedAllowed(nodeEnv = env.NODE_ENV) {
   if (nodeEnv === "production") {
     throw new Error("Refusing to seed when NODE_ENV=production");
@@ -162,6 +196,16 @@ export async function seedMasterData({ nodeEnv = env.NODE_ENV } = {}) {
     { $set: clone(SEED_LEARNER) },
     { upsert: true, new: true },
   ).lean();
+  const rosterLearners = [learner];
+  for (const spec of SEED_ROSTER_LEARNERS) {
+    rosterLearners.push(
+      await Learner.findOneAndUpdate(
+        { externalRef: spec.externalRef },
+        { $set: clone(spec) },
+        { upsert: true, new: true },
+      ).lean(),
+    );
+  }
   const assessor = await upsertByCode(Assessor, SEED_ASSESSOR);
   const proctor = await upsertByCode(Proctor, SEED_PROCTOR);
 
@@ -177,6 +221,60 @@ export async function seedMasterData({ nodeEnv = env.NODE_ENV } = {}) {
   );
   await User.updateOne({ email: "proctor@aa.example" }, { $set: { linkedProfileId: proctor._id } });
 
+  const electrician = qualifications.find((item) => item.code === SEED_QUALIFICATION_PERCENT.code);
+  const allocatedAt = new Date(SEED_BATCH.allocatedAt);
+  const dues = await slaDueAtCreation({
+    type: SEED_BATCH.type,
+    assessmentStartDate: SEED_BATCH.assessmentStartDate,
+    assessmentEndDate: SEED_BATCH.assessmentEndDate,
+    allocatedAt,
+  });
+  await Batch.findOneAndUpdate(
+    { _id: SEED_BATCH_ID },
+    {
+      $set: {
+        abId: awardingBody._id,
+        qualificationId: electrician._id,
+        type: SEED_BATCH.type,
+        mode: SEED_BATCH.mode,
+        assessmentStartDate: SEED_BATCH.assessmentStartDate,
+        assessmentEndDate: SEED_BATCH.assessmentEndDate,
+        tpId: trainingPartner._id,
+        centreId: centre._id,
+        candidateCount: rosterLearners.length,
+        sector: electrician.sector,
+        ratioClass: electrician.ratioClass,
+        assessmentLanguage: SEED_BATCH.assessmentLanguage,
+        state: centre.state,
+        status: "allocated",
+        statusVersion: 1,
+        isReassessment: false,
+        firstAssessmentBatchId: SEED_BATCH_ID,
+        sla: {
+          acceptDueAt: dues.acceptDueAt,
+          assignDueAt: dues.assignDueAt,
+          resultDueAt: dues.resultDueAt,
+          breached: [],
+          lateActions: [],
+        },
+        accommodations: [],
+        allocatedAt,
+      },
+    },
+    { upsert: true, new: true },
+  );
+  await Candidate.deleteMany({ batchId: SEED_BATCH_ID });
+  await Candidate.insertMany(
+    rosterLearners.map((row) => ({
+      batchId: SEED_BATCH_ID,
+      learnerId: row._id,
+      name: row.name,
+      externalRef: row.externalRef,
+      accommodations: [...(row.accommodations ?? [])],
+      active: true,
+    })),
+  );
+
   return {
     abCode: awardingBody.code,
     tpCode: trainingPartner.code,
@@ -185,5 +283,7 @@ export async function seedMasterData({ nodeEnv = env.NODE_ENV } = {}) {
     learnerExternalRef: learner.externalRef,
     assessorCode: assessor.code,
     proctorCode: proctor.code,
+    batchId: String(SEED_BATCH_ID),
+    rosterSize: rosterLearners.length,
   };
 }

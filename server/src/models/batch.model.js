@@ -70,7 +70,7 @@ const batchSchema = new mongoose.Schema(
     assessmentEndDate: { type: String, required: true, match: /^\d{4}-\d{2}-\d{2}$/ },
     tpId: { type: mongoose.Schema.Types.ObjectId, required: true, ref: "TrainingPartner" },
     centreId: { type: mongoose.Schema.Types.ObjectId, required: true, ref: "Centre" },
-    candidateCount: { type: Number, required: true, min: 1 },
+    candidateCount: { type: Number, required: true, min: 0 },
     sector: { type: String, required: true, enum: SECTOR_NAMES },
     ratioClass: { type: String, required: true, enum: RATIO_CLASSES },
     assessmentLanguage: { type: String, required: true, trim: true, minlength: 1, maxlength: 80 },

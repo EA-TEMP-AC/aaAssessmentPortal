@@ -3,6 +3,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { AwardingBody } from "../src/models/awarding-body.model.js";
 import { Assessor } from "../src/models/assessor.model.js";
+import { Batch } from "../src/models/batch.model.js";
+import { Candidate } from "../src/models/candidate.model.js";
 import { Centre } from "../src/models/centre.model.js";
 import { Learner } from "../src/models/learner.model.js";
 import { Proctor } from "../src/models/proctor.model.js";
@@ -13,10 +15,13 @@ import { seedRoleUsers } from "../src/scripts/seed-users.js";
 import {
   SEED_ASSESSOR,
   SEED_AWARDING_BODY,
+  SEED_BATCH,
+  SEED_BATCH_ID,
   SEED_CENTRE,
   SEED_LEARNER,
   SEED_PROCTOR,
   SEED_QUALIFICATIONS,
+  SEED_ROSTER_LEARNERS,
   SEED_TRAINING_PARTNER,
   assertSeedAllowed,
   seedMasterData,
@@ -37,6 +42,8 @@ describe("master data seed", () => {
       Assessor.syncIndexes(),
       Proctor.syncIndexes(),
       User.syncIndexes(),
+      Batch.syncIndexes(),
+      Candidate.syncIndexes(),
     ]);
   });
 
@@ -96,10 +103,14 @@ describe("master data seed", () => {
     expect(await TrainingPartner.countDocuments()).toBe(1);
     expect(await Centre.countDocuments()).toBe(1);
     expect(await Qualification.countDocuments()).toBe(SEED_QUALIFICATIONS.length);
-    expect(await Learner.countDocuments()).toBe(1);
+    expect(await Learner.countDocuments()).toBe(1 + SEED_ROSTER_LEARNERS.length);
     expect(await Assessor.countDocuments()).toBe(1);
     expect(await Proctor.countDocuments()).toBe(1);
     expect(await User.countDocuments()).toBe(9);
+    expect(await Batch.countDocuments()).toBe(1);
+    expect(await Candidate.countDocuments()).toBe(1 + SEED_ROSTER_LEARNERS.length);
+    expect(first.batchId).toBe(String(SEED_BATCH_ID));
+    expect(first.rosterSize).toBe(1 + SEED_ROSTER_LEARNERS.length);
 
     const awardingBody = await AwardingBody.findOne({ code: SEED_AWARDING_BODY.code }).lean();
     expect(awardingBody.name).toBe(SEED_AWARDING_BODY.name);
@@ -139,5 +150,18 @@ describe("master data seed", () => {
     expect(proctor.toa).toBeUndefined();
     expect(String(assessorUser.linkedProfileId)).toBe(String(assessor._id));
     expect(String(proctorUser.linkedProfileId)).toBe(String(proctor._id));
+
+    const batch = await Batch.findById(SEED_BATCH_ID).lean();
+    expect(batch.status).toBe("allocated");
+    expect(batch.assessmentStartDate).toBe(SEED_BATCH.assessmentStartDate);
+    expect(batch.candidateCount).toBe(1 + SEED_ROSTER_LEARNERS.length);
+    expect(batch).not.toHaveProperty("aadhaar");
+    const roster = await Candidate.find({ batchId: SEED_BATCH_ID }).lean();
+    expect(roster).toHaveLength(1 + SEED_ROSTER_LEARNERS.length);
+    expect(roster.map((row) => row.externalRef).sort()).toEqual(
+      [SEED_LEARNER.externalRef, ...SEED_ROSTER_LEARNERS.map((row) => row.externalRef)].sort(),
+    );
+    expect(roster.every((row) => row.active)).toBe(true);
+    expect(roster[0]).not.toHaveProperty("aadhaar");
   });
 });

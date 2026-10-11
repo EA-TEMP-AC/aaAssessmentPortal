@@ -92,13 +92,30 @@ export const BATCH_CREATE_ROLES = Object.freeze(["aa_admin", "ab_reviewer"]);
 
 /**
  * Batch list, get, and the compliance dashboard stub. docs/SCHEMA.md §5.
- * sme is denied. candidate is allowed at the route and matches no rows (open question 70).
+ * sme is denied. candidate matches batches whose roster contains their learner.
  */
 export const BATCH_READ_ROLES = Object.freeze([
   "aa_admin",
   "mis",
   "assessor",
   "proctor",
+  "candidate",
+  "tp",
+  "ab_reviewer",
+  "ncvet_viewer",
+]);
+
+/**
+ * Candidate roster writes and CSV import. docs/SCHEMA.md §5.
+ * Reads are scoped to the caller's batch row (candidate sees only their row).
+ */
+export const CANDIDATE_WRITE_ROLES = Object.freeze(["aa_admin", "mis"]);
+
+/** Candidate roster GET. Proctor and sme are denied on this collection. */
+export const CANDIDATE_READ_ROLES = Object.freeze([
+  "aa_admin",
+  "mis",
+  "assessor",
   "candidate",
   "tp",
   "ab_reviewer",

@@ -20,6 +20,13 @@ export function errorHandler(err, _req, res, _next) {
     return;
   }
 
+  if (err?.type === "entity.too.large") {
+    res.status(400).json({
+      error: { code: "VALIDATION_ERROR", message: "CSV file is too large" },
+    });
+    return;
+  }
+
   if (err instanceof AppError) {
     const body = { error: { code: err.code, message: err.message } };
     if (err.details) body.error.details = err.details;
