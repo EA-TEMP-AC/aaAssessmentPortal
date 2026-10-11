@@ -205,6 +205,9 @@
 97. **F-12 holiday list has no pages or search.** `GET /admin/holidays` returns `{ items }` for optional `from`, `to`, and `region` as `YYYY-MM-DD`. The screen sends `from` and `to` only and lists every returned row. It does not send a search string, `region`, `page`, or `pageSize`. Should the contract add search and pagination?
 98. **F-12 blank region and weekday numbers.** A blank region is sent as `null` (AA-wide). A typed region is trimmed. The screen says batches do not use region yet (open question 27). Weekend checkboxes use 0 for Sunday through 6 for Saturday. Confirm both.
 99. **F-12 config before the first save.** GET may omit `id` and still return `weekendDays` and `timezone`. The timezone control is read-only and is not sent on PUT. The screen still edits those default weekend days. Confirm.
+100. **Batch status history.** `GET /batches/:id` does not include a `statusHistory` array. F-02 shows `allocatedAt`, `acceptedAt`, `assignedAt`, `cancelledAt`, and `sla.lateActions`, and will render `statusHistory` if a later response adds it. Confirm that is the history to show.
+101. **Assign pickers.** F-02 calls `GET /assessors/available?batchId=` (B-04 `{ items }`). There is no `/proctors/available`; the optional proctor list is `GET /proctors?pageSize=100`. Create dropdowns load awarding bodies, qualifications, training partners, and centres at `pageSize` 100 with no search. Confirm.
+102. **SLA “soon” band.** The countdown treats an action at the stored due instant as on time, and overdue after that instant. The amber “due soon” band is a UI choice of 24 hours remaining. It is not a named compliance constant. Confirm, or name a constant.
 
 ## Not mandated by NCVET (TR s29), do not market as compliance features
 Specific language, DB, cloud, server architecture, API style, biometric or face-recognition tech, GPS hardware, payment gateway, CRM, help-desk software.

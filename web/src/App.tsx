@@ -11,6 +11,7 @@ import { MasterDataPage } from "./pages/MasterDataPage";
 import { RecognitionPage } from "./pages/RecognitionPage";
 import { UsersPage } from "./pages/UsersPage";
 import { WorkingDaysPage } from "./pages/WorkingDaysPage";
+import { BatchesPage } from "./pages/BatchesPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
 import { RoleHomePage } from "./pages/RoleHomePage";
 import { AuthBridge, GuestOnly, RequireAuth, RequireRole, RootRedirect } from "./routing/guards";
@@ -35,7 +36,13 @@ export function AppRoutes() {
             {sections.map((item) => (
               <Route key={item.id} element={<RequireRole roles={item.roles} />}>
                 <Route
-                  path={item.id === "master-data" ? "/master-data/*" : item.to}
+                  path={
+                    item.id === "master-data"
+                      ? "/master-data/*"
+                      : item.id === "batches"
+                        ? "/batches/*"
+                        : item.to
+                  }
                   element={
                     item.id === "audit" ? (
                       <AuditLogPage />
@@ -47,6 +54,8 @@ export function AppRoutes() {
                       <RecognitionPage />
                     ) : item.id === "working-days" ? (
                       <WorkingDaysPage />
+                    ) : item.id === "batches" ? (
+                      <BatchesPage />
                     ) : (
                       <PlaceholderPage title={item.label} description={item.description} />
                     )

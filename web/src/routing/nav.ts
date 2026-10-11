@@ -30,7 +30,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     id: "batches",
     label: "Batches",
     to: "/batches",
-    description: "Batch list and actions will be added in a later task.",
+    description: "Filter batches, watch stored SLA due times, and take the actions your role and the current status allow.",
     roles: BATCH_ROLES,
   },
   {

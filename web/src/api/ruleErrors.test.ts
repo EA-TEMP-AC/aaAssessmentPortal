@@ -20,6 +20,17 @@ it("explains RULE_OUTSIDE_RECOGNITION with each failed check", () => {
   expect(explainBatchRule("VALIDATION_ERROR", {})).toBeNull();
 });
 
+it("explains the other Phase 1 RULE_* codes", () => {
+  expect(errorMessage(new ApiError(409, "RULE_TOA_INVALID", "ToA invalid"))).toContain("Training of Assessor");
+  expect(errorMessage(new ApiError(409, "RULE_MAX_AAS", "Too many AAs"))).toContain("more than four");
+  expect(errorMessage(new ApiError(409, "RULE_ASSESSOR_CLASH", "Clash"))).toContain("different centre");
+  expect(
+    errorMessage(
+      new ApiError(409, "RULE_RATIO", "Over ratio", { ratioClass: "manufacturing", candidateCount: 30, max: 25 }),
+    ),
+  ).toContain("Maximum for this class: 25");
+});
+
 it("explains RULE_ASSESSOR_LANGUAGE on master-data alerts as well", () => {
   const error = new ApiError(409, "RULE_ASSESSOR_LANGUAGE", "Language does not match");
   const formatted = formatMasterDataError(error);

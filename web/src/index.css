@@ -556,6 +556,183 @@ input[readonly] {
   background: #e8eef5;
 }
 
+textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.5rem 0.75rem;
+  border: 2px solid #243040;
+  border-radius: 6px;
+  font: inherit;
+  min-height: 6rem;
+}
+
+.form-warning {
+  background: #fffbeb;
+  color: #78350f;
+  border: 1px solid #78350f;
+  padding: 0.75rem;
+  border-radius: 6px;
+  margin: 0 0 1rem;
+}
+
+.form-warning:focus {
+  outline: 3px solid #0b3a6e;
+  outline-offset: 2px;
+}
+
+.batches-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 0.75rem 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.batches-filters .field {
+  margin-bottom: 0;
+}
+
+.batches-filter-actions,
+.batches-pager {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.batches-filter-actions {
+  margin-bottom: 1rem;
+}
+
+.batches-summary {
+  font-weight: 600;
+}
+
+.batches-table {
+  width: 100%;
+  min-width: 56rem;
+  border-collapse: collapse;
+}
+
+.batches-table th,
+.batches-table td {
+  text-align: left;
+  vertical-align: top;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid #d5dbe3;
+  overflow-wrap: anywhere;
+}
+
+.batches-table th {
+  background: #e8eef5;
+  color: #10233f;
+}
+
+.batches-pager {
+  margin-top: 1rem;
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: 999px;
+  font-weight: 600;
+  border: 1px solid currentColor;
+}
+
+.status-badge-mark {
+  font-size: 0.7em;
+}
+
+.status-allocated,
+.status-accepted {
+  background: #e8eef5;
+  color: #10233f;
+}
+
+.status-assessor_assigned,
+.status-in_progress,
+.status-assessment_completed {
+  background: #ecfdf3;
+  color: #14532d;
+}
+
+.status-result_submitted,
+.status-ab_validated,
+.status-published {
+  background: #eff6ff;
+  color: #1e3a8a;
+}
+
+.status-rejected,
+.status-cancelled,
+.status-disputed {
+  background: #fef2f2;
+  color: #7f1d1d;
+}
+
+.sla-column {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.sla-timeline {
+  margin: 0 0 1rem;
+  padding-left: 1.25rem;
+}
+
+.sla-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-weight: 600;
+}
+
+.sla-ok {
+  color: #14532d;
+}
+
+.sla-soon {
+  color: #92400e;
+}
+
+.sla-overdue {
+  color: #7f1d1d;
+}
+
+.sla-closed {
+  color: #243040;
+}
+
+.sla-icon {
+  font-size: 0.85em;
+}
+
+.sla-breach {
+  margin: 0.25rem 0 0;
+  font-weight: 600;
+}
+
+.batch-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 0.75rem 1rem;
+  margin: 0 0 1.5rem;
+}
+
+.batch-facts dt {
+  font-weight: 700;
+}
+
+.batch-facts dd {
+  margin: 0.25rem 0 0;
+  overflow-wrap: anywhere;
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     scroll-behavior: auto;
