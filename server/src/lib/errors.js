@@ -46,6 +46,32 @@ export function slaAcceptExpired(message = "lateReason is required after acceptD
   return new AppError(409, "SLA_ACCEPT_EXPIRED", message);
 }
 
+export function slaAssignExpired(message = "lateReason is required after assignDueAt") {
+  return new AppError(409, "SLA_ASSIGN_EXPIRED", message);
+}
+
+export function ruleToaInvalid(message = "ToA is missing or expired on the assessment date") {
+  return new AppError(409, "RULE_TOA_INVALID", message);
+}
+
+export function ruleMaxAas(message = "Assessor would exceed the maximum number of AAs") {
+  return new AppError(409, "RULE_MAX_AAS", message);
+}
+
+export function ruleRatio(message = "Candidate count exceeds the assessor ratio", details) {
+  return new AppError(409, "RULE_RATIO", message, details);
+}
+
+export function ruleAssessorClash(message = "Assessor is already booked at a different centre") {
+  return new AppError(409, "RULE_ASSESSOR_CLASH", message);
+}
+
+export function ruleAssessorLanguage(
+  message = "Assessor languages omit the batch assessment language",
+) {
+  return new AppError(409, "RULE_ASSESSOR_LANGUAGE", message);
+}
+
 export function outsideRecognition(checks) {
   return new AppError(409, "RULE_OUTSIDE_RECOGNITION", "Outside AA recognition", {
     checks,

@@ -1,10 +1,16 @@
-import { MongoMemoryServer } from "mongodb-memory-server";
+import { MongoMemoryReplSet } from "mongodb-memory-server";
 import mongoose from "mongoose";
 
 let mongo;
 
+/**
+ * Replica set so assign/cancel lock work can use transactions.
+ * SCHEMA §3.9. Production docker-compose is also a replica set.
+ */
 export async function startMongo() {
-  mongo = await MongoMemoryServer.create();
+  mongo = await MongoMemoryReplSet.create({
+    replSet: { count: 1, storageEngine: "wiredTiger" },
+  });
   await mongoose.connect(mongo.getUri());
 }
 

@@ -21,15 +21,7 @@ import { createUser, webDevice } from "./helpers/fixtures.js";
 
 const app = createApp();
 const MOUNTED = ["accept", "reject", "cancel", "complete"];
-const NOT_MOUNTED = [
-  "assign",
-  "reassign",
-  "submit-result",
-  "validate",
-  "publish",
-  "dispute",
-  "resolve-dispute",
-];
+const NOT_MOUNTED = ["submit-result", "validate", "publish", "dispute", "resolve-dispute"];
 
 const batchKeys = [
   "abId",
@@ -862,7 +854,7 @@ describe("batches", () => {
     expect(Object.values(candidateDash.body.statusCounts).every((count) => count === 0)).toBe(true);
   });
 
-  it("does not mount assign, reassign, result, or dispute routes", async () => {
+  it("does not mount result or dispute routes", async () => {
     const m = await masters();
     const admin = await sessionFor("aa_admin");
     const created = await createOne(admin.token, m);

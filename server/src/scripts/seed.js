@@ -33,6 +33,7 @@ async function main() {
       `Seeded master data AB ${master.abCode}, TP ${master.tpCode}, centre ${master.centreCode}`,
     );
     console.log(`Seeded qualifications ${qualifications}, learner ${master.learnerExternalRef}`);
+    console.log(`Seeded assessor ${master.assessorCode}, proctor ${master.proctorCode}`);
   } finally {
     await mongoose.disconnect();
   }

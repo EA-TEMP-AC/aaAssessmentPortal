@@ -3,8 +3,10 @@ import { auditMiddleware } from "./middleware/audit.middleware.js";
 import { errorHandler } from "./middleware/error-handler.js";
 import { auditRouter } from "./modules/audit/audit.routes.js";
 import { authRouter } from "./modules/auth/auth.routes.js";
+import { assessorsRouter } from "./modules/assessors/assessor.routes.js";
 import { batchesRouter } from "./modules/batches/batch.routes.js";
 import { complianceRouter } from "./modules/compliance/compliance.routes.js";
+import { proctorsRouter } from "./modules/proctors/proctor.routes.js";
 import { healthRouter } from "./modules/health/health.routes.js";
 import {
   awardingBodiesRouter,
@@ -35,6 +37,8 @@ export function createApp() {
   app.use("/api/v1/centres", centresRouter);
   app.use("/api/v1/qualifications", qualificationsRouter);
   app.use("/api/v1/learners", learnersRouter);
+  app.use("/api/v1/assessors", assessorsRouter);
+  app.use("/api/v1/proctors", proctorsRouter);
   app.use("/api/v1/audit-logs", auditRouter);
   app.use("/api/v1/admin/working-day-config", workingDayConfigRouter);
   app.use("/api/v1/admin/holidays", holidaysRouter);

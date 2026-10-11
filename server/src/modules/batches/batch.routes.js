@@ -7,12 +7,15 @@ import { BATCH_CREATE_ROLES, BATCH_READ_ROLES } from "../../models/roles.js";
 import { rolesForAction } from "./batch-transitions.js";
 import {
   acceptBodySchema,
+  assignBodySchema,
   batchIdParamSchema,
   createBatchBodySchema,
   listBatchesQuerySchema,
   reasonBodySchema,
+  reassignBodySchema,
   rejectBodySchema,
 } from "./batch.schemas.js";
+import { assignAssessor, reassignAssessor } from "./assign.service.js";
 import { createBatch, getBatch, listBatches, transitionBatch } from "./batch.service.js";
 
 function setAudit(req, entry) {
@@ -86,3 +89,29 @@ postTransition(batchesRouter, "accept", acceptBodySchema);
 postTransition(batchesRouter, "reject", rejectBodySchema);
 postTransition(batchesRouter, "cancel", reasonBodySchema);
 postTransition(batchesRouter, "complete", reasonBodySchema);
+
+function postAssignment(action, schema, handler) {
+  batchesRouter.post(
+    `/:id/${action}`,
+    requireRoles(...rolesForAction(action)),
+    asyncHandler(async (req, res) => {
+      const { id } = batchIdParamSchema.parse(req.params);
+      const body = schema.parse(req.body ?? {});
+      const saved = await handler(req.user, id, body, { ip: clientIp(req) });
+      setAudit(req, {
+        action: `batch.${action}`,
+        entity: "batch",
+        entityId: saved.batch.id,
+        abId: saved.batch.abId,
+        batchId: saved.batch.id,
+        before: saved.before,
+        after: saved.stored,
+        ...(saved.batch.warnings ? { meta: { warnings: saved.batch.warnings } } : {}),
+      });
+      await res.status(200).json(saved.batch);
+    }),
+  );
+}
+
+postAssignment("assign", assignBodySchema, assignAssessor);
+postAssignment("reassign", reassignBodySchema, reassignAssessor);

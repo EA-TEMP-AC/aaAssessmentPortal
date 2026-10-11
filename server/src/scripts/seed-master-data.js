@@ -1,6 +1,8 @@
 import { AwardingBody } from "../models/awarding-body.model.js";
+import { Assessor } from "../models/assessor.model.js";
 import { Centre } from "../models/centre.model.js";
 import { Learner } from "../models/learner.model.js";
+import { Proctor } from "../models/proctor.model.js";
 import { Qualification } from "../models/qualification.model.js";
 import { TrainingPartner } from "../models/training-partner.model.js";
 import { User } from "../models/user.model.js";
@@ -82,6 +84,34 @@ export const SEED_QUALIFICATIONS = Object.freeze([
   SEED_QUALIFICATION_ABSOLUTE,
 ]);
 
+/** Sample assessor linked to Q-ELEC-L4. Idempotent on `code`. */
+export const SEED_ASSESSOR = Object.freeze({
+  code: "ASR-SAMPLE",
+  name: "Sample Assessor",
+  email: "assessor.sample@aa.example",
+  qualifications: Object.freeze(["Electrician L4"]),
+  yearsOfExperience: 6,
+  languages: Object.freeze(["Hindi", "English"]),
+  toa: Object.freeze({
+    certNo: "TOA-ELEC-001",
+    issuedOn: "2024-01-15",
+    expiresOn: "2027-01-14",
+  }),
+  otherAaCount: 1,
+  undertaking: true,
+  active: true,
+});
+
+/** Sample proctor. No ToA. Idempotent on `code`. */
+export const SEED_PROCTOR = Object.freeze({
+  code: "PRC-SAMPLE",
+  name: "Sample Proctor",
+  email: "proctor.sample@aa.example",
+  qualifications: Object.freeze(["Proctor L1"]),
+  languages: Object.freeze(["Hindi"]),
+  active: true,
+});
+
 /** Sample learner so the seeded candidate can be linked. Idempotent on `externalRef`. */
 export const SEED_LEARNER = Object.freeze({
   name: "Sample Learner",
@@ -108,9 +138,10 @@ async function upsertByCode(model, spec) {
 }
 
 /**
- * Sample AB, TP, centre, qualifications, and one learner.
- * Upserts by code or externalRef. Links the seeded ab_reviewer, tp, and candidate
- * when those users already exist. Refuses to run when NODE_ENV=production.
+ * Sample AB, TP, centre, qualifications, learner, assessor, and proctor.
+ * Upserts by code or externalRef. Links the seeded ab_reviewer, tp, candidate,
+ * assessor, and proctor when those users already exist. Refuses to run when
+ * NODE_ENV=production.
  */
 export async function seedMasterData({ nodeEnv = env.NODE_ENV } = {}) {
   assertSeedAllowed(nodeEnv);
@@ -131,6 +162,8 @@ export async function seedMasterData({ nodeEnv = env.NODE_ENV } = {}) {
     { $set: clone(SEED_LEARNER) },
     { upsert: true, new: true },
   ).lean();
+  const assessor = await upsertByCode(Assessor, SEED_ASSESSOR);
+  const proctor = await upsertByCode(Proctor, SEED_PROCTOR);
 
   await User.updateOne({ email: "ab.reviewer@aa.example" }, { $set: { abId: awardingBody._id } });
   await User.updateOne({ email: "tp@aa.example" }, { $set: { tpId: trainingPartner._id } });
@@ -138,6 +171,11 @@ export async function seedMasterData({ nodeEnv = env.NODE_ENV } = {}) {
     { email: "candidate@aa.example" },
     { $set: { linkedProfileId: learner._id } },
   );
+  await User.updateOne(
+    { email: "assessor@aa.example" },
+    { $set: { linkedProfileId: assessor._id } },
+  );
+  await User.updateOne({ email: "proctor@aa.example" }, { $set: { linkedProfileId: proctor._id } });
 
   return {
     abCode: awardingBody.code,
@@ -145,5 +183,7 @@ export async function seedMasterData({ nodeEnv = env.NODE_ENV } = {}) {
     centreCode: centre.code,
     qualificationCodes: qualifications.map((item) => item.code),
     learnerExternalRef: learner.externalRef,
+    assessorCode: assessor.code,
+    proctorCode: proctor.code,
   };
 }

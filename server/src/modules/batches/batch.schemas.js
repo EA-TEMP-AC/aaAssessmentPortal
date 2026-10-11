@@ -63,6 +63,18 @@ export const reasonBodySchema = z
   })
   .strict();
 
+export const assignBodySchema = z
+  .object({
+    assessorId: objectIdSchema,
+    proctorId: objectIdSchema.nullable().optional(),
+    ratioOverrideReason: reasonSchema.optional(),
+    languageOverrideReason: reasonSchema.optional(),
+    lateReason: reasonSchema.optional(),
+  })
+  .strict();
+
+export const reassignBodySchema = assignBodySchema;
+
 export const listBatchesQuerySchema = z
   .object({
     status: z.preprocess(blankToUndefined, z.enum(BATCH_STATUSES).optional()),

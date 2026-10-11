@@ -58,6 +58,33 @@ export const QUALIFICATION_READ_ROLES = Object.freeze([
 export const LEARNER_READ_ROLES = Object.freeze(["aa_admin", "mis", "candidate", "ncvet_viewer"]);
 
 /**
+ * Assessor registry reads. SCHEMA §5 master-data R plus the assessor
+ * viewing their own record (linkedProfileId). Writes stay MASTER_DATA_WRITE_ROLES.
+ */
+export const ASSESSOR_READ_ROLES = Object.freeze([
+  "aa_admin",
+  "mis",
+  "assessor",
+  "ab_reviewer",
+  "ncvet_viewer",
+]);
+
+/**
+ * Proctor registry reads. SCHEMA §5 master-data R plus the proctor
+ * viewing their own record (linkedProfileId).
+ */
+export const PROCTOR_READ_ROLES = Object.freeze([
+  "aa_admin",
+  "mis",
+  "proctor",
+  "ab_reviewer",
+  "ncvet_viewer",
+]);
+
+/** GET /assessors/available. Assigners and monitoring readers. */
+export const ASSESSOR_AVAILABLE_ROLES = Object.freeze(["aa_admin", "mis", "ncvet_viewer"]);
+
+/**
  * Batch create. docs/SCHEMA.md §5.
  * ab_reviewer may create only when abId equals user.abId (enforced in the service).
  */

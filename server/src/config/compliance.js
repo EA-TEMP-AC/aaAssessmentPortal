@@ -29,6 +29,12 @@ export const compliance = Object.freeze({
   TOA_VALIDITY_YEARS: 3,
   /** NCVET:FR §D. SCHEMA §2. Assessor may work with at most this many AAs. */
   MAX_AAS_PER_ASSESSOR: 4,
+  /**
+   * Annexure IX(a) Assessment Delivery sub-parameter 9; docs/ERF.md row 09.
+   * Same assessor, same centre, same day is allowed. Warn when either batch
+   * has fewer than this many candidates. Different centres stay a hard clash.
+   */
+  SAME_CENTRE_LOW_CANDIDATE_THRESHOLD: 10,
   /** project. SCHEMA §2. Candidate cap for manufacturing when the ratio rule applies. */
   RATIO_MAX_MANUFACTURING: 25,
   /** project. SCHEMA §2. Candidate cap for services when the ratio rule applies. */

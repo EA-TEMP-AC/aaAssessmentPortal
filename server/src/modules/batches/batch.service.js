@@ -6,7 +6,9 @@ import {
   slaAcceptExpired,
   validationError,
 } from "../../lib/errors.js";
+import { withTransaction } from "../../lib/mongo-session.js";
 import { recordAudit } from "../../middleware/audit.middleware.js";
+import { releaseLocksForBatch } from "./assessor-day-locks.js";
 import { batchQueryFilter, isInBatchScope } from "../../middleware/scope.js";
 import { AwardingBody } from "../../models/awarding-body.model.js";
 import { Centre } from "../../models/centre.model.js";
@@ -323,11 +325,28 @@ export async function transitionBatch(user, id, action, body = {}, context = {})
     };
   }
 
-  const updated = await Batch.findOneAndUpdate(
-    { _id: existing._id, status: existing.status, statusVersion: existing.statusVersion },
-    update,
-    { new: true, runValidators: true },
-  ).lean();
+  const casFilter = {
+    _id: existing._id,
+    status: existing.status,
+    statusVersion: existing.statusVersion,
+  };
+
+  const updated =
+    action === "cancel"
+      ? await withTransaction(async (session) => {
+          const cas = await Batch.findOneAndUpdate(casFilter, update, {
+            new: true,
+            runValidators: true,
+            session,
+          }).lean();
+          if (!cas) return null;
+          await releaseLocksForBatch(cas._id, session);
+          return cas;
+        })
+      : await Batch.findOneAndUpdate(casFilter, update, {
+          new: true,
+          runValidators: true,
+        }).lean();
 
   if (!updated) {
     const still = await Batch.exists({ _id: existing._id });

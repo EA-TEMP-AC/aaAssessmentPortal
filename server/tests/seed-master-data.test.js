@@ -2,16 +2,20 @@ import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { AwardingBody } from "../src/models/awarding-body.model.js";
+import { Assessor } from "../src/models/assessor.model.js";
 import { Centre } from "../src/models/centre.model.js";
 import { Learner } from "../src/models/learner.model.js";
+import { Proctor } from "../src/models/proctor.model.js";
 import { Qualification } from "../src/models/qualification.model.js";
 import { TrainingPartner } from "../src/models/training-partner.model.js";
 import { User } from "../src/models/user.model.js";
 import { seedRoleUsers } from "../src/scripts/seed-users.js";
 import {
+  SEED_ASSESSOR,
   SEED_AWARDING_BODY,
   SEED_CENTRE,
   SEED_LEARNER,
+  SEED_PROCTOR,
   SEED_QUALIFICATIONS,
   SEED_TRAINING_PARTNER,
   assertSeedAllowed,
@@ -30,6 +34,8 @@ describe("master data seed", () => {
       Centre.syncIndexes(),
       Qualification.syncIndexes(),
       Learner.syncIndexes(),
+      Assessor.syncIndexes(),
+      Proctor.syncIndexes(),
       User.syncIndexes(),
     ]);
   });
@@ -70,6 +76,8 @@ describe("master data seed", () => {
       tpCode: SEED_TRAINING_PARTNER.code,
       centreCode: SEED_CENTRE.code,
       learnerExternalRef: SEED_LEARNER.externalRef,
+      assessorCode: SEED_ASSESSOR.code,
+      proctorCode: SEED_PROCTOR.code,
     });
     expect(first.qualificationCodes.sort()).toEqual(
       SEED_QUALIFICATIONS.map((item) => item.code).sort(),
@@ -89,6 +97,8 @@ describe("master data seed", () => {
     expect(await Centre.countDocuments()).toBe(1);
     expect(await Qualification.countDocuments()).toBe(SEED_QUALIFICATIONS.length);
     expect(await Learner.countDocuments()).toBe(1);
+    expect(await Assessor.countDocuments()).toBe(1);
+    expect(await Proctor.countDocuments()).toBe(1);
     expect(await User.countDocuments()).toBe(9);
 
     const awardingBody = await AwardingBody.findOne({ code: SEED_AWARDING_BODY.code }).lean();
@@ -111,10 +121,23 @@ describe("master data seed", () => {
     const reviewer = await User.findOne({ email: "ab.reviewer@aa.example" }).lean();
     const tp = await User.findOne({ email: "tp@aa.example" }).lean();
     const candidate = await User.findOne({ email: "candidate@aa.example" }).lean();
+    const assessorUser = await User.findOne({ email: "assessor@aa.example" }).lean();
+    const proctorUser = await User.findOne({ email: "proctor@aa.example" }).lean();
     expect(String(reviewer.abId)).toBe(String(awardingBody._id));
     expect(String(tp.tpId)).toBe(String(partner._id));
     expect(String(candidate.linkedProfileId)).toBe(
       String((await Learner.findOne({ externalRef: SEED_LEARNER.externalRef }).lean())._id),
     );
+    const assessor = await Assessor.findOne({ code: SEED_ASSESSOR.code }).lean();
+    const proctor = await Proctor.findOne({ code: SEED_PROCTOR.code }).lean();
+    expect(assessor.toa.certNo).toBe(SEED_ASSESSOR.toa.certNo);
+    expect(assessor.languages).toEqual([...SEED_ASSESSOR.languages]);
+    expect(assessor.otherAaCount).toBe(SEED_ASSESSOR.otherAaCount);
+    expect(assessor.undertaking).toBe(true);
+    expect(assessor).not.toHaveProperty("aadhaar");
+    expect(proctor.qualifications).toEqual([...SEED_PROCTOR.qualifications]);
+    expect(proctor.toa).toBeUndefined();
+    expect(String(assessorUser.linkedProfileId)).toBe(String(assessor._id));
+    expect(String(proctorUser.linkedProfileId)).toBe(String(proctor._id));
   });
 });
