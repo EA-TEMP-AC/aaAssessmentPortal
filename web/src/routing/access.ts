@@ -135,3 +135,35 @@ export function canReadProctors(role: Role): boolean {
   return PROCTOR_READ_ROLES.includes(role);
 }
 
+/** SCHEMA §5 and B-07b candidate roster roles. */
+export const CANDIDATE_READ_ROLES: readonly Role[] = [
+  "aa_admin",
+  "mis",
+  "assessor",
+  "candidate",
+  "tp",
+  "ab_reviewer",
+  "ncvet_viewer",
+];
+
+export const CANDIDATE_WRITE_ROLES: readonly Role[] = ["aa_admin", "mis"];
+
+export function canReadCandidates(role: Role): boolean {
+  return CANDIDATE_READ_ROLES.includes(role);
+}
+
+export function canWriteCandidates(role: Role): boolean {
+  return CANDIDATE_WRITE_ROLES.includes(role);
+}
+
+export const CANDIDATE_ROSTER_OPEN_STATUSES = [
+  "allocated",
+  "accepted",
+  "assessor_assigned",
+] as const;
+
+export function isBatchRosterWritable(status: string): boolean {
+  return (CANDIDATE_ROSTER_OPEN_STATUSES as readonly string[]).includes(status);
+}
+
+

@@ -733,6 +733,34 @@ textarea {
   overflow-wrap: anywhere;
 }
 
+.candidate-roster-section {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #d5dbe3;
+}
+
+.candidate-toolbar {
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.candidate-summary {
+  font-weight: 600;
+  margin: 0.5rem 0 1rem;
+}
+
+.candidate-table {
+  width: 100%;
+  min-width: 48rem;
+  border-collapse: collapse;
+}
+
+.import-results {
+  margin-top: 1rem;
+}
+
+
 @media (prefers-reduced-motion: reduce) {
   * {
     scroll-behavior: auto;
