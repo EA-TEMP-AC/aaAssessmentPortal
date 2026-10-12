@@ -7,6 +7,11 @@ import { assessorsRouter } from "./modules/assessors/assessor.routes.js";
 import { batchesRouter } from "./modules/batches/batch.routes.js";
 import { complianceRouter } from "./modules/compliance/compliance.routes.js";
 import { proctorsRouter } from "./modules/proctors/proctor.routes.js";
+import {
+  assessorLoginEventRouter,
+  proctorLoginEventRouter,
+  studentLoginEventRouter,
+} from "./modules/login-events/login-event.routes.js";
 import { healthRouter } from "./modules/health/health.routes.js";
 import {
   awardingBodiesRouter,
@@ -45,6 +50,9 @@ export function createApp() {
   app.use("/api/v1/admin/recognition", recognitionRouter);
   app.use("/api/v1/batches", batchesRouter);
   app.use("/api/v1/compliance", complianceRouter);
+  app.use("/api/v1/assessor", assessorLoginEventRouter);
+  app.use("/api/v1/proctor", proctorLoginEventRouter);
+  app.use("/api/v1/student", studentLoginEventRouter);
 
   app.use((_req, res) => {
     res.status(404).json({

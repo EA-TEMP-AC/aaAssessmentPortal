@@ -42,6 +42,10 @@ export function invalidTransition(message = "Illegal status change") {
   return new AppError(409, "INVALID_TRANSITION", message);
 }
 
+export function conflictIdempotent(message = "Same clientEventId with a different payload") {
+  return new AppError(409, "CONFLICT_IDEMPOTENT", message);
+}
+
 export function slaAcceptExpired(message = "lateReason is required after acceptDueAt") {
   return new AppError(409, "SLA_ACCEPT_EXPIRED", message);
 }

@@ -39,7 +39,7 @@ Phase 1 endpoints have examples. Phase 2+ stubs without full examples.
 | `RESULT_INCOMPLETE` | 409 | Submit missing active roster rows |
 | `EVIDENCE_REQUIRED` | 409 | Flag true (Phase 2) |
 | `REASSESS_NOT_ELIGIBLE` | 409 | Reassessment rules failed. `details.reason`: `not_published`, `window`, `outcome`, or `type`. Window is one year from the original result’s publication date (Guidelines 4.7) |
-| `CONFLICT_IDEMPOTENT` | 409 | Same `clientEventId`, different payload |
+| `CONFLICT_IDEMPOTENT` | 409 | Same `clientEventId`, different payload, path, or user |
 
 **Soft SLA:** `aa_admin` may proceed after due with required `lateReason`; server records `sla.breached` + audit. Codes above only when late and reason missing.
 
@@ -426,24 +426,79 @@ CRUD includes `languages: string[]` on assessors (trimmed; may be empty). `GET /
 
 ### POST /assessor/login-event
 
-Validation: assigned assessor; status ≥ `assessor_assigned` (not rejected/cancelled); **`capturedAt`** IST date in assessment window; flags `clockSkewFlag`, `lateSync`.
+Owned by **B-06**. Role: `assessor`. Login and logout, geo-tagged (NCVET:TR s9, s26).
 
-Request/response as v0.3 plus:
+Request:
 ```json
 {
-  "clockSkewFlag": false,
+  "clientEventId": "5f0c1c9e-6f0b-4c1e-9a55-0d6b8f2f7a11",
+  "batchId": "66f0000000000000000000b1",
+  "type": "login",
+  "capturedAt": "2026-11-20T05:00:00.000Z",
+  "lat": 19.076012345,
+  "lng": 72.877654321,
+  "accuracy": 12.5,
+  "locationStatus": "captured",
+  "device": { "deviceId": "dev-9f3a", "platform": "android", "appVersion": "1.0.0" }
+}
+```
+
+- `clientEventId` (1–200 characters) is made on the device and is the idempotency key.
+- `capturedAt` is the device clock, ISO-8601 with `Z` or an offset.
+- `lat` (−90..90) and `lng` (−180..180) are required and stored as sent. `accuracy` (metres, ≥ 0) is optional and stored as sent.
+- `locationStatus` is optional and may only be `"captured"`. `device` is optional.
+- `batchId` is required. Unknown keys are `400 VALIDATION_ERROR`, including server-owned fields (`receivedAt`, `clockSkewMs`, `lateSync`, …).
+
+Response `200` (first submission and replays alike):
+```json
+{
+  "id": "66f0000000000000000000e1",
+  "clientEventId": "5f0c1c9e-6f0b-4c1e-9a55-0d6b8f2f7a11",
+  "actorType": "assessor",
+  "actorId": "66f0000000000000000000a1",
+  "candidateId": null,
+  "batchId": "66f0000000000000000000b1",
+  "type": "login",
+  "lat": 19.076012345,
+  "lng": 72.877654321,
+  "accuracy": 12.5,
+  "capturedAt": "2026-11-20T05:00:00.000Z",
+  "receivedAt": "2026-11-22T10:00:00.000Z",
+  "clockSkewMs": 190800000,
+  "clockSkewFlag": true,
   "lateSync": true,
+  "device": { "deviceId": "dev-9f3a", "platform": "android", "appVersion": "1.0.0" },
+  "syncedAt": "2026-11-22T10:00:00.000Z",
   "abEmailQueuedAt": "2026-11-22T10:00:00.000Z",
   "abEmailSentAt": null,
   "replayed": false
 }
 ```
 
-AB email: **enqueue** to `emailQueue` for `notificationEmails` with `capturedAt` in body (B-06); enqueue failure never fails this call. Worker/SMTP (B-08) delivers asynchronously.
+`actorId` is the caller's `linkedProfileId` (assessor, proctor, or learner). `clockSkewMs` is `receivedAt − capturedAt`. `clockSkewFlag` is true when its absolute value is over `MAX_CLOCK_SKEW_MS`. `lateSync` is true when the IST date of `receivedAt` is after the IST date of `capturedAt`. Neither flag rejects the event. `accuracy`, `candidateId`, and `device` are `null` when absent.
+
+**Idempotency.** The same `clientEventId` with the same payload from the same user returns the stored event with `replayed: true` and writes nothing new (no second event, status change, or email). A replay is not re-validated, so a queued resend still succeeds after the batch has moved on. The same `clientEventId` with a different payload, a different path, or a different user is `409 CONFLICT_IDEMPOTENT`.
+
+**Validation (first submission), in this order:**
+
+| Check | Failure |
+|---|---|
+| Body shape | `400 VALIDATION_ERROR` |
+| Role matches the path | `403 FORBIDDEN` |
+| Batch exists | `404 NOT_FOUND` |
+| Caller is the batch's `assessorId` | `403 FORBIDDEN` |
+| Batch status is `assessor_assigned`, `in_progress`, `assessment_completed`, `result_submitted`, `ab_validated`, `published`, or `disputed` | `409 INVALID_TRANSITION` |
+| IST date of `capturedAt` is within `assessmentStartDate`..`assessmentEndDate`, inclusive | `400 VALIDATION_ERROR` with `details.capturedAt` |
+
+**Status.** The first valid assessor event of `type: "login"` on an `assessor_assigned` batch moves it to `in_progress` (`statusVersion` + 1, audit `batch.login-event`). Logout, proctor, and student events never change status.
+
+**AB email.** An assessor `login` **enqueues** one `emailQueue` job (`kind: "assessor_login"`) to the AB's `notificationEmails`, with `capturedAt` in the body, and sets `abEmailQueuedAt`. Enqueue failure never fails this call: the response is still `200` with `abEmailQueuedAt: null`, and a replay of that event tries the enqueue again. Logout does not send mail. Worker/SMTP (B-08) delivers asynchronously. `abEmailSentAt` stays `null` (open Q107).
+
+**Audit.** `loginEvent.create` or `loginEvent.replay` with the event as `after`. No mail body or recipients.
 
 ### POST /proctor/login-event / POST /student/login-event
 
-Same validation pattern (proctor assigned / student on roster).
+Same request, response, idempotency, and validation. Roles: `proctor` on the proctor path; `candidate` on the student path (`actorType: "student"`). The proctor must be the batch's `proctorId`. The student's learner must have an **active** roster row on the batch; that row's id is returned as `candidateId`. No status change and no AB email.
 
 ### POST /assessor/batches/:id/attendance | checklist
 

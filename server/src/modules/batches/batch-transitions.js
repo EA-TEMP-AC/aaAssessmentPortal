@@ -3,9 +3,11 @@
  * Every status change looks up a row here (actor role × from → to).
  * B-03 mounts accept, reject, cancel, and complete.
  * B-04 mounts assign and reassign.
- * login-event and the checklist path (B-06), and submit-result / validate /
- * publish / dispute (B-05) stay in the table so later tasks do not add a
- * second one. Those routes are not registered.
+ * B-06 mounts login-event (modules/login-events): the first valid assessor
+ * login moves assessor_assigned to in_progress.
+ * The checklist path, and submit-result / validate / publish / dispute (B-05)
+ * stay in the table so later tasks do not add a second one. Those routes are
+ * not registered.
  */
 
 export const BATCH_STATUSES = Object.freeze([
