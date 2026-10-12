@@ -54,6 +54,28 @@ export function slaAssignExpired(message = "lateReason is required after assignD
   return new AppError(409, "SLA_ASSIGN_EXPIRED", message);
 }
 
+export function slaResultExpired(message = "lateReason is required after resultDueAt") {
+  return new AppError(409, "SLA_RESULT_EXPIRED", message);
+}
+
+export function resultOutcomeMismatch(details) {
+  return new AppError(
+    400,
+    "RESULT_OUTCOME_MISMATCH",
+    "outcome does not match the server-computed outcome",
+    details,
+  );
+}
+
+export function resultIncomplete(details) {
+  return new AppError(
+    409,
+    "RESULT_INCOMPLETE",
+    "Every active candidate needs a complete result row",
+    details,
+  );
+}
+
 export function ruleToaInvalid(message = "ToA is missing or expired on the assessment date") {
   return new AppError(409, "RULE_TOA_INVALID", message);
 }

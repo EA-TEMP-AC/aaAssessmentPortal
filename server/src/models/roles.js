@@ -124,3 +124,23 @@ export const CANDIDATE_READ_ROLES = Object.freeze([
 
 /** Attendance and checklist writes. docs/SCHEMA.md §5: the assigned assessor only. */
 export const ATTENDANCE_WRITE_ROLES = Object.freeze(["assessor"]);
+
+/** Results PUT. docs/SCHEMA.md §5. Submit, validate, and publish use the transition table. */
+export const RESULT_WRITE_ROLES = Object.freeze(["aa_admin"]);
+
+/** Results read. docs/SCHEMA.md §5: proctor and sme are denied. Rows follow batch scope. */
+export const RESULT_READ_ROLES = Object.freeze([
+  "aa_admin",
+  "mis",
+  "assessor",
+  "candidate",
+  "tp",
+  "ab_reviewer",
+  "ncvet_viewer",
+]);
+
+/** These roles read a result only after it is published. */
+export const RESULT_PUBLISHED_ONLY_ROLES = Object.freeze(["candidate", "tp"]);
+
+/** GET /results/:id/change-log. API_CONTRACT.md. */
+export const RESULT_CHANGE_LOG_ROLES = Object.freeze(["aa_admin", "ab_reviewer", "mis"]);

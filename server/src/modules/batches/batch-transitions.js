@@ -7,8 +7,9 @@
  * login moves assessor_assigned to in_progress.
  * B-06c mounts checklist (modules/attendance): the assigned assessor's
  * completing checklist moves in_progress to assessment_completed.
- * submit-result / validate / publish / dispute (B-05) stay in the table so
- * later tasks do not add a second one. Those routes are not registered.
+ * B-05 mounts submit-result, validate, and publish (modules/results).
+ * dispute and resolve-dispute stay in the table and are not registered:
+ * disputes are deferred.
  */
 
 export const BATCH_STATUSES = Object.freeze([

@@ -21,6 +21,7 @@ import {
   qualificationsRouter,
   trainingPartnersRouter,
 } from "./modules/master-data/master-data.routes.js";
+import { resultsRouter } from "./modules/results/result.routes.js";
 import { recognitionRouter } from "./modules/recognition/recognition.routes.js";
 import { usersRouter } from "./modules/users/users.routes.js";
 import {
@@ -50,6 +51,7 @@ export function createApp() {
   app.use("/api/v1/admin/holidays", holidaysRouter);
   app.use("/api/v1/admin/recognition", recognitionRouter);
   app.use("/api/v1/batches", batchesRouter);
+  app.use("/api/v1/results", resultsRouter);
   app.use("/api/v1/compliance", complianceRouter);
   app.use("/api/v1/assessor", assessorLoginEventRouter);
   app.use("/api/v1/assessor", assessorFieldRouter);
