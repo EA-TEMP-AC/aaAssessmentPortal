@@ -9,6 +9,7 @@ import { PasswordGatePage } from "./pages/PasswordGatePage";
 import { AuditLogPage } from "./pages/AuditLogPage";
 import { MasterDataPage } from "./pages/MasterDataPage";
 import { RecognitionPage } from "./pages/RecognitionPage";
+import { RegistryPage } from "./pages/RegistryPage";
 import { UsersPage } from "./pages/UsersPage";
 import { WorkingDaysPage } from "./pages/WorkingDaysPage";
 import { BatchesPage } from "./pages/BatchesPage";
@@ -41,13 +42,17 @@ export function AppRoutes() {
                       ? "/master-data/*"
                       : item.id === "batches"
                         ? "/batches/*"
-                        : item.to
+                        : item.id === "registry"
+                          ? "/registry/*"
+                          : item.to
                   }
                   element={
                     item.id === "audit" ? (
                       <AuditLogPage />
                     ) : item.id === "users" ? (
                       <UsersPage />
+                    ) : item.id === "registry" ? (
+                      <RegistryPage />
                     ) : item.id === "master-data" ? (
                       <MasterDataPage />
                     ) : item.id === "recognition" ? (

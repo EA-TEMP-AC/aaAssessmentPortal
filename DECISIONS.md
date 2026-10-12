@@ -110,6 +110,7 @@
   - PATCH is soft-delete (`active: false`) or accommodations. No DELETE. After a roster write, `candidateCount` is the active row count.
   - Import accepts `text/csv` or multipart `file` (`.csv` name). Response `{ created, skipped, errors: [{ row, reason }] }`. Limits `CANDIDATE_CSV_MAX_BYTES` (1 MiB) and `CANDIDATE_CSV_MAX_ROWS` (500) in `candidate-limits.js` (not SCHEMA §2). Cells are never evaluated; leading `= + - @` are stored with a leading `'`.
   - Roster writes only while `allocated` | `accepted` | `assessor_assigned`. Seed: learners `TP-REG-10022` and `TP-REG-10023` plus allocated batch `66f0b07b0000000000000001` with a 3-row roster. No Aadhaar fields. Resolves open Q70.
+- **F-03 assessor and proctor registry screens (2026-10-12):** The web route is `/registry`. Subnav tabs offer Assessors (`/registry/assessors`) and Proctors (`/registry/proctors`). `aa_admin` and `mis` have full write access (create, edit, and deactivate via DELETE). `ncvet_viewer` and `ab_reviewer` have read-only access. `assessor` is scoped to their linked profile on the Assessors tab, and `proctor` to their linked profile on the Proctors tab. Other roles (`sme`, `candidate`, `tp`) are denied. The forms support name, code, contact email, qualifications/sector, editable multi-select languages with custom additions, ToA certificate and validity dates (`expiresOn >= issuedOn`), experience, other AA count, undertaking, and active status.
 
 ## Open questions (need human / NCVET / AB)
 1. DEP and SIDH integration: API or file upload? Formats?
