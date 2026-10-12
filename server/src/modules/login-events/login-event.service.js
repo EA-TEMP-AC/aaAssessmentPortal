@@ -52,12 +52,15 @@ function payloadHash(user, actorType, body) {
     userId: String(user._id),
     actorType,
     clientEventId: body.clientEventId,
-    batchId: body.batchId.toLowerCase(),
+    batchId: body.batchId ? body.batchId.toLowerCase() : null,
     type: body.type,
     capturedAt: new Date(body.capturedAt).toISOString(),
-    lat: body.lat,
-    lng: body.lng,
+    locationStatus: body.locationStatus ?? (body.lat !== undefined ? "captured" : "unavailable"),
+    lat: body.lat ?? null,
+    lng: body.lng ?? null,
     accuracy: body.accuracy ?? null,
+    locationUnavailableReason: body.locationUnavailableReason ?? null,
+    locationUnavailableDetail: body.locationUnavailableDetail ?? null,
     device: body.device ?? null,
   });
   return createHash("sha256").update(canonical).digest("hex");
@@ -74,11 +77,16 @@ export function presentLoginEvent(doc, { replayed }) {
     actorType: doc.actorType,
     actorId: String(doc.actorId),
     candidateId: doc.candidateId ? String(doc.candidateId) : null,
-    batchId: String(doc.batchId),
+    batchId: doc.batchId ? String(doc.batchId) : null,
     type: doc.type,
-    lat: doc.lat,
-    lng: doc.lng,
+    locationStatus: doc.locationStatus,
+    lat: doc.lat ?? null,
+    lng: doc.lng ?? null,
     accuracy: doc.accuracy ?? null,
+    locationUnavailableReason: doc.locationUnavailableReason ?? null,
+    locationUnavailableDetail: doc.locationUnavailableDetail ?? null,
+    missingGpsFix: doc.missingGpsFix ?? (doc.locationStatus === "unavailable" || doc.lat == null),
+    noGpsFix: doc.noGpsFix ?? (doc.locationStatus === "unavailable" || doc.lat == null),
     capturedAt: iso(doc.capturedAt),
     receivedAt: iso(doc.receivedAt),
     clockSkewMs: doc.clockSkewMs,
@@ -133,6 +141,10 @@ function assertSamePayload(existing, hash) {
 
 function abEmailText({ assessorName, batch, event }) {
   const accuracy = event.accuracy == null ? "" : ` (accuracy ${event.accuracy} m)`;
+  const location =
+    event.locationStatus === "unavailable" || event.lat == null
+      ? `Unavailable (${event.locationUnavailableReason ?? "no fix"})`
+      : `${event.lat}, ${event.lng}${accuracy}`;
   return [
     "An assessor has logged in for an assessment batch.",
     "",
@@ -142,7 +154,7 @@ function abEmailText({ assessorName, batch, event }) {
     `Captured at (device clock): ${event.capturedAt.toISOString()}`,
     `Captured on (IST date): ${istCalendarDate(event.capturedAt)}`,
     `Received at (server clock): ${event.receivedAt.toISOString()}`,
-    `Location: ${event.lat}, ${event.lng}${accuracy}`,
+    `Location: ${location}`,
   ].join("\n");
 }
 
@@ -151,10 +163,12 @@ function abEmailText({ assessorName, batch, event }) {
  * Never throws: a missing AB, a failed lookup, or a failed insert leaves
  * `abEmailQueuedAt` null and the login event stands. The claim on
  * `abEmailQueuedAt` stops a replay from queuing a second mail.
+ * B-06b: Skips email enqueue if event has no batch attached (batchId is null).
  * @returns {Promise<object>} the event as stored after the attempt
  */
 export async function queueAbLoginEmail(event, now = new Date()) {
   if (event.actorType !== "assessor" || event.type !== "login") return event;
+  if (!event.batchId) return event;
   if (event.abEmailQueuedAt) return event;
   try {
     const claimed = await LoginEvent.findOneAndUpdate(
@@ -204,6 +218,7 @@ export async function queueAbLoginEmail(event, now = new Date()) {
  * (`replayed: true`) without re-validating, so an offline queue can resend after
  * the batch has moved on. A different payload is `409 CONFLICT_IDEMPOTENT`.
  * The first valid assessor login moves `assessor_assigned` → `in_progress`.
+ * B-06b: accepts batchId null (skips batch-related checks and mail) and missing GPS.
  * @param {object} user
  * @param {"assessor"|"proctor"|"student"} actorType
  * @param {object} body parsed loginEventBodySchema
@@ -213,26 +228,47 @@ export async function recordLoginEvent(user, actorType, body, context = {}) {
   const receivedAt = context.now ?? new Date();
   if (LOGIN_EVENT_ROLE_BY_ACTOR[actorType] !== user?.role) throw forbidden();
 
+  const profileId = user.linkedProfileId;
+  if (!profileId) throw forbidden();
+
   const hash = payloadHash(user, actorType, body);
   const existing = await LoginEvent.findOne({ clientEventId: body.clientEventId }).lean();
   if (existing) {
     // A replay also retries a mail that could not be queued the first time.
     const event = await queueAbLoginEmail(assertSamePayload(existing, hash), receivedAt);
-    return { event, replayed: true };
+    let abId = null;
+    if (existing.batchId) {
+      const b = await Batch.findById(existing.batchId).select("abId").lean();
+      abId = b?.abId ?? null;
+    }
+    return { event, replayed: true, abId };
   }
 
-  const batch = await Batch.findById(body.batchId).lean();
-  if (!batch) throw notFound();
-  const candidate = await assertAssigned(user, actorType, batch);
-  if (!LOGIN_EVENT_BATCH_STATUSES.includes(batch.status)) {
-    throw invalidTransition("Batch status does not allow login events");
+  const hasBatch = Boolean(body.batchId);
+  let batch = null;
+  let candidate = null;
+
+  if (hasBatch) {
+    batch = await Batch.findById(body.batchId).lean();
+    if (!batch) throw notFound();
+    candidate = await assertAssigned(user, actorType, batch);
+    if (!LOGIN_EVENT_BATCH_STATUSES.includes(batch.status)) {
+      throw invalidTransition("Batch status does not allow login events");
+    }
+    const capturedAt = new Date(body.capturedAt);
+    assertInWindow(batch, capturedAt);
   }
+
   const capturedAt = new Date(body.capturedAt);
-  assertInWindow(batch, capturedAt);
-
   const clockSkewMs = receivedAt.getTime() - capturedAt.getTime();
   const next =
-    body.type === "login" ? resolveTransition(user.role, batch.status, "login-event") : null;
+    hasBatch && body.type === "login"
+      ? resolveTransition(user.role, batch.status, "login-event")
+      : null;
+
+  const locationStatus =
+    body.locationStatus ?? (body.lat !== undefined ? "captured" : "unavailable");
+  const isMissingFix = locationStatus === "unavailable" || body.lat == null;
 
   let saved;
   try {
@@ -242,14 +278,19 @@ export async function recordLoginEvent(user, actorType, body, context = {}) {
           {
             clientEventId: body.clientEventId,
             actorType,
-            actorId: user.linkedProfileId,
+            actorId: profileId,
             userId: user._id,
-            candidateId: candidate?._id,
-            batchId: batch._id,
+            candidateId: candidate?._id ?? null,
+            batchId: batch?._id ?? null,
             type: body.type,
-            lat: body.lat,
-            lng: body.lng,
-            accuracy: body.accuracy,
+            locationStatus,
+            lat: body.lat ?? null,
+            lng: body.lng ?? null,
+            accuracy: body.accuracy ?? null,
+            locationUnavailableReason: body.locationUnavailableReason ?? null,
+            locationUnavailableDetail: body.locationUnavailableDetail ?? null,
+            missingGpsFix: isMissingFix,
+            noGpsFix: isMissingFix,
             capturedAt,
             receivedAt,
             clockSkewMs,
@@ -264,7 +305,7 @@ export async function recordLoginEvent(user, actorType, body, context = {}) {
       );
 
       let moved = null;
-      if (next) {
+      if (next && batch) {
         moved = await Batch.findOneAndUpdate(
           { _id: batch._id, status: batch.status, statusVersion: batch.statusVersion },
           { $set: { status: next.to }, $inc: { statusVersion: 1 } },
@@ -286,10 +327,10 @@ export async function recordLoginEvent(user, actorType, body, context = {}) {
     // Two submissions of the same clientEventId arrived together.
     const winner = await LoginEvent.findOne({ clientEventId: body.clientEventId }).lean();
     if (!winner) throw err;
-    return { event: assertSamePayload(winner, hash), replayed: true };
+    return { event: assertSamePayload(winner, hash), replayed: true, abId: batch?.abId ?? null };
   }
 
-  if (saved.moved) {
+  if (saved.moved && batch) {
     await recordAudit({
       actorId: user._id,
       actorRole: user.role,
@@ -306,5 +347,5 @@ export async function recordLoginEvent(user, actorType, body, context = {}) {
   }
 
   const event = await queueAbLoginEmail(saved.event, receivedAt);
-  return { event, replayed: false, abId: batch.abId };
+  return { event, replayed: false, abId: batch?.abId ?? null };
 }

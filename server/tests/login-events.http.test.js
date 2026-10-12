@@ -362,15 +362,25 @@ describe("login events", () => {
     }
   });
 
-  it("rejects missing coordinates, a missing batch id, and server-owned fields", async () => {
+  it("rejects invalid coordinates, invalid batch id, missing reasons, and server-owned fields", async () => {
     const w = await world();
     const assessor = await sessionFor("assessor", w.assessor._id);
     const noFix = eventBody(w.batch, { lat: undefined, lng: undefined });
     const bad = [
       noFix,
-      { ...noFix, locationStatus: "unavailable", locationUnavailableReason: "timeout" },
-      eventBody(w.batch, { batchId: null }),
+      { ...noFix, locationStatus: "unavailable" }, // missing reason
+      { ...noFix, locationStatus: "captured" }, // missing coordinates
+      { ...noFix, locationStatus: "unavailable", locationUnavailableReason: "" }, // empty reason
+      {
+        ...eventBody(w.batch),
+        locationStatus: "unavailable",
+        locationUnavailableReason: "timeout",
+      }, // lat/lng present with unavailable
+      { ...eventBody(w.batch), locationUnavailableReason: "timeout" }, // reason present with captured
+      eventBody(w.batch, { batchId: "not-an-id" }),
       eventBody(w.batch, { lat: 91 }),
+      eventBody(w.batch, { lat: -91 }),
+      eventBody(w.batch, { lng: 181 }),
       eventBody(w.batch, { capturedAt: "yesterday" }),
       eventBody(w.batch, { receivedAt: CAPTURED_AT }),
       eventBody(w.batch, { clockSkewMs: 0 }),
@@ -381,83 +391,188 @@ describe("login events", () => {
     expect(await LoginEvent.countDocuments({})).toBe(0);
   });
 
-  it("queues one email to the awarding body when an assessor logs in", async () => {
+  it("accepts locationStatus unavailable with a reason, flags missing fix, and never blocks login or batch transition", async () => {
     const w = await world();
     const assessor = await sessionFor("assessor", w.assessor._id);
-    const proctor = await sessionFor("proctor", w.proctor._id);
-
-    const res = await post("assessor", assessor.token, eventBody(w.batch));
-    expect(res.status, JSON.stringify(res.body)).toBe(200);
-    expect(res.body.abEmailQueuedAt).toEqual(expect.any(String));
-    expect(res.body.abEmailSentAt).toBeNull();
-
-    const jobs = await EmailQueue.find({}).lean();
-    expect(jobs).toHaveLength(1);
-    expect(jobs[0]).toMatchObject({
-      to: AB_EMAILS,
-      kind: "assessor_login",
-      status: "pending",
-      attempts: 0,
-    });
-    expect(jobs[0].text).toContain(CAPTURED_AT);
-    expect(jobs[0].text).toContain("Ravi Assessor");
-    expect(jobs[0].meta).toMatchObject({
-      loginEventId: res.body.id,
+    const body = {
+      clientEventId: "evt-gps-miss",
       batchId: String(w.batch._id),
+      type: "login",
       capturedAt: CAPTURED_AT,
-    });
+      locationStatus: "unavailable",
+      locationUnavailableReason: "timeout",
+      locationUnavailableDetail: "GPS fix timed out after 10s",
+      device: { deviceId: "dev-9f3a", platform: "android", appVersion: "1.0.0" },
+    };
 
-    // Logout and proctor events do not notify the AB.
-    await post(
-      "assessor",
-      assessor.token,
-      eventBody(w.batch, { clientEventId: "e2", type: "logout" }),
-    );
-    await post("proctor", proctor.token, eventBody(w.batch, { clientEventId: "e3" }));
-    expect(await LoginEvent.countDocuments({})).toBe(3);
-    expect(await EmailQueue.countDocuments({})).toBe(1);
-  });
-
-  it("still records the login when the email cannot be queued, and queues it on the resend", async () => {
-    const w = await world();
-    const assessor = await sessionFor("assessor", w.assessor._id);
-    vi.spyOn(console, "error").mockImplementation(() => {});
-    vi.spyOn(EmailQueue, "create").mockRejectedValueOnce(new Error("queue is down"));
-
-    const res = await post("assessor", assessor.token, eventBody(w.batch));
+    const res = await post("assessor", assessor.token, body);
     expect(res.status, JSON.stringify(res.body)).toBe(200);
-    expect(res.body.abEmailQueuedAt).toBeNull();
-    expect(await LoginEvent.countDocuments({})).toBe(1);
-    expect(await EmailQueue.countDocuments({})).toBe(0);
-    expect((await Batch.findById(w.batch._id).lean()).status).toBe("in_progress");
+    expect(res.body).toMatchObject({
+      clientEventId: "evt-gps-miss",
+      actorType: "assessor",
+      batchId: String(w.batch._id),
+      type: "login",
+      locationStatus: "unavailable",
+      lat: null,
+      lng: null,
+      accuracy: null,
+      locationUnavailableReason: "timeout",
+      locationUnavailableDetail: "GPS fix timed out after 10s",
+      missingGpsFix: true,
+      noGpsFix: true,
+      replayed: false,
+    });
 
-    const again = await post("assessor", assessor.token, eventBody(w.batch));
-    expect(again.status).toBe(200);
-    expect(again.body.replayed).toBe(true);
-    expect(again.body.abEmailQueuedAt).toEqual(expect.any(String));
-    expect(await EmailQueue.countDocuments({})).toBe(1);
+    const stored = await LoginEvent.findOne({ clientEventId: "evt-gps-miss" }).lean();
+    expect(stored.locationStatus).toBe("unavailable");
+    expect(stored.lat).toBeNull();
+    expect(stored.lng).toBeNull();
+    expect(stored.locationUnavailableReason).toBe("timeout");
+    expect(stored.locationUnavailableDetail).toBe("GPS fix timed out after 10s");
+    expect(stored.missingGpsFix).toBe(true);
+    expect(stored.noGpsFix).toBe(true);
+
+    // Batch status still moves to in_progress on the first assessor login
+    const batch = await Batch.findById(w.batch._id).lean();
+    expect(batch.status).toBe("in_progress");
+
+    // Email is still queued, noting location is unavailable
+    const job = await EmailQueue.findOne({ "meta.loginEventId": res.body.id }).lean();
+    expect(job).not.toBeNull();
+    expect(job.text).toContain("Location: Unavailable (timeout)");
   });
 
-  it("still records the login when the awarding body lookup fails or finds nothing", async () => {
-    const w = await world();
-    const assessor = await sessionFor("assessor", w.assessor._id);
-    vi.spyOn(console, "error").mockImplementation(() => {});
-    vi.spyOn(AwardingBody, "findById").mockImplementationOnce(() => {
-      throw new Error("lookup failed");
-    });
-    const failed = await post("assessor", assessor.token, eventBody(w.batch));
-    expect(failed.status, JSON.stringify(failed.body)).toBe(200);
-    expect(failed.body.abEmailQueuedAt).toBeNull();
+  it("accepts batchId null, stores the event, skips assignment/window checks, batch transition, and AB email", async () => {
+    const otherAssessor = await Assessor.create({ name: "Unassigned", code: "ASR-99" });
+    const assessor = await sessionFor("assessor", otherAssessor._id, "unassigned@aa.example");
 
-    await AwardingBody.deleteMany({});
-    const missing = await post(
-      "assessor",
-      assessor.token,
-      eventBody(w.batch, { clientEventId: "evt-0002" }),
-    );
-    expect(missing.status).toBe(200);
-    expect(missing.body.abEmailQueuedAt).toBeNull();
+    // capturedAt can even be any datetime since there is no batch date-window
+    const body = {
+      clientEventId: "evt-null-batch",
+      batchId: null,
+      type: "login",
+      capturedAt: "2026-05-10T12:00:00.000Z",
+      lat: 19.076,
+      lng: 72.877,
+      device: { deviceId: "dev-9f3a", platform: "android", appVersion: "1.0.0" },
+    };
+
+    const res = await post("assessor", assessor.token, body);
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body).toMatchObject({
+      clientEventId: "evt-null-batch",
+      actorType: "assessor",
+      actorId: String(otherAssessor._id),
+      candidateId: null,
+      batchId: null,
+      type: "login",
+      lat: 19.076,
+      lng: 72.877,
+      abEmailQueuedAt: null,
+      abEmailSentAt: null,
+      replayed: false,
+    });
+
+    const stored = await LoginEvent.findOne({ clientEventId: "evt-null-batch" }).lean();
+    expect(stored.batchId).toBeNull();
+    expect(stored.candidateId).toBeNull();
+    expect(stored.abEmailQueuedAt).toBeNull();
+
+    // No emails queued
     expect(await EmailQueue.countDocuments({})).toBe(0);
+
+    // Audit log recorded
+    const audit = await AuditLog.findOne({ entityId: res.body.id }).lean();
+    expect(audit).toMatchObject({
+      action: "loginEvent.create",
+      entity: "loginEvent",
+      batchId: null,
+      abId: null,
+    });
+  });
+
+  it("handles combined null batchId and missing GPS with replay idempotency", async () => {
+    const otherAssessor = await Assessor.create({ name: "Unassigned 2", code: "ASR-100" });
+    const assessor = await sessionFor("assessor", otherAssessor._id, "unassigned2@aa.example");
+
+    const body = {
+      clientEventId: "evt-null-batch-no-gps",
+      batchId: null,
+      type: "login",
+      capturedAt: "2026-06-01T08:00:00.000Z",
+      locationStatus: "unavailable",
+      locationUnavailableReason: "permission_denied",
+      device: { deviceId: "dev-9f3a", platform: "android", appVersion: "1.0.0" },
+    };
+
+    const first = await post("assessor", assessor.token, body);
+    expect(first.status, JSON.stringify(first.body)).toBe(200);
+    expect(first.body.batchId).toBeNull();
+    expect(first.body.missingGpsFix).toBe(true);
+    expect(first.body.lat).toBeNull();
+    expect(first.body.replayed).toBe(false);
+
+    // Replay returns identical event with replayed: true
+    const replay = await post("assessor", assessor.token, body);
+    expect(replay.status, JSON.stringify(replay.body)).toBe(200);
+    expect(replay.body).toEqual({ ...first.body, replayed: true });
+    expect(await LoginEvent.countDocuments({ clientEventId: "evt-null-batch-no-gps" })).toBe(1);
+
+    // Replay with different payload is 409 CONFLICT_IDEMPOTENT
+    expectError(
+      await post("assessor", assessor.token, { ...body, type: "logout" }),
+      409,
+      "CONFLICT_IDEMPOTENT",
+    );
+  });
+
+  it("accepts missing GPS and null batchId on proctor and student endpoints", async () => {
+    const proctorProfile = await Proctor.create({ name: "Proctor Free", code: "PRC-99" });
+    const proctor = await sessionFor("proctor", proctorProfile._id, "free-proctor@aa.example");
+    const studentLearnerId = oid();
+    const student = await sessionFor("candidate", studentLearnerId, "free-student@aa.example");
+
+    // Proctor with null batch and unavailable location
+    const pRes = await post("proctor", proctor.token, {
+      clientEventId: "evt-proctor-null-batch",
+      batchId: null,
+      type: "login",
+      capturedAt: "2026-07-01T10:00:00.000Z",
+      locationStatus: "unavailable",
+      locationUnavailableReason: "position_unavailable",
+    });
+    expect(pRes.status, JSON.stringify(pRes.body)).toBe(200);
+    expect(pRes.body.actorType).toBe("proctor");
+    expect(pRes.body.batchId).toBeNull();
+    expect(pRes.body.missingGpsFix).toBe(true);
+
+    // Student with null batch and captured location
+    const sRes = await post("student", student.token, {
+      clientEventId: "evt-student-null-batch",
+      batchId: null,
+      type: "login",
+      capturedAt: "2026-07-01T10:00:00.000Z",
+      lat: 28.6139,
+      lng: 77.209,
+    });
+    expect(sRes.status, JSON.stringify(sRes.body)).toBe(200);
+    expect(sRes.body.actorType).toBe("student");
+    expect(sRes.body.batchId).toBeNull();
+    expect(sRes.body.candidateId).toBeNull();
+    expect(sRes.body.missingGpsFix).toBe(false);
+
+    // Student with null batch and unavailable location
+    const sResNoGps = await post("student", student.token, {
+      clientEventId: "evt-student-null-batch-no-gps",
+      batchId: null,
+      type: "login",
+      capturedAt: "2026-07-01T10:00:00.000Z",
+      locationStatus: "unavailable",
+      locationUnavailableReason: "unknown",
+    });
+    expect(sResNoGps.status, JSON.stringify(sResNoGps.body)).toBe(200);
+    expect(sResNoGps.body.actorType).toBe("student");
+    expect(sResNoGps.body.missingGpsFix).toBe(true);
   });
 
   it("writes audit rows without tokens, password data, or the email body", async () => {

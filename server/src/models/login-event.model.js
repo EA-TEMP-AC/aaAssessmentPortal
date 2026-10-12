@@ -26,12 +26,22 @@ const loginEventSchema = new mongoose.Schema(
     /** assessors / proctors / learners id (users.linkedProfileId). */
     actorId: { type: mongoose.Schema.Types.ObjectId, required: true },
     userId: { type: mongoose.Schema.Types.ObjectId, required: true, ref: "User" },
-    candidateId: { type: mongoose.Schema.Types.ObjectId, ref: "Candidate" },
-    batchId: { type: mongoose.Schema.Types.ObjectId, required: true, ref: "Batch" },
+    candidateId: { type: mongoose.Schema.Types.ObjectId, ref: "Candidate", default: null },
+    batchId: { type: mongoose.Schema.Types.ObjectId, ref: "Batch", default: null },
     type: { type: String, required: true, enum: LOGIN_EVENT_TYPES },
-    lat: { type: Number, required: true },
-    lng: { type: Number, required: true },
-    accuracy: { type: Number },
+    locationStatus: {
+      type: String,
+      required: true,
+      enum: ["captured", "unavailable"],
+      default: "captured",
+    },
+    lat: { type: Number, default: null },
+    lng: { type: Number, default: null },
+    accuracy: { type: Number, default: null },
+    locationUnavailableReason: { type: String, default: null },
+    locationUnavailableDetail: { type: String, default: null },
+    missingGpsFix: { type: Boolean, required: true, default: false },
+    noGpsFix: { type: Boolean, required: true, default: false },
     capturedAt: { type: Date, required: true },
     receivedAt: { type: Date, required: true },
     clockSkewMs: { type: Number, required: true },
@@ -50,5 +60,6 @@ const loginEventSchema = new mongoose.Schema(
 loginEventSchema.index({ clientEventId: 1 }, { unique: true });
 loginEventSchema.index({ batchId: 1, capturedAt: 1 });
 loginEventSchema.index({ actorType: 1, actorId: 1, capturedAt: -1 });
+loginEventSchema.index({ missingGpsFix: 1 });
 
 export const LoginEvent = mongoose.model("LoginEvent", loginEventSchema, "loginEvents");

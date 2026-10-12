@@ -405,9 +405,14 @@ Indexes: `{ batchId: 1 }`; `{ learnerId: 1 }`; unique `{ batchId: 1, learnerId: 
 | actorType | LoginActorType | Y | |
 | actorId | ObjectId | Y | |
 | candidateId | ObjectId | N | student |
-| batchId | ObjectId | Y | |
+| batchId | ObjectId | N | nullable; when null, batch-related checks, transition, and AB email are skipped |
 | type | LoginEventType | Y | |
-| lat, lng | number | Y | |
+| locationStatus | string | Y | `"captured"` \| `"unavailable"` |
+| lat, lng | number | N | required when `locationStatus` is `"captured"`; absent when `"unavailable"` |
+| accuracy | number | N | optional when `locationStatus` is `"captured"`; absent when `"unavailable"` |
+| locationUnavailableReason | string | N | required when `locationStatus` is `"unavailable"`; absent when `"captured"` |
+| locationUnavailableDetail | string | N | optional device detail |
+| missingGpsFix | bool | Y | true when `locationStatus` is `"unavailable"` or fix is missing; flagged for reports; never blocks login |
 | capturedAt | Date | Y | |
 | receivedAt | Date | Y | |
 | clockSkewMs | number | Y | |
@@ -422,14 +427,17 @@ Indexes: `{ batchId: 1 }`; `{ learnerId: 1 }`; unique `{ batchId: 1, learnerId: 
 
 **Validation:**
 
-1. Assigned assessor / proctor / roster student.
-2. Batch status **≥ `assessor_assigned`** in lifecycle order and **not** `rejected`/`cancelled` (i.e. `assessor_assigned`, `in_progress`, `assessment_completed`, `result_submitted`, `ab_validated`, `published`, `disputed`).
-3. IST date of **`capturedAt`** ∈ `[assessmentStartDate, assessmentEndDate]`. Outside → `VALIDATION_ERROR`.
-4. Set `clockSkewFlag` / `lateSync` as flags; do not reject for skew alone.
+1. If `batchId` is provided:
+   - Assigned assessor / proctor / roster student.
+   - Batch status **≥ `assessor_assigned`** in lifecycle order and **not** `rejected`/`cancelled` (i.e. `assessor_assigned`, `in_progress`, `assessment_completed`, `result_submitted`, `ab_validated`, `published`, `disputed`).
+   - IST date of **`capturedAt`** ∈ `[assessmentStartDate, assessmentEndDate]`. Outside → `VALIDATION_ERROR`.
+   If `batchId` is `null`: skip assigned-actor, status, and date-window checks. Store event.
+2. **GPS miss:** If `locationStatus` is `"unavailable"`, `locationUnavailableReason` is required and `lat`/`lng`/`accuracy` must be absent. Stored with flag `missingGpsFix: true`. Never block login for a missing fix. If `"captured"`, `lat` and `lng` are required.
+3. Set `clockSkewFlag` / `lateSync` as flags; do not reject for skew alone.
 
-**AB email:** B-06 **enqueues** to `emailQueue` for `notificationEmails`; body includes `capturedAt`; enqueue never fails login API. Worker/retries/SMTP owned by **B-08**.
+**AB email:** B-06 **enqueues** to `emailQueue` for `notificationEmails` on assessor `login` when a batch is attached; body includes `capturedAt` and location (or unavailable reason); enqueue never fails login API. When `batchId` is `null`, AB email is skipped (sent only when a batch is attached). Worker/retries/SMTP owned by **B-08**.
 
-Indexes: `{ clientEventId: 1 }` unique; `{ batchId: 1, capturedAt: 1 }`; `{ actorType: 1, actorId: 1, capturedAt: -1 }`.
+Indexes: `{ clientEventId: 1 }` unique; `{ batchId: 1, capturedAt: 1 }`; `{ actorType: 1, actorId: 1, capturedAt: -1 }`; `{ missingGpsFix: 1 }`.
 
 ### 3.12 `emailQueue` (phase 1)
 
