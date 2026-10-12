@@ -42,6 +42,8 @@
     - **T-01:** cover the per-type dues, recognition override, language override, and the publication-date window.
     - **Q-05:** “sector” for the 5% rule is an Annexure II / recognition sector, not `ratioClass`.
 
+- **Login-event decisions (2026-10-12, human):** (Q33/Q108) GPS miss is accepted: no coordinates allowed when `locationStatus` is `unavailable` with a reason, event flagged, login not blocked. (Q34/Q109) Null `batchId` is accepted and stored; AB mail only when a batch is attached. Task B-06b. (Q106) Attendance, checklist and batch GETs are split into B-06c.
+
 ## Proposed
 - Stack: Node/Express + MongoDB (replica set) + React/Vite + React Native/Expo. Reason: matches existing team skills and tooling.
 - Multi-tenant from day one? (one AA per tenant vs. single AA). Needs human decision. Phase 1 schema assumes single AA.
