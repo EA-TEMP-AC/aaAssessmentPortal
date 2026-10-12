@@ -283,11 +283,18 @@ export async function listBatches(user, query, now = new Date()) {
   };
 }
 
-export async function getBatch(user, id, now = new Date()) {
+/**
+ * The stored batch, for child reads. Unknown id is 404; outside scope is 403.
+ */
+export async function loadReadableBatch(user, id) {
   const doc = await Batch.findById(id).lean();
   if (!doc) throw notFound();
   if (!(await canReadBatch(user, doc))) throw forbidden();
-  return presentBatch(doc, { now });
+  return doc;
+}
+
+export async function getBatch(user, id, now = new Date()) {
+  return presentBatch(await loadReadableBatch(user, id), { now });
 }
 
 /**

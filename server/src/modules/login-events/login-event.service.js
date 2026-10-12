@@ -39,7 +39,7 @@ export const LOGIN_EVENT_BATCH_STATUSES = Object.freeze([
 
 export const AB_LOGIN_EMAIL_KIND = "assessor_login";
 
-function stableStringify(value) {
+export function stableStringify(value) {
   if (value === null || typeof value !== "object") return JSON.stringify(value) ?? "null";
   if (Array.isArray(value)) return `[${value.map((item) => stableStringify(item)).join(",")}]`;
   const keys = Object.keys(value).sort();
@@ -95,7 +95,7 @@ export function presentLoginEvent(doc, { replayed }) {
 /**
  * docs/SCHEMA.md §3.11 validation step 1. Returns the roster row for a student.
  */
-async function assertAssigned(user, actorType, batch) {
+export async function assertAssigned(user, actorType, batch) {
   const profileId = user.linkedProfileId;
   if (!profileId) throw forbidden();
   if (actorType === "assessor") {
@@ -115,7 +115,7 @@ async function assertAssigned(user, actorType, batch) {
   return row;
 }
 
-function assertInWindow(batch, capturedAt) {
+export function assertInWindow(batch, capturedAt) {
   const day = istCalendarDate(capturedAt);
   if (day < batch.assessmentStartDate || day > batch.assessmentEndDate) {
     throw validationError("capturedAt is outside the assessment window", {
@@ -307,4 +307,34 @@ export async function recordLoginEvent(user, actorType, body, context = {}) {
 
   const event = await queueAbLoginEmail(saved.event, receivedAt);
   return { event, replayed: false, abId: batch.abId };
+}
+
+/**
+ * GET /batches/:id/login-events. The caller's batch scope is checked first.
+ * A candidate sees only their own student events.
+ * @param {object} user
+ * @param {object} batch a batch the caller may read
+ * @param {{ from?: string, to?: string, actorType?: string }} query
+ */
+export async function listBatchLoginEvents(user, batch, query = {}) {
+  const filter = { batchId: batch._id };
+  if (query.actorType) filter.actorType = query.actorType;
+  if (user?.role === "candidate") {
+    if (query.actorType && query.actorType !== "student") return { items: [] };
+    filter.actorType = "student";
+    filter.actorId = user.linkedProfileId;
+  }
+  if (query.from || query.to) {
+    filter.capturedAt = {};
+    if (query.from) filter.capturedAt.$gte = new Date(query.from);
+    if (query.to) filter.capturedAt.$lte = new Date(query.to);
+  }
+  const docs = await LoginEvent.find(filter).sort({ capturedAt: 1, _id: 1 }).lean();
+  return {
+    items: docs.map((doc) => {
+      const event = presentLoginEvent(doc, { replayed: false });
+      delete event.replayed;
+      return event;
+    }),
+  };
 }

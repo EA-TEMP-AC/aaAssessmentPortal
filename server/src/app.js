@@ -4,6 +4,7 @@ import { errorHandler } from "./middleware/error-handler.js";
 import { auditRouter } from "./modules/audit/audit.routes.js";
 import { authRouter } from "./modules/auth/auth.routes.js";
 import { assessorsRouter } from "./modules/assessors/assessor.routes.js";
+import { assessorFieldRouter } from "./modules/attendance/attendance.routes.js";
 import { batchesRouter } from "./modules/batches/batch.routes.js";
 import { complianceRouter } from "./modules/compliance/compliance.routes.js";
 import { proctorsRouter } from "./modules/proctors/proctor.routes.js";
@@ -51,6 +52,7 @@ export function createApp() {
   app.use("/api/v1/batches", batchesRouter);
   app.use("/api/v1/compliance", complianceRouter);
   app.use("/api/v1/assessor", assessorLoginEventRouter);
+  app.use("/api/v1/assessor", assessorFieldRouter);
   app.use("/api/v1/proctor", proctorLoginEventRouter);
   app.use("/api/v1/student", studentLoginEventRouter);
 

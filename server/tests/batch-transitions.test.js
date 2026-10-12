@@ -18,6 +18,7 @@ const EXPECTED = [
   ["reassign", "assessor_assigned", "assessor_assigned", ["aa_admin"]],
   ["cancel", "assessor_assigned", "cancelled", ["aa_admin"]],
   ["complete", "in_progress", "assessment_completed", ["aa_admin"]],
+  ["checklist", "in_progress", "assessment_completed", ["assessor"]],
   ["cancel", "in_progress", "cancelled", ["aa_admin"]],
   ["submit-result", "assessment_completed", "result_submitted", ["aa_admin"]],
   ["cancel", "assessment_completed", "cancelled", ["aa_admin"]],
@@ -62,6 +63,7 @@ describe("batch transition table", () => {
     expect(rolesForAction("assign")).toEqual(["aa_admin"]);
     expect(rolesForAction("reassign")).toEqual(["aa_admin"]);
     expect(rolesForAction("login-event")).toEqual(["assessor"]);
+    expect(rolesForAction("checklist")).toEqual(["assessor"]);
     expect(rolesForAction("validate")).toEqual(["ab_reviewer"]);
     expect(rolesForAction("publish")).toEqual(["ab_reviewer"]);
     expect(rolesForAction("dispute")).toEqual(["aa_admin", "ab_reviewer"]);

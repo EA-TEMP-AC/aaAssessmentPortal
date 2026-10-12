@@ -5,9 +5,10 @@
  * B-04 mounts assign and reassign.
  * B-06 mounts login-event (modules/login-events): the first valid assessor
  * login moves assessor_assigned to in_progress.
- * The checklist path, and submit-result / validate / publish / dispute (B-05)
- * stay in the table so later tasks do not add a second one. Those routes are
- * not registered.
+ * B-06c mounts checklist (modules/attendance): the assigned assessor's
+ * completing checklist moves in_progress to assessment_completed.
+ * submit-result / validate / publish / dispute (B-05) stay in the table so
+ * later tasks do not add a second one. Those routes are not registered.
  */
 
 export const BATCH_STATUSES = Object.freeze([
@@ -50,6 +51,7 @@ export const BATCH_TRANSITIONS = Object.freeze([
   transition("reassign", "assessor_assigned", "assessor_assigned", ["aa_admin"]),
   transition("cancel", "assessor_assigned", "cancelled", ["aa_admin"]),
   transition("complete", "in_progress", "assessment_completed", ["aa_admin"]),
+  transition("checklist", "in_progress", "assessment_completed", ["assessor"]),
   transition("cancel", "in_progress", "cancelled", ["aa_admin"]),
   transition("submit-result", "assessment_completed", "result_submitted", ["aa_admin"]),
   transition("cancel", "assessment_completed", "cancelled", ["aa_admin"]),

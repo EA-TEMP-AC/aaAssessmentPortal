@@ -286,7 +286,7 @@ Response `200`: `status: "cancelled"`, `cancelledAt` set.
 
 ### POST /batches/:id/complete
 
-Roles: `aa_admin`. From `in_progress` → `assessment_completed` when checklist/attendance gate is skipped or overridden. **Required** `reason`. Audit-logged. (Owned by **B-03**; assessor checklist path may also reach `assessment_completed` without this call — B-06.)
+Roles: `aa_admin`. From `in_progress` → `assessment_completed` when checklist/attendance gate is skipped or overridden. **Required** `reason`. Audit-logged. (Owned by **B-03**; the assessor checklist path also reaches `assessment_completed` without this call — see `POST /assessor/batches/:id/checklist`, B-06c.)
 
 Request:
 ```json
@@ -383,11 +383,11 @@ Roles: write `aa_admin` | `mis`; read those plus `ncvet_viewer`. Audit on `PUT`.
 
 ### Batch child reads
 
-Roles: scoped batch readers.
+Owned by **B-06c**. Roles: the batch read roles (`aa_admin`, `mis`, `assessor`, `proctor`, `candidate`, `tp`, `ab_reviewer`, `ncvet_viewer`), each in their batch row scope (SCHEMA §5). `sme` is `403`. Unknown batch id is `404`. An existing batch outside the caller's scope is `403`. Every response is `200` `{ "items": [ ... ] }` with no paging.
 
-- `GET /batches/:id/login-events?from=&to=&actorType=`
-- `GET /batches/:id/attendance`
-- `GET /batches/:id/checklist` — latest or list by `capturedAt`
+- `GET /batches/:id/login-events?from=&to=&actorType=`: login events for the batch, oldest `capturedAt` first. Items are the login-event response object without `replayed`. `from` and `to` are ISO-8601 instants (with `Z` or an offset), inclusive bounds on `capturedAt`; `from` after `to` is `400`. `actorType` is `assessor`, `proctor`, or `student`. A `candidate` gets only their own student events.
+- `GET /batches/:id/attendance`: the attendance rows (shape below), ordered by `candidateId`. A `candidate` gets only their own row.
+- `GET /batches/:id/checklist`: every checklist submission (shape below, without `replayed`, `batchStatus`, and `batchStatusVersion`), newest `capturedAt` first. `?latest=true` returns only the newest one. A `latest` value other than `true` or `false` is `400`.
 
 ---
 
@@ -500,9 +500,110 @@ Response `200` (first submission and replays alike):
 
 Same request, response, idempotency, and validation. Roles: `proctor` on the proctor path; `candidate` on the student path (`actorType: "student"`). The proctor must be the batch's `proctorId`. The student's learner must have an **active** roster row on the batch; that row's id is returned as `candidateId`. No status change and no AB email.
 
-### POST /assessor/batches/:id/attendance | checklist
+### POST /assessor/batches/:id/attendance
 
-Unchanged write shapes.
+Owned by **B-06c**. Role: `assessor`, and only the batch's `assessorId`. Candidate attendance and identity check (NCVET:FR §E).
+
+Request:
+```json
+{
+  "capturedAt": "2026-11-20T05:00:00.000Z",
+  "records": [
+    { "candidateId": "66f0000000000000000000k1", "present": true, "idVerified": true },
+    { "candidateId": "66f0000000000000000000k2", "present": false, "note": "Did not report" }
+  ]
+}
+```
+
+- `capturedAt` is the device clock, ISO-8601 with `Z` or an offset.
+- `records` holds 1–500 rows. A `candidateId` may appear once. Each must be an **active** roster row on this batch.
+- `present` is required. `idVerified` (boolean) and `note` (1–500 characters) are optional. `idVerified` is a yes/no only; no ID number is accepted.
+- Unknown keys are `400 VALIDATION_ERROR`, including server-owned fields.
+
+Response `200`: the stored rows for the candidates in the request.
+```json
+{
+  "items": [
+    {
+      "id": "66f0000000000000000000t1",
+      "batchId": "66f0000000000000000000b1",
+      "candidateId": "66f0000000000000000000k1",
+      "present": true,
+      "idVerified": true,
+      "note": null,
+      "capturedAt": "2026-11-20T05:00:00.000Z",
+      "receivedAt": "2026-11-20T05:00:02.000Z",
+      "assessorId": "66f0000000000000000000a1"
+    }
+  ]
+}
+```
+
+There is one row per candidate per batch. A later submission replaces the row (omitted `idVerified` and `note` become `null`). A submission whose `capturedAt` is older than the stored row leaves that row as it is, and the response shows the stored row. A candidate with `present: false` takes the result outcome `Absent` (B-05). Attendance alone never changes batch status.
+
+| Check, in this order | Failure |
+|---|---|
+| Body shape | `400 VALIDATION_ERROR` |
+| Role is `assessor` | `403 FORBIDDEN` |
+| Batch exists | `404 NOT_FOUND` |
+| Caller is the batch's `assessorId` | `403 FORBIDDEN` |
+| Batch status is `in_progress` | `409 INVALID_TRANSITION` |
+| IST date of `capturedAt` is within `assessmentStartDate`..`assessmentEndDate`, inclusive | `400 VALIDATION_ERROR` with `details.capturedAt` |
+| Every `candidateId` is an active roster row on this batch | `400 VALIDATION_ERROR` with `details.records` |
+
+**Audit.** `attendance.record` with the previous rows as `before` and the stored rows as `after`.
+
+### POST /assessor/batches/:id/checklist
+
+Owned by **B-06c**. Role: `assessor`, and only the batch's `assessorId`. Tool and equipment check (NCVET:FR §E), and the step that completes the assessment.
+
+Request:
+```json
+{
+  "clientEventId": "0b6b8b6e-52d1-4f0c-9a3e-6f8d2f4f1c20",
+  "capturedAt": "2026-11-21T11:30:00.000Z",
+  "items": [
+    { "key": "multimeter", "label": "Digital multimeter", "available": true },
+    { "key": "soldering-station", "available": false, "note": "One of two units faulty" }
+  ],
+  "completeAssessment": true
+}
+```
+
+- `clientEventId` (1–200 characters) is made on the device and is the idempotency key.
+- `items` holds 1–200 rows. `key` (1–100 characters) may appear once. `available` is required. `label` (1–200) and `note` (1–500) are optional. Keys are not checked against a Q File list (open Q14).
+- `completeAssessment` is optional and defaults to `false`.
+- Unknown keys are `400 VALIDATION_ERROR`.
+
+Response `200` (first submission and replays alike):
+```json
+{
+  "id": "66f0000000000000000000h1",
+  "clientEventId": "0b6b8b6e-52d1-4f0c-9a3e-6f8d2f4f1c20",
+  "batchId": "66f0000000000000000000b1",
+  "assessorId": "66f0000000000000000000a1",
+  "items": [
+    { "key": "multimeter", "label": "Digital multimeter", "available": true, "note": null },
+    { "key": "soldering-station", "label": null, "available": false, "note": "One of two units faulty" }
+  ],
+  "completeAssessment": true,
+  "capturedAt": "2026-11-21T11:30:00.000Z",
+  "receivedAt": "2026-11-21T11:30:03.000Z",
+  "replayed": false,
+  "batchStatus": "assessment_completed",
+  "batchStatusVersion": 5
+}
+```
+
+`batchStatus` and `batchStatusVersion` are the batch as it is after this call.
+
+**Status.** With `completeAssessment: true` the batch moves `in_progress` → `assessment_completed` (`statusVersion` + 1, audit `batch.checklist`). Every **active** roster candidate must already have an attendance row; otherwise `409 INVALID_TRANSITION` with `details.missingAttendance` (candidate ids) and the checklist is not stored. An item with `available: false` does not block the move. Without the flag the checklist is stored and the batch does not move. The checklist row and the status change are one transaction: if the status change loses a race, the call is `409 INVALID_TRANSITION` and nothing is stored.
+
+**Idempotency.** The same `clientEventId` with the same payload from the same user on the same batch returns the stored checklist with `replayed: true` and writes nothing new. A replay is not re-validated, so a queued resend still succeeds after the batch has completed. A different payload, batch, or user is `409 CONFLICT_IDEMPOTENT`.
+
+**Validation (first submission).** The same checks, in the same order, as attendance up to the `capturedAt` window, then the attendance gate when `completeAssessment` is true.
+
+**Audit.** `checklist.create` or `checklist.replay` with the checklist as `after`, and `batch.checklist` for the status change.
 
 ---
 
