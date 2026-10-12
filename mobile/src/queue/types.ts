@@ -47,6 +47,57 @@ export type QueuedLoginEvent = {
   server: ServerLoginEvent | null;
 };
 
+export type AttendanceRecordInput = {
+  candidateId: string;
+  present: boolean;
+  idVerified?: boolean;
+  note?: string;
+};
+
+export type QueuedAttendanceEvent = {
+  clientEventId: string;
+  sequence: number;
+  type: "attendance";
+  userId: string;
+  batchId: string;
+  capturedAt: string;
+  records: AttendanceRecordInput[];
+  status: QueueStatus;
+  attempts: number;
+  nextAttemptAt: number | null;
+  lastError: string | null;
+  conflict: { code: "CONFLICT_IDEMPOTENT"; message: string } | null;
+  syncedAt: string | null;
+  server?: unknown;
+};
+
+export type ChecklistItemInput = {
+  key: string;
+  label?: string;
+  available: boolean;
+  note?: string;
+};
+
+export type QueuedChecklistEvent = {
+  clientEventId: string;
+  sequence: number;
+  type: "checklist";
+  userId: string;
+  batchId: string;
+  capturedAt: string;
+  items: ChecklistItemInput[];
+  completeAssessment: boolean;
+  status: QueueStatus;
+  attempts: number;
+  nextAttemptAt: number | null;
+  lastError: string | null;
+  conflict: { code: "CONFLICT_IDEMPOTENT"; message: string } | null;
+  syncedAt: string | null;
+  server?: unknown;
+};
+
+export type QueuedItem = QueuedLoginEvent | QueuedAttendanceEvent | QueuedChecklistEvent;
+
 export type NewLoginEvent = {
   type: LoginEventType;
   role: FieldRole;
@@ -56,6 +107,25 @@ export type NewLoginEvent = {
   gps: GpsCapture;
   device: DeviceInfo;
 };
+
+export type NewAttendanceEvent = {
+  type: "attendance";
+  userId: string;
+  batchId: string;
+  capturedAt: string;
+  records: AttendanceRecordInput[];
+};
+
+export type NewChecklistEvent = {
+  type: "checklist";
+  userId: string;
+  batchId: string;
+  capturedAt: string;
+  items: ChecklistItemInput[];
+  completeAssessment?: boolean;
+};
+
+export type AnyNewEvent = NewLoginEvent | NewAttendanceEvent | NewChecklistEvent;
 
 export function loginEventPath(role: string): LoginEventPath | null {
   if (role === "assessor") return "/assessor/login-event";
