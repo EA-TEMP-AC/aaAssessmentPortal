@@ -51,8 +51,8 @@ describe("login-event API", () => {
     expect(JSON.stringify(body)).not.toMatch(/"lat"|"lng"/);
   });
 
-  it("uses the mock implementation unless the env flag is live", async () => {
-    expect(readMobileEnv({}).loginEventsMode).toBe("mock");
+  it("defaults to live endpoints unless the env flag is mock", async () => {
+    expect(readMobileEnv({}).loginEventsMode).toBe("live");
     expect(readMobileEnv({ EXPO_PUBLIC_LOGIN_EVENTS_MODE: "live" }).loginEventsMode).toBe("live");
     expect(readMobileEnv({ EXPO_PUBLIC_LOGIN_EVENTS_MODE: "mock" }).loginEventsMode).toBe("mock");
 

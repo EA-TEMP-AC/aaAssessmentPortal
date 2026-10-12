@@ -1,6 +1,7 @@
+import type { BatchFieldApi } from "../api/batchApi";
 import type { LoginEventApi, LoginEventSuccess } from "../api/loginEvents";
 import type { EventQueue } from "../queue/eventQueue";
-import type { QueuedLoginEvent, ServerLoginEvent } from "../queue/types";
+import type { QueuedItem, ServerLoginEvent } from "../queue/types";
 import { syncBackoffMs } from "./backoff";
 
 export type SyncStop = "offline" | "backoff" | "unauthorized" | "done";
@@ -23,7 +24,7 @@ function serverFrom(result: LoginEventSuccess): ServerLoginEvent {
 }
 
 /**
- * Sends pending login events in sequence order.
+ * Sends pending field events (login, attendance, checklist) in sequence order.
  * A retryable failure stops the pass so a later event cannot overtake an earlier one.
  * CONFLICT_IDEMPOTENT is stored on the event and is not retried. The event stays on the device.
  * A 200 replay (replayed true or false) is success.
@@ -32,6 +33,7 @@ function serverFrom(result: LoginEventSuccess): ServerLoginEvent {
 export async function syncQueue(options: {
   queue: EventQueue;
   api: LoginEventApi;
+  batchApi?: BatchFieldApi;
   accessToken: string;
   /** Only events captured by this user are sent. Other users' events stay queued. */
   userId: string;
@@ -44,7 +46,7 @@ export async function syncQueue(options: {
     return report;
   }
 
-  const events = await options.queue.list();
+  const events = await options.queue.list<QueuedItem>();
   const pending = events.filter((event) => event.status === "pending" && event.userId === options.userId);
 
   for (const event of pending) {
@@ -55,51 +57,172 @@ export async function syncQueue(options: {
     }
 
     report.attempted += 1;
-    const result = await options.api.post(event, options.accessToken);
-    if (result.kind === "success") {
-      const synced: QueuedLoginEvent = {
-        ...event,
-        status: "synced",
-        syncedAt: new Date(now).toISOString(),
-        lastError: null,
-        nextAttemptAt: null,
-        server: serverFrom(result),
-      };
-      await options.queue.update(synced);
-      report.synced += 1;
-      continue;
-    }
 
-    if (result.kind === "conflict") {
-      const conflicted: QueuedLoginEvent = {
+    if (event.type === "login" || event.type === "logout") {
+      const result = await options.api.post(event, options.accessToken);
+      if (result.kind === "success") {
+        const synced: QueuedItem = {
+          ...event,
+          status: "synced",
+          syncedAt: new Date(now).toISOString(),
+          lastError: null,
+          nextAttemptAt: null,
+          server: serverFrom(result),
+        };
+        await options.queue.update(synced);
+        report.synced += 1;
+        continue;
+      }
+
+      if (result.kind === "conflict") {
+        const conflicted: QueuedItem = {
+          ...event,
+          status: "conflict",
+          attempts: event.attempts + 1,
+          lastError: result.message,
+          nextAttemptAt: null,
+          conflict: { code: result.code, message: result.message },
+        };
+        await options.queue.update(conflicted);
+        report.conflicts += 1;
+        continue;
+      }
+
+      if (result.kind === "unauthorized") {
+        report.stopped = "unauthorized";
+        break;
+      }
+
+      const attempts = event.attempts + 1;
+      const waiting: QueuedItem = {
         ...event,
-        status: "conflict",
-        attempts: event.attempts + 1,
+        status: "pending",
+        attempts,
         lastError: result.message,
-        nextAttemptAt: null,
-        conflict: { code: result.code, message: result.message },
+        nextAttemptAt: now + syncBackoffMs(attempts),
       };
-      await options.queue.update(conflicted);
-      report.conflicts += 1;
-      continue;
-    }
-
-    if (result.kind === "unauthorized") {
-      report.stopped = "unauthorized";
+      await options.queue.update(waiting);
+      report.stopped = "backoff";
       break;
     }
 
-    const attempts = event.attempts + 1;
-    const waiting: QueuedLoginEvent = {
-      ...event,
-      status: "pending",
-      attempts,
-      lastError: result.message,
-      nextAttemptAt: now + syncBackoffMs(attempts),
-    };
-    await options.queue.update(waiting);
-    report.stopped = "backoff";
-    break;
+    if (event.type === "attendance") {
+      if (!options.batchApi) {
+        // Cannot sync attendance without batchApi
+        break;
+      }
+      const result = await options.batchApi.postAttendance(
+        event.batchId,
+        { capturedAt: event.capturedAt, records: event.records },
+        options.accessToken,
+      );
+
+      if (result.kind === "success") {
+        const synced: QueuedItem = {
+          ...event,
+          status: "synced",
+          syncedAt: new Date(now).toISOString(),
+          lastError: null,
+          nextAttemptAt: null,
+          server: result.items,
+        };
+        await options.queue.update(synced);
+        report.synced += 1;
+        continue;
+      }
+
+      if (result.kind === "conflict") {
+        const conflicted: QueuedItem = {
+          ...event,
+          status: "conflict",
+          attempts: event.attempts + 1,
+          lastError: result.message,
+          nextAttemptAt: null,
+          conflict: { code: result.code, message: result.message },
+        };
+        await options.queue.update(conflicted);
+        report.conflicts += 1;
+        continue;
+      }
+
+      if (result.kind === "unauthorized") {
+        report.stopped = "unauthorized";
+        break;
+      }
+
+      const attempts = event.attempts + 1;
+      const waiting: QueuedItem = {
+        ...event,
+        status: "pending",
+        attempts,
+        lastError: result.message,
+        nextAttemptAt: now + syncBackoffMs(attempts),
+      };
+      await options.queue.update(waiting);
+      report.stopped = "backoff";
+      break;
+    }
+
+    if (event.type === "checklist") {
+      if (!options.batchApi) {
+        break;
+      }
+      const result = await options.batchApi.postChecklist(
+        event.batchId,
+        {
+          clientEventId: event.clientEventId,
+          capturedAt: event.capturedAt,
+          items: event.items,
+          completeAssessment: event.completeAssessment,
+        },
+        options.accessToken,
+      );
+
+      if (result.kind === "success") {
+        const synced: QueuedItem = {
+          ...event,
+          status: "synced",
+          syncedAt: new Date(now).toISOString(),
+          lastError: null,
+          nextAttemptAt: null,
+          server: result.checklist,
+        };
+        await options.queue.update(synced);
+        report.synced += 1;
+        continue;
+      }
+
+      if (result.kind === "conflict") {
+        const conflicted: QueuedItem = {
+          ...event,
+          status: "conflict",
+          attempts: event.attempts + 1,
+          lastError: result.message,
+          nextAttemptAt: null,
+          conflict: { code: result.code, message: result.message },
+        };
+        await options.queue.update(conflicted);
+        report.conflicts += 1;
+        continue;
+      }
+
+      if (result.kind === "unauthorized") {
+        report.stopped = "unauthorized";
+        break;
+      }
+
+      const attempts = event.attempts + 1;
+      const waiting: QueuedItem = {
+        ...event,
+        status: "pending",
+        attempts,
+        lastError: result.message,
+        nextAttemptAt: now + syncBackoffMs(attempts),
+      };
+      await options.queue.update(waiting);
+      report.stopped = "backoff";
+      break;
+    }
   }
 
   if (report.synced > 0) {
