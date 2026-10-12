@@ -17,6 +17,7 @@ import {
 } from "./batch.schemas.js";
 import { mountBatchChildReadRoutes } from "../attendance/attendance.routes.js";
 import { mountCandidateRoutes } from "../candidates/candidate.routes.js";
+import { mountResultRoutes } from "../results/result.routes.js";
 import { assignAssessor, reassignAssessor } from "./assign.service.js";
 import { createBatch, getBatch, listBatches, transitionBatch } from "./batch.service.js";
 
@@ -120,3 +121,4 @@ postAssignment("reassign", reassignBodySchema, reassignAssessor);
 
 mountCandidateRoutes(batchesRouter);
 mountBatchChildReadRoutes(batchesRouter);
+mountResultRoutes(batchesRouter);

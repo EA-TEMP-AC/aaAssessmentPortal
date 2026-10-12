@@ -36,7 +36,7 @@ Phase 1 endpoints have examples. Phase 2+ stubs without full examples.
 | `RULE_ASSESSOR_LANGUAGE` | 409 | Assessor languages omit `assessmentLanguage`, and no `aa_admin` override reason |
 | `RESULT_PASS_MARK_INVALID` | 400 | Marks vs max/pass rules |
 | `RESULT_OUTCOME_MISMATCH` | 400 | Client `outcome` ≠ server |
-| `RESULT_INCOMPLETE` | 409 | Submit missing active roster rows |
+| `RESULT_INCOMPLETE` | 409 | Submit with an active roster candidate that has no row, or a row with marks missing |
 | `EVIDENCE_REQUIRED` | 409 | Flag true (Phase 2) |
 | `REASSESS_NOT_ELIGIBLE` | 409 | Reassessment rules failed. `details.reason`: `not_published`, `window`, `outcome`, or `type`. Window is one year from the original result’s publication date (Guidelines 4.7) |
 | `CONFLICT_IDEMPOTENT` | 409 | Same `clientEventId`, different payload, path, or user |
@@ -299,17 +299,44 @@ Errors: `400 VALIDATION_ERROR` (missing reason), `409 INVALID_TRANSITION`.
 
 ### POST /batches/:id/submit-result
 
-Roles: `aa_admin`. **No body** except optional soft-SLA:
+Owned by **B-05**. Roles: `aa_admin`. **No body** except optional soft-SLA:
 
 ```json
 { "lateReason": "Marks verification with TP took extra day" }
 ```
 
-Requires `results.status=draft` with a row per **active** candidate → else `RESULT_INCOMPLETE`. Batch → `result_submitted`; result → `submitted`.
+Unknown keys are `400 VALIDATION_ERROR`. The server recomputes every outcome from the stored marks, the attendance rows, and the qualification as it is now, then moves batch `assessment_completed` → `result_submitted` and result `draft` → `submitted` in one transaction, and writes a change-log row (`action: "submit"`, with any row whose outcome changed on recompute).
 
-### POST /batches/:id/validate / publish / dispute / resolve-dispute
+Response `200`: the result object (see `PUT /batches/:id/results`) with `status: "submitted"`, `submittedAt`, `submittedBy`, plus `batchStatus` and `batchStatusVersion`.
 
-Owned by **B-05**. AB validate/publish; pre-publication dispute/resolve (see SCHEMA).
+| Check, in this order | Failure |
+|---|---|
+| Role is `aa_admin` | `403 FORBIDDEN` |
+| Batch exists | `404 NOT_FOUND` |
+| Batch status is `assessment_completed` | `409 INVALID_TRANSITION` |
+| A draft exists, every **active** roster candidate has a row, and every row has an outcome | `409 RESULT_INCOMPLETE` with `details.missingCandidates` (no row) and `details.incompleteMarks` (row with marks still missing), both arrays of candidate ids |
+| Now is on or before `resultDueAt`, or `lateReason` is sent | `409 SLA_RESULT_EXPIRED` |
+
+A late submit with `lateReason` adds `result` to `sla.breached`, appends `sla.lateActions`, and writes audit `sla_late_submit` (`meta.reason`, `meta.key: "result"`). A deactivated roster row is not required.
+
+**Audit.** `batch.submit-result` (batch status before and after) and `result.submit` (result header before and after, no rows).
+
+### POST /batches/:id/validate, POST /batches/:id/publish
+
+Owned by **B-05**. Roles: `ab_reviewer`, and only when the batch `abId` equals the reviewer's `abId`. Any other role, a reviewer of another awarding body, and a reviewer with no `abId` are `403 FORBIDDEN`.
+
+Request: optional `{ "reason": "Checked against the marks sheet" }` (1–2000 characters), stored on the change-log row. Unknown keys are `400`.
+
+- `validate`: batch `result_submitted` → `ab_validated`; result `submitted` → `validated`; sets `validatedAt`, `validatedBy`.
+- `publish`: batch `ab_validated` → `published`; result `validated` → `published`; sets `publishedAt`, `publishedBy`. `publishedAt` is the reassessment window anchor (Guidelines 4.7, SCHEMA §4.2, B-09).
+
+Response `200`: the result object plus `batchStatus` and `batchStatusVersion`. Any other batch or result status is `409 INVALID_TRANSITION` (publish before validate, a repeat call). Unknown batch is `404`. Each call is one transaction and writes a change-log row (`validate` or `publish`).
+
+**Audit.** `batch.validate` / `batch.publish` and `result.validate` / `result.publish`.
+
+### POST /batches/:id/dispute, POST /batches/:id/resolve-dispute
+
+**Not mounted (`404`).** Disputes are deferred (B-05 decision, 2026-10-12). The `disputed` status and its rows stay in SCHEMA §1.2 and the transition table for a later task; no Phase 1 call reaches them.
 
 ### POST /batches/:id/reassessments
 
@@ -632,9 +659,11 @@ Response `200` (first submission and replays alike):
 
 ## Results
 
+Owned by **B-05**. Code is in `server/src/modules/results/`.
+
 ### PUT /batches/:id/results
 
-Roles: `aa_admin`. **Only if** batch=`assessment_completed` and result=`draft` (or none yet → create draft).
+Roles: `aa_admin`. **Only if** batch=`assessment_completed` and result=`draft` (or none yet → create draft). Any other batch or result status is `409 INVALID_TRANSITION`.
 
 Request — omit `outcome`; do not send conflicting `absent`:
 ```json
@@ -648,21 +677,104 @@ Request — omit `outcome`; do not send conflicting `absent`:
       "candidateId": "66f0000000000000000000k2",
       "nos": []
     }
+  ],
+  "changeReason": "Marks sheet received from the assessor"
+}
+```
+
+- The body **replaces** the draft rows. A candidate left out of `rows` has no row afterwards. `rows` holds 0–500 rows; a `candidateId` may appear once and must be an **active** roster row on this batch.
+- `nos` holds 0–200 entries; a `nosId` may appear once and must be on the batch's qualification. `theory`, `practical`, and `viva` are numbers ≥ 0, or `null` / omitted while the mark is not known yet.
+- `absent` (boolean) and `outcome` (`Pass` | `Fail` | `Absent`) are optional and are only checked, never trusted.
+- `changeReason` (1–2000 characters) is optional and is stored on the change-log row.
+- Unknown keys are `400 VALIDATION_ERROR`.
+
+Response `200`:
+```json
+{
+  "id": "66f0000000000000000000r1",
+  "batchId": "66f0000000000000000000b1",
+  "status": "draft",
+  "rows": [
+    {
+      "candidateId": "66f0000000000000000000k1",
+      "absent": false,
+      "outcome": "Pass",
+      "nos": [{ "nosId": "NOS-01", "theory": 70, "practical": 80, "viva": 75 }]
+    },
+    { "candidateId": "66f0000000000000000000k2", "absent": true, "outcome": "Absent", "nos": [] }
+  ],
+  "submittedAt": null,
+  "submittedBy": null,
+  "validatedAt": null,
+  "validatedBy": null,
+  "publishedAt": null,
+  "publishedBy": null,
+  "createdAt": "2026-11-23T06:00:00.000Z",
+  "updatedAt": "2026-11-23T06:00:00.000Z"
+}
+```
+
+The first PUT sets `batches.resultId`. PUT never changes batch status or `statusVersion`.
+
+**Outcome (server-computed).**
+
+- **Absent.** A candidate whose attendance row has `present: false` is `Absent` (`attendanceByCandidate`, B-06c) and stores no marks. A candidate with **no** attendance row (possible after `POST /batches/:id/complete`) is `Absent` only when the row sends `absent: true`.
+- **Ceiling.** For each NOS component: the NOS `maxMarks`, else the qualification `maxMarks`. A `percent` qualification with neither is marked out of 100, so the mark is the percent. A ceiling of `0` means that component is not assessed on that NOS.
+- **Pass / Fail.** `passMarkUnit: "percent"` compares mark ÷ ceiling × 100 with `passMarks`. `"absolute"` compares the raw mark with `passMarks`. `passCriteriaMode: "nos_wise"` (also used when the qualification has none) needs every assessed component of every NOS to pass. `"overall"` sums each component over the NOS (percent: against the summed ceilings) and needs every component total to pass.
+- **`null`.** A draft row that still lacks a mark for any assessed component of any NOS has `outcome: null`. Such a row blocks submit (`RESULT_INCOMPLETE`).
+- PC-level marks are not part of this body (open Q123).
+
+| Failure | When |
+|---|---|
+| `400 VALIDATION_ERROR` with `details.rows` | `absent: true` for a candidate present in attendance; `absent: false` for one absent in attendance; marks for an absent candidate; a `candidateId` that is not an active roster row; a `nosId` not on the qualification |
+| `400 RESULT_PASS_MARK_INVALID` with `details` `{ candidateId, nosId, component, max }` | A mark above its ceiling |
+| `400 RESULT_OUTCOME_MISMATCH` with `details.rows[{ candidateId, outcome }]` (the server's value) | A sent `outcome` differs from the computed one |
+| `409 INVALID_TRANSITION` | Batch is not `assessment_completed`, or the result is not `draft` |
+
+**Change log.** One `resultChangeLogs` row (`action: "save"`) per PUT that creates the draft or changes a row. **Audit.** `result.save` with the result before and after.
+
+### GET /batches/:id/results
+
+Roles: `aa_admin`, `mis`, `assessor`, `candidate`, `tp`, `ab_reviewer`, `ncvet_viewer`, each in their batch row scope (SCHEMA §5). `proctor` and `sme` are `403`. Unknown batch is `404`; a batch outside scope is `403`. No result yet is `404`.
+
+Response `200`: the result object above. A **candidate** gets only their own row in `rows`. A `candidate` or `tp` gets the result only once it is `published`; before that the call is `404`.
+
+### GET /results/:id/change-log
+
+`aa_admin` | `ab_reviewer` | `mis`. A reviewer reads only results of batches with their own `abId` (`403` otherwise). Unknown id is `404`. Oldest first, no paging.
+
+```json
+{
+  "items": [
+    {
+      "id": "66f0000000000000000000g1",
+      "resultId": "66f0000000000000000000r1",
+      "batchId": "66f0000000000000000000b1",
+      "action": "save",
+      "fromStatus": null,
+      "toStatus": "draft",
+      "byUserId": "66f000000000000000000001",
+      "byRole": "aa_admin",
+      "reason": "Marks sheet received from the assessor",
+      "changes": [
+        {
+          "candidateId": "66f0000000000000000000k1",
+          "before": null,
+          "after": {
+            "candidateId": "66f0000000000000000000k1",
+            "absent": false,
+            "outcome": "Pass",
+            "nos": [{ "nosId": "NOS-01", "theory": 70, "practical": 80, "viva": 75 }]
+          }
+        }
+      ],
+      "createdAt": "2026-11-23T06:00:00.000Z"
+    }
   ]
 }
 ```
 
-Server sets `outcome` from marks + **attendance** (`Absent` if `present=false`). Response includes computed outcomes, `status: "draft"`.
-
-Errors: `INVALID_TRANSITION`, `RESULT_PASS_MARK_INVALID`, `RESULT_OUTCOME_MISMATCH`, `VALIDATION_ERROR` (absent conflict).
-
-### GET /batches/:id/results
-
-Scoped; **candidate** sees own row only.
-
-### GET /results/:id/change-log
-
-`aa_admin` | `ab_reviewer` | `mis`.
+`action` is `save`, `submit`, `validate`, or `publish`. `changes` lists the rows that differ (`before` is `null` for a new row, `after` is `null` for a removed one); it is empty for `validate` and `publish`. Rows are append-only.
 
 ---
 
