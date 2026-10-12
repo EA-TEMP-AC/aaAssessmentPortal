@@ -23,17 +23,27 @@ import { expoGpsCapture } from "./geo/expoLocation";
 import { recordAuthGeoEvent } from "./geo/recordAuthGeoEvent";
 import { netInfoConnectivity } from "./net/netInfoConnectivity";
 import { createEventQueue, type QueueSnapshot } from "./queue/eventQueue";
-import type { AttendanceRecordInput, ChecklistItemInput } from "./queue/types";
+import type { AttendanceRecordInput, ChecklistItemInput, LoginEventType, QueuedItem } from "./queue/types";
 import { AttendanceScreen } from "./screens/AttendanceScreen";
 import { BatchScreen } from "./screens/BatchScreen";
 import { ChecklistScreen } from "./screens/ChecklistScreen";
 import { LoginScreen } from "./screens/LoginScreen";
 import { PasswordChangeScreen } from "./screens/PasswordChangeScreen";
 import { StatusScreen } from "./screens/StatusScreen";
+import { TrackingScreen } from "./screens/TrackingScreen";
 import { asyncStorageStore } from "./storage/asyncStorageAdapter";
 import { createBatchStore } from "./storage/batchStore";
 import { secureStore } from "./storage/secureStoreAdapter";
+import { downloadAssignedBatch } from "./sync/downloadBatch";
 import { syncQueue } from "./sync/syncQueue";
+import {
+  batchIdForAuthEvent,
+  describeGps,
+  isTrackingRole,
+  recordTrackingEvent,
+  trackingHistory,
+  trackingWindow,
+} from "./tracking/tracking";
 
 const EMPTY_SNAPSHOT: QueueSnapshot = {
   queueLength: 0,
@@ -43,7 +53,21 @@ const EMPTY_SNAPSHOT: QueueSnapshot = {
   retryMessage: null,
 };
 
-type Tab = "batch" | "attendance" | "checklist" | "status";
+type Tab = "batch" | "attendance" | "checklist" | "tracking" | "status";
+
+const TAB_LABELS: Record<Tab, string> = {
+  batch: "Batch",
+  attendance: "Attendance",
+  checklist: "Checklist",
+  tracking: "Tracking",
+  status: "Session",
+};
+
+/** Students and proctors record location (M-03). Attendance and checklist are the assessor's. */
+function tabsForRole(role: string): Tab[] {
+  if (isTrackingRole(role)) return ["batch", "tracking", "status"];
+  return ["batch", "attendance", "checklist", "status"];
+}
 
 function messageFrom(err: unknown, fallback: string): string {
   if (err instanceof ApiError) return err.message;
@@ -87,6 +111,9 @@ export default function FieldApp() {
   const [downloadingBatch, setDownloadingBatch] = useState(false);
   const [savingAttendance, setSavingAttendance] = useState(false);
   const [savingChecklist, setSavingChecklist] = useState(false);
+  const [queueItems, setQueueItems] = useState<QueuedItem[]>([]);
+  const [recordingTracking, setRecordingTracking] = useState<LoginEventType | null>(null);
+  const [trackingResult, setTrackingResult] = useState<string | null>(null);
 
   const onlineRef = useRef(false);
   const tail = useRef(Promise.resolve());
@@ -107,6 +134,7 @@ export default function FieldApp() {
 
   async function refreshSnapshot() {
     setSnapshot(await queue.snapshot());
+    setQueueItems(await queue.list<QueuedItem>());
   }
 
   async function loadCachedBatch() {
@@ -306,7 +334,8 @@ export default function FieldApp() {
     try {
       await enqueueWork(async () => {
         const session = await sessions.load();
-        const batchId = cachedBatch?.batch?.id ?? null;
+        // Outside the assessment dates the server rejects a batch event, so it goes without one.
+        const batchId = batchIdForAuthEvent(cachedBatch, Date.now());
         if (session && !session.user.mustChangePassword) {
           const device = await currentDevice();
           await recordAuthGeoEvent({
@@ -354,23 +383,31 @@ export default function FieldApp() {
     setBanner(null);
     try {
       await enqueueWork(async () => {
-        const batches = await batchApi.listAssignedBatches(decision.session.accessToken);
-        if (batches.length === 0) {
-          setBanner("No assigned batches found for this assessor.");
+        const role = decision.session.user.role;
+        const download = await downloadAssignedBatch({
+          api: batchApi,
+          store: batchStore,
+          role,
+          accessToken: decision.session.accessToken,
+        });
+        if (download.kind === "none") {
+          setBanner("No assigned batches found for this user.");
           return;
         }
-        const assigned = batches[0];
-        if (!assigned) {
-          setBanner("No assigned batch available.");
-          return;
-        }
-        const roster = await batchApi.getCandidates(assigned.id, decision.session.accessToken);
-        const saved = await batchStore.saveBatch(assigned, roster);
+        const saved = download.data;
+        const assigned = saved.batch;
         setCachedBatch(saved);
 
-        // Attach the batch id to queued events once the batch is downloaded
-        await queue.attachBatchId(assigned.id, decision.session.user.id);
-        setNotice(`Downloaded batch #${assigned.id.slice(-6)} and ${roster.length} candidates for offline use.`);
+        if (isTrackingRole(role)) {
+          // Tracking events carry the batch id themselves; sign-in events stay batch-free.
+          setNotice(`Downloaded batch #${assigned.id.slice(-6)} for offline use.`);
+        } else {
+          // Attach the batch id to queued events once the batch is downloaded
+          await queue.attachBatchId(assigned.id, decision.session.user.id);
+          setNotice(
+            `Downloaded batch #${assigned.id.slice(-6)} and ${saved.roster.length} candidates for offline use.`,
+          );
+        }
         await refreshSnapshot();
         await syncNow();
       });
@@ -378,6 +415,41 @@ export default function FieldApp() {
       setBanner(messageFrom(err, "Failed to download assigned batch."));
     } finally {
       setDownloadingBatch(false);
+    }
+  }
+
+  async function handleRecordTracking(type: LoginEventType) {
+    if (decision.state !== "ready") return;
+    setRecordingTracking(type);
+    setBanner(null);
+    setTrackingResult(null);
+    try {
+      await enqueueWork(async () => {
+        const device = await currentDevice();
+        const result = await recordTrackingEvent({
+          queue,
+          type,
+          role: decision.session.user.role,
+          userId: decision.session.user.id,
+          cached: cachedBatch,
+          device,
+          capture,
+          now: () => Date.now(),
+        });
+        if (result.kind === "refused") {
+          setBanner(result.message);
+          return;
+        }
+        setTrackingResult(
+          `${type === "login" ? "Login" : "Logout"} saved. ${describeGps(result.event.gps)}. It syncs when the device is online.`,
+        );
+        await refreshSnapshot();
+        await syncNow();
+      });
+    } catch (err) {
+      setBanner(messageFrom(err, "Failed to record the location event."));
+    } finally {
+      setRecordingTracking(null);
     }
   }
 
@@ -455,8 +527,37 @@ export default function FieldApp() {
   } else if (decision.state === "password_change_required") {
     body = <PasswordChangeScreen onSignOut={() => void onLogout()} signingOut={loggingOut} />;
   } else if (decision.state === "ready") {
+    const role = decision.session.user.role;
+    const tabs = tabsForRole(role);
+    const activeTab: Tab = tabs.includes(tab) ? tab : "batch";
     let screenContent;
-    if (tab === "batch") {
+    if (activeTab === "tracking" && isTrackingRole(role)) {
+      if (!cachedBatch) {
+        screenContent = (
+          <View style={styles.promptCard}>
+            <Text style={styles.promptTitle}>No Batch Downloaded</Text>
+            <Text style={styles.promptText}>Download your batch first to record your location for it.</Text>
+            <Pressable style={styles.tabSwitchButton} onPress={() => setTab("batch")}>
+              <Text style={styles.tabSwitchButtonText}>Go to Batch Screen</Text>
+            </Pressable>
+          </View>
+        );
+      } else {
+        screenContent = (
+          <TrackingScreen
+            role={role}
+            batchData={cachedBatch}
+            online={online}
+            window={trackingWindow(cachedBatch.batch, Date.now())}
+            history={trackingHistory(queueItems, decision.session.user.id, cachedBatch.batch.id)}
+            recording={recordingTracking}
+            lastResult={trackingResult}
+            banner={banner}
+            onRecord={(type) => void handleRecordTracking(type)}
+          />
+        );
+      }
+    } else if (activeTab === "batch") {
       screenContent = (
         <BatchScreen
           batchData={cachedBatch}
@@ -467,7 +568,7 @@ export default function FieldApp() {
           banner={banner}
         />
       );
-    } else if (tab === "attendance") {
+    } else if (activeTab === "attendance") {
       if (!cachedBatch) {
         screenContent = (
           <View style={styles.promptCard}>
@@ -492,7 +593,7 @@ export default function FieldApp() {
           />
         );
       }
-    } else if (tab === "checklist") {
+    } else if (activeTab === "checklist") {
       if (!cachedBatch) {
         screenContent = (
           <View style={styles.promptCard}>
@@ -537,40 +638,20 @@ export default function FieldApp() {
         <View style={styles.contentArea}>{screenContent}</View>
         {/* Bottom Tab Bar */}
         <View style={styles.tabBar}>
-          <Pressable
-            style={[styles.tabItem, tab === "batch" && styles.tabActive]}
-            onPress={() => setTab("batch")}
-            accessibilityRole="tab"
-            accessibilityLabel="Batch"
-          >
-            <Text style={[styles.tabText, tab === "batch" && styles.tabTextActive]}>Batch</Text>
-          </Pressable>
-          <Pressable
-            style={[styles.tabItem, tab === "attendance" && styles.tabActive]}
-            onPress={() => setTab("attendance")}
-            accessibilityRole="tab"
-            accessibilityLabel="Attendance"
-          >
-            <Text style={[styles.tabText, tab === "attendance" && styles.tabTextActive]}>Attendance</Text>
-          </Pressable>
-          <Pressable
-            style={[styles.tabItem, tab === "checklist" && styles.tabActive]}
-            onPress={() => setTab("checklist")}
-            accessibilityRole="tab"
-            accessibilityLabel="Checklist"
-          >
-            <Text style={[styles.tabText, tab === "checklist" && styles.tabTextActive]}>Checklist</Text>
-          </Pressable>
-          <Pressable
-            style={[styles.tabItem, tab === "status" && styles.tabActive]}
-            onPress={() => setTab("status")}
-            accessibilityRole="tab"
-            accessibilityLabel="Session"
-          >
-            <Text style={[styles.tabText, tab === "status" && styles.tabTextActive]}>
-              Session {snapshot.queueLength > 0 ? `(${snapshot.queueLength})` : ""}
-            </Text>
-          </Pressable>
+          {tabs.map((item) => (
+            <Pressable
+              key={item}
+              style={[styles.tabItem, activeTab === item && styles.tabActive]}
+              onPress={() => setTab(item)}
+              accessibilityRole="tab"
+              accessibilityLabel={TAB_LABELS[item]}
+            >
+              <Text style={[styles.tabText, activeTab === item && styles.tabTextActive]}>
+                {TAB_LABELS[item]}
+                {item === "status" && snapshot.queueLength > 0 ? ` (${snapshot.queueLength})` : ""}
+              </Text>
+            </Pressable>
+          ))}
         </View>
       </View>
     );
