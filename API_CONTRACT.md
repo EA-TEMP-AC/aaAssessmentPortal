@@ -334,6 +334,32 @@ Response `200`: the result object plus `batchStatus` and `batchStatusVersion`. A
 
 **Audit.** `batch.validate` / `batch.publish` and `result.validate` / `result.publish`.
 
+### POST /batches/:id/return-for-correction
+
+Owned by **B-05b** (decided 2026-10-12, Q127). Roles: `ab_reviewer`, and only when the batch `abId` equals the reviewer's `abId`. Any other role, a reviewer of another awarding body, and a reviewer with no `abId` are `403 FORBIDDEN`.
+
+```json
+{ "reason": "NOS-02 theory marks do not match the marks sheet" }
+```
+
+`reason` is required (1–2000 characters after trimming). A missing or blank reason and unknown keys are `400 VALIDATION_ERROR`.
+
+Moves batch `result_submitted` or `ab_validated` → `assessment_completed`, and result `submitted` or `validated` → `draft`, in one transaction. `statusVersion` increments. The rows and their outcomes are kept. `submittedAt`, `submittedBy`, `validatedAt`, and `validatedBy` are set to `null`. `aa_admin` can then `PUT /batches/:id/results` and `POST /batches/:id/submit-result` again; the usual submit checks apply, including the soft SLA on the stored `resultDueAt`.
+
+Response `200`: the result object with `status: "draft"`, plus `batchStatus: "assessment_completed"` and `batchStatusVersion`.
+
+| Check, in this order | Failure |
+|---|---|
+| Role is `ab_reviewer` | `403 FORBIDDEN` |
+| Body has a `reason` | `400 VALIDATION_ERROR` |
+| Batch exists | `404 NOT_FOUND` |
+| Batch `abId` is the reviewer's `abId` | `403 FORBIDDEN` |
+| Batch status is `result_submitted` or `ab_validated`, and the result status matches it | `409 INVALID_TRANSITION` |
+
+A `published` result cannot be returned (`409 INVALID_TRANSITION`). So are a draft and a repeat call.
+
+**Change log.** One row: `action: "return"`, `fromStatus` `submitted` or `validated`, `toStatus: "draft"`, the `reason`, and empty `changes`. **Audit.** `batch.return-for-correction` (batch status before and after) and `result.return` (result header before and after, no rows), both with `meta.reason`.
+
 ### POST /batches/:id/dispute, POST /batches/:id/resolve-dispute
 
 **Not mounted (`404`).** Disputes are deferred (B-05 decision, 2026-10-12). The `disputed` status and its rows stay in SCHEMA §1.2 and the transition table for a later task; no Phase 1 call reaches them.
@@ -663,7 +689,7 @@ Owned by **B-05**. Code is in `server/src/modules/results/`.
 
 ### PUT /batches/:id/results
 
-Roles: `aa_admin`. **Only if** batch=`assessment_completed` and result=`draft` (or none yet → create draft). Any other batch or result status is `409 INVALID_TRANSITION`.
+Roles: `aa_admin`. **Only if** batch=`assessment_completed` and result=`draft` (or none yet → create draft). A result returned for correction (B-05b) is a draft again. Any other batch or result status is `409 INVALID_TRANSITION`.
 
 Request — omit `outcome`; do not send conflicting `absent`:
 ```json
@@ -774,7 +800,7 @@ Response `200`: the result object above. A **candidate** gets only their own row
 }
 ```
 
-`action` is `save`, `submit`, `validate`, or `publish`. `changes` lists the rows that differ (`before` is `null` for a new row, `after` is `null` for a removed one); it is empty for `validate` and `publish`. Rows are append-only.
+`action` is `save`, `submit`, `validate`, `publish`, or `return` (B-05b return for correction; `reason` is always set). `changes` lists the rows that differ (`before` is `null` for a new row, `after` is `null` for a removed one); it is empty for `validate`, `publish`, and `return`. Rows are append-only.
 
 ---
 

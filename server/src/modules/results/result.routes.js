@@ -12,12 +12,14 @@ import { rolesForAction } from "../batches/batch-transitions.js";
 import {
   idParamSchema,
   resultsBodySchema,
+  returnForCorrectionBodySchema,
   reviewBodySchema,
   submitResultBodySchema,
 } from "./result.schemas.js";
 import {
   getResults,
   listChangeLog,
+  returnForCorrection,
   reviewResult,
   saveResults,
   submitResult,
@@ -39,6 +41,7 @@ function postResultMove(router, action, schema, handler) {
         batchId: id,
         before: saved.before,
         after: saved.after,
+        ...(saved.meta ? { meta: saved.meta } : {}),
       };
       await res.status(200).json(saved.result);
     }),
@@ -87,6 +90,12 @@ export function mountResultRoutes(router) {
   );
   postResultMove(router, "publish", reviewBodySchema, (user, id, body, context) =>
     reviewResult(user, id, "publish", body, context),
+  );
+  postResultMove(
+    router,
+    "return-for-correction",
+    returnForCorrectionBodySchema,
+    returnForCorrection,
   );
 }
 

@@ -38,6 +38,12 @@ const RESULT_MOVES = Object.freeze({
   publish: Object.freeze({ from: "validated", to: "published", log: "publish" }),
 });
 
+/** Batch status → the result status that return-for-correction sends back to `draft`. */
+const RETURNABLE_RESULT_STATUS = Object.freeze({
+  result_submitted: "submitted",
+  ab_validated: "validated",
+});
+
 function iso(value) {
   return value ? new Date(value).toISOString() : null;
 }
@@ -293,8 +299,17 @@ function assertBatchScopeForReview(user, batch) {
  * one transaction. Both documents use compare-and-set, so a raced call is
  * `409 INVALID_TRANSITION` and nothing is stored.
  */
-async function moveResult({ user, batch, result, action, next, resultSet, batchUpdate, log }) {
-  const move = RESULT_MOVES[action];
+async function moveResult({
+  user,
+  batch,
+  result,
+  action,
+  move = RESULT_MOVES[action],
+  next,
+  resultSet,
+  batchUpdate,
+  log,
+}) {
   return withTransaction(async (session) => {
     const updated = await Result.findOneAndUpdate(
       { _id: result._id, status: move.from, updatedAt: result.updatedAt },
@@ -330,17 +345,18 @@ async function moveResult({ user, batch, result, action, next, resultSet, batchU
   });
 }
 
-async function auditMove({ user, batch, before, after, action, ip }) {
+async function auditMove({ user, batch, before, after, action, log, meta, ip }) {
   await recordAudit({
     actorId: user._id,
     actorRole: user.role,
-    action: `result.${RESULT_MOVES[action].log}`,
+    action: `result.${log ?? RESULT_MOVES[action].log}`,
     entity: "result",
     entityId: String(after._id),
     abId: batch.abId,
     batchId: batch._id,
     before: resultHeader(before),
     after: resultHeader(after),
+    ...(meta ? { meta } : {}),
     ip,
   });
 }
@@ -480,6 +496,57 @@ export async function reviewResult(user, batchId, action, body = {}, context = {
 
   await auditMove({ user, batch, before: result, after: saved.result, action, ip: context.ip });
   return presentMove(batch, saved);
+}
+
+/**
+ * POST /batches/:id/return-for-correction. The awarding body reviewer of the
+ * batch's own `abId` sends a submitted or validated result back: the batch
+ * returns to `assessment_completed` and the result to `draft`, so `aa_admin`
+ * can PUT and submit again. A published result cannot be returned. The marks
+ * are kept; the submit and validate stamps are cleared.
+ * @param {object} user
+ * @param {string} batchId
+ * @param {{ reason: string }} body
+ * @param {{ ip?: string }} [context]
+ */
+export async function returnForCorrection(user, batchId, body, context = {}) {
+  const action = "return-for-correction";
+  if (!rolesForAction(action).includes(user?.role)) throw forbidden();
+  const batch = await Batch.findById(batchId).lean();
+  if (!batch) throw notFound();
+  assertBatchScopeForReview(user, batch);
+  const next = resolveTransition(user.role, batch.status, action);
+  if (!next) throw invalidTransition();
+
+  const result = await Result.findOne({ batchId: batch._id }).lean();
+  if (!result || result.status !== RETURNABLE_RESULT_STATUS[batch.status]) {
+    throw invalidTransition();
+  }
+
+  const saved = await moveResult({
+    user,
+    batch,
+    result,
+    action,
+    move: { from: result.status, to: "draft", log: "return" },
+    next,
+    resultSet: { submittedAt: null, submittedBy: null, validatedAt: null, validatedBy: null },
+    batchUpdate: {},
+    log: { reason: body.reason },
+  });
+
+  const meta = { reason: body.reason };
+  await auditMove({
+    user,
+    batch,
+    before: result,
+    after: saved.result,
+    action,
+    log: "return",
+    meta,
+    ip: context.ip,
+  });
+  return { ...presentMove(batch, saved), meta };
 }
 
 /**

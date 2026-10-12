@@ -60,3 +60,6 @@ export const resultsBodySchema = z
 export const submitResultBodySchema = z.object({ lateReason: reasonSchema.optional() }).strict();
 
 export const reviewBodySchema = z.object({ reason: reasonSchema.optional() }).strict();
+
+/** POST /batches/:id/return-for-correction. The reason is required. */
+export const returnForCorrectionBodySchema = z.object({ reason: reasonSchema }).strict();

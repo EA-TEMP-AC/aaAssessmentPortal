@@ -24,6 +24,8 @@ const EXPECTED = [
   ["cancel", "assessment_completed", "cancelled", ["aa_admin"]],
   ["validate", "result_submitted", "ab_validated", ["ab_reviewer"]],
   ["publish", "ab_validated", "published", ["ab_reviewer"]],
+  ["return-for-correction", "result_submitted", "assessment_completed", ["ab_reviewer"]],
+  ["return-for-correction", "ab_validated", "assessment_completed", ["ab_reviewer"]],
   ["dispute", "result_submitted", "disputed", ["aa_admin", "ab_reviewer"]],
   ["dispute", "ab_validated", "disputed", ["aa_admin", "ab_reviewer"]],
   ["resolve-dispute", "disputed", "result_submitted", ["aa_admin", "ab_reviewer"]],
@@ -66,6 +68,7 @@ describe("batch transition table", () => {
     expect(rolesForAction("checklist")).toEqual(["assessor"]);
     expect(rolesForAction("validate")).toEqual(["ab_reviewer"]);
     expect(rolesForAction("publish")).toEqual(["ab_reviewer"]);
+    expect(rolesForAction("return-for-correction")).toEqual(["ab_reviewer"]);
     expect(rolesForAction("dispute")).toEqual(["aa_admin", "ab_reviewer"]);
     expect(rolesForAction("resolve-dispute")).toEqual(["aa_admin", "ab_reviewer"]);
     expect(rolesForAction("not-an-action")).toEqual([]);
@@ -100,6 +103,8 @@ describe("batch transition table", () => {
         action: "resolve-dispute",
       }),
     ).toBe(true);
+    expect(resolveTransition("ab_reviewer", "published", "return-for-correction")).toBeNull();
+    expect(resolveTransition("aa_admin", "result_submitted", "return-for-correction")).toBeNull();
     expect(resolveTransition("aa_admin", "accepted", "accept")).toBeNull();
     expect(resolveTransition("tp", "allocated", "cancel")).toBeNull();
   });

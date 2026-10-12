@@ -625,6 +625,240 @@ describe("results", () => {
     });
   });
 
+  describe("POST /batches/:id/return-for-correction", () => {
+    const reason = "NOS-02 theory marks do not match the marks sheet";
+
+    it("returns a submitted result to draft and the batch to assessment_completed", async () => {
+      const w = await world();
+      const admin = await sessionFor("aa_admin");
+      const reviewer = await sessionFor("ab_reviewer", { abId: w.ab._id });
+      await advance(w, admin, reviewer, "submitted");
+      const since = oid();
+
+      const res = await post(reviewer.token, w.batch._id, "return-for-correction", { reason });
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      expect(res.body.status).toBe("draft");
+      expect(res.body.batchStatus).toBe("assessment_completed");
+      expect(res.body.batchStatusVersion).toBe(7);
+      expect(res.body.submittedAt).toBeNull();
+      expect(res.body.submittedBy).toBeNull();
+      // The marks are kept for the correction.
+      expect(outcomes(res.body)).toEqual({
+        [w.asha._id]: "Pass",
+        [w.bala._id]: "Absent",
+        [w.chitra._id]: "Fail",
+      });
+
+      const batch = await Batch.findById(w.batch._id).lean();
+      expect(batch.status).toBe("assessment_completed");
+      expect(String(batch.resultId)).toBe(res.body.id);
+      expect((await Result.findOne({}).lean()).status).toBe("draft");
+
+      const log = await ResultChangeLog.findOne({ action: "return" }).lean();
+      expect(log).toMatchObject({
+        fromStatus: "submitted",
+        toStatus: "draft",
+        byRole: "ab_reviewer",
+        reason,
+        changes: [],
+      });
+      expect(String(log.byUserId)).toBe(reviewer.userId);
+
+      const audits = await AuditLog.find({ _id: { $gt: since } }).lean();
+      expect(audits.map((row) => row.action).sort()).toEqual([
+        "batch.return-for-correction",
+        "result.return",
+      ]);
+      for (const row of audits) {
+        expect(row.meta.reason).toBe(reason);
+        expect(row.actorRole).toBe("ab_reviewer");
+        expect(String(row.batchId)).toBe(String(w.batch._id));
+        expect(String(row.abId)).toBe(String(w.ab._id));
+      }
+      const move = audits.find((row) => row.action === "batch.return-for-correction");
+      expect(move.before.status).toBe("result_submitted");
+      expect(move.after).toMatchObject({ status: "assessment_completed", resultStatus: "draft" });
+      const header = audits.find((row) => row.action === "result.return");
+      expect(header.before.status).toBe("submitted");
+      expect(header.after.status).toBe("draft");
+
+      // Nothing left to return.
+      expectError(
+        await post(reviewer.token, w.batch._id, "return-for-correction", { reason }),
+        409,
+        "INVALID_TRANSITION",
+      );
+    });
+
+    it("returns a validated result and clears the validate stamps", async () => {
+      const w = await world();
+      const admin = await sessionFor("aa_admin");
+      const reviewer = await sessionFor("ab_reviewer", { abId: w.ab._id });
+      await advance(w, admin, reviewer, "validated");
+
+      const res = await post(reviewer.token, w.batch._id, "return-for-correction", { reason });
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      expect(res.body).toMatchObject({
+        status: "draft",
+        batchStatus: "assessment_completed",
+        batchStatusVersion: 8,
+        submittedAt: null,
+        submittedBy: null,
+        validatedAt: null,
+        validatedBy: null,
+        publishedAt: null,
+      });
+      const log = await ResultChangeLog.findOne({ action: "return" }).lean();
+      expect(log).toMatchObject({ fromStatus: "validated", toStatus: "draft", reason });
+      expect((await Batch.findById(w.batch._id).lean()).status).toBe("assessment_completed");
+    });
+
+    it("denies other roles and a reviewer of another awarding body", async () => {
+      const w = await world();
+      const admin = await sessionFor("aa_admin");
+      const reviewer = await sessionFor("ab_reviewer", { abId: w.ab._id });
+      const other = await sessionFor("ab_reviewer", { abId: oid() }, "other-ab@aa.example");
+      const unlinked = await sessionFor("ab_reviewer", {}, "no-ab@aa.example");
+      const mis = await sessionFor("mis");
+      const assessor = await sessionFor("assessor", { linkedProfileId: w.assessorId });
+      await advance(w, admin, reviewer, "submitted");
+
+      for (const session of [admin, mis, assessor, other, unlinked]) {
+        expectError(
+          await post(session.token, w.batch._id, "return-for-correction", { reason }),
+          403,
+          "FORBIDDEN",
+        );
+      }
+      expect((await Result.findOne({}).lean()).status).toBe("submitted");
+      expect((await Batch.findById(w.batch._id).lean()).status).toBe("result_submitted");
+      expect(await ResultChangeLog.countDocuments({ action: "return" })).toBe(0);
+      expectError(
+        await post(reviewer.token, oid(), "return-for-correction", { reason }),
+        404,
+        "NOT_FOUND",
+      );
+    });
+
+    it("requires a reason", async () => {
+      const w = await world();
+      const admin = await sessionFor("aa_admin");
+      const reviewer = await sessionFor("ab_reviewer", { abId: w.ab._id });
+      await advance(w, admin, reviewer, "submitted");
+
+      for (const body of [{}, { reason: "" }, { reason: "   " }, { reason, extra: true }]) {
+        expectError(
+          await post(reviewer.token, w.batch._id, "return-for-correction", body),
+          400,
+          "VALIDATION_ERROR",
+        );
+      }
+      expect((await Result.findOne({}).lean()).status).toBe("submitted");
+      expect((await Batch.findById(w.batch._id).lean()).status).toBe("result_submitted");
+    });
+
+    it("is not allowed after publish or before submit", async () => {
+      const w = await world();
+      const admin = await sessionFor("aa_admin");
+      const reviewer = await sessionFor("ab_reviewer", { abId: w.ab._id });
+
+      expect((await putResults(admin.token, w.batch._id, { rows: fullRows(w) })).status).toBe(200);
+      expectError(
+        await post(reviewer.token, w.batch._id, "return-for-correction", { reason }),
+        409,
+        "INVALID_TRANSITION",
+      );
+
+      expect((await post(admin.token, w.batch._id, "submit-result")).status).toBe(200);
+      expect((await post(reviewer.token, w.batch._id, "validate")).status).toBe(200);
+      expect((await post(reviewer.token, w.batch._id, "publish")).status).toBe(200);
+      const published = await Result.findOne({}).lean();
+
+      expectError(
+        await post(reviewer.token, w.batch._id, "return-for-correction", { reason }),
+        409,
+        "INVALID_TRANSITION",
+      );
+      const stored = await Result.findOne({}).lean();
+      expect(stored.status).toBe("published");
+      expect(stored.publishedAt).toEqual(published.publishedAt);
+      expect((await Batch.findById(w.batch._id).lean()).status).toBe("published");
+      expect(await ResultChangeLog.countDocuments({ action: "return" })).toBe(0);
+    });
+
+    it("runs the full cycle: return, edit, submit, validate, publish", async () => {
+      const w = await world();
+      const admin = await sessionFor("aa_admin");
+      const reviewer = await sessionFor("ab_reviewer", { abId: w.ab._id });
+      await advance(w, admin, reviewer, "validated");
+
+      // Marks are closed until the reviewer returns the result.
+      expectError(
+        await putResults(admin.token, w.batch._id, { rows: fullRows(w) }),
+        409,
+        "INVALID_TRANSITION",
+      );
+      expect(
+        (await post(reviewer.token, w.batch._id, "return-for-correction", { reason })).status,
+      ).toBe(200);
+
+      const corrected = fullRows(w);
+      corrected[2] = { candidateId: String(w.chitra._id), nos: pass };
+      const edited = await putResults(admin.token, w.batch._id, {
+        rows: corrected,
+        changeReason: "Corrected NOS-02 theory for Chitra",
+      });
+      expect(edited.status, JSON.stringify(edited.body)).toBe(200);
+      expect(edited.body.status).toBe("draft");
+      expect(outcomes(edited.body)[w.chitra._id]).toBe("Pass");
+
+      const submitted = await post(admin.token, w.batch._id, "submit-result");
+      expect(submitted.status, JSON.stringify(submitted.body)).toBe(200);
+      expect(submitted.body.status).toBe("submitted");
+      expect(submitted.body.submittedBy).toBe(admin.userId);
+      expect(submitted.body.validatedAt).toBeNull();
+
+      const validated = await post(reviewer.token, w.batch._id, "validate");
+      expect(validated.status, JSON.stringify(validated.body)).toBe(200);
+      const published = await post(reviewer.token, w.batch._id, "publish");
+      expect(published.status, JSON.stringify(published.body)).toBe(200);
+      expect(published.body.status).toBe("published");
+      expect(published.body.batchStatus).toBe("published");
+      // 5 → submit, validate, return, submit, validate, publish.
+      expect(published.body.batchStatusVersion).toBe(11);
+      expect(published.body.publishedAt).not.toBeNull();
+      expect(outcomes(published.body)[w.chitra._id]).toBe("Pass");
+
+      expect(await Result.countDocuments({})).toBe(1);
+      const logs = await ResultChangeLog.find({}).sort({ _id: 1 }).lean();
+      expect(logs.map((row) => row.action)).toEqual([
+        "save",
+        "submit",
+        "validate",
+        "return",
+        "save",
+        "submit",
+        "validate",
+        "publish",
+      ]);
+      expect(logs[4].fromStatus).toBe("draft");
+      expect(logs[4].changes).toHaveLength(1);
+      expect(logs[4].changes[0].before.outcome).toBe("Fail");
+      expect(logs[4].changes[0].after.outcome).toBe("Pass");
+
+      const change = await request(app)
+        .get(`/api/v1/results/${published.body.id}/change-log`)
+        .set(bearer(admin.token));
+      expect(change.body.items[3]).toMatchObject({
+        action: "return",
+        fromStatus: "validated",
+        toStatus: "draft",
+        byRole: "ab_reviewer",
+        reason,
+      });
+    });
+  });
+
   describe("GET /batches/:id/results", () => {
     it("shows a candidate only their own row, and only once published", async () => {
       const w = await world();

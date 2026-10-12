@@ -5,7 +5,13 @@ import { RESULT_STATUSES } from "./result.model.js";
  * resultChangeLogs. docs/SCHEMA.md §3.15. Append-only: no update or delete.
  * One row per result write. `changes` holds the rows that differ, before and after.
  */
-export const RESULT_CHANGE_ACTIONS = Object.freeze(["save", "submit", "validate", "publish"]);
+export const RESULT_CHANGE_ACTIONS = Object.freeze([
+  "save",
+  "submit",
+  "validate",
+  "publish",
+  "return",
+]);
 
 const changeSchema = new mongoose.Schema(
   {

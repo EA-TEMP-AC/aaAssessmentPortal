@@ -8,6 +8,8 @@
  * B-06c mounts checklist (modules/attendance): the assigned assessor's
  * completing checklist moves in_progress to assessment_completed.
  * B-05 mounts submit-result, validate, and publish (modules/results).
+ * B-05b mounts return-for-correction (modules/results): the awarding body
+ * reviewer sends a submitted or validated result back to assessment_completed.
  * dispute and resolve-dispute stay in the table and are not registered:
  * disputes are deferred.
  */
@@ -58,6 +60,8 @@ export const BATCH_TRANSITIONS = Object.freeze([
   transition("cancel", "assessment_completed", "cancelled", ["aa_admin"]),
   transition("validate", "result_submitted", "ab_validated", ["ab_reviewer"]),
   transition("publish", "ab_validated", "published", ["ab_reviewer"]),
+  transition("return-for-correction", "result_submitted", "assessment_completed", ["ab_reviewer"]),
+  transition("return-for-correction", "ab_validated", "assessment_completed", ["ab_reviewer"]),
   transition("dispute", "result_submitted", "disputed", ["aa_admin", "ab_reviewer"]),
   transition("dispute", "ab_validated", "disputed", ["aa_admin", "ab_reviewer"]),
   transition("resolve-dispute", "disputed", "result_submitted", ["aa_admin", "ab_reviewer"]),
