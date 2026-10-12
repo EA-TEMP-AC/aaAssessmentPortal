@@ -32,6 +32,7 @@ type RequestOptions = {
   auth?: boolean;
   retryOn401?: boolean;
   signal?: AbortSignal;
+  headers?: Record<string, string> | Headers;
 };
 
 let unauthorizedHandler: () => void = () => {};
@@ -114,9 +115,19 @@ export async function apiRequestResult<T>(
 }
 
 async function performRequest<T>(path: string, options: RequestOptions): Promise<{ status: number; body: T }> {
-  const headers = new Headers();
+  const headers = new Headers(options.headers);
+  let requestBody: BodyInit | undefined;
   if (options.body !== undefined) {
-    headers.set("Content-Type", "application/json");
+    if (typeof FormData !== "undefined" && options.body instanceof FormData) {
+      requestBody = options.body;
+    } else if (typeof options.body === "string" && headers.has("Content-Type")) {
+      requestBody = options.body;
+    } else {
+      if (!headers.has("Content-Type")) {
+        headers.set("Content-Type", "application/json");
+      }
+      requestBody = JSON.stringify(options.body);
+    }
   }
   if (options.auth !== false) {
     const token = getAccessToken();
@@ -127,7 +138,7 @@ async function performRequest<T>(path: string, options: RequestOptions): Promise
   const response = await fetch(`${API_BASE_URL}${normalizedPath}`, {
     method: options.method ?? "GET",
     headers,
-    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+    body: requestBody,
     signal: options.signal,
   });
 

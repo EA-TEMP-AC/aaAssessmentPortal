@@ -37,6 +37,7 @@ function defaultListHandler(url: URL, current = batchRecord()) {
   if (url.pathname.endsWith("/batches") && !url.pathname.includes(IDS.batch)) {
     return jsonResponse(200, listBody([current]));
   }
+  if (url.pathname.endsWith("/candidates")) return jsonResponse(200, { items: [] });
   if (url.pathname.endsWith(`/batches/${IDS.batch}`)) return jsonResponse(200, current);
   if (url.pathname.endsWith("/assessors/available")) return jsonResponse(200, { items: [assessorItem()] });
   if (url.pathname.endsWith("/proctors")) return jsonResponse(200, { page: 1, pageSize: 100, total: 1, items: [proctorItem()] });
