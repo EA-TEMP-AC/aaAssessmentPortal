@@ -5,6 +5,7 @@ import {
   BATCH_ROLES,
   MASTER_DATA_ROLES,
   RECOGNITION_ROLES,
+  REGISTRY_ROLES,
   RESULTS_ROLES,
   USER_ADMIN_ROLES,
   WORKING_DAY_ROLES,
@@ -39,6 +40,13 @@ export const NAV_ITEMS: readonly NavItem[] = [
     to: "/users",
     description: "Create and manage accounts, including password reset.",
     roles: USER_ADMIN_ROLES,
+  },
+  {
+    id: "registry",
+    label: "Registry",
+    to: "/registry",
+    description: "Assessor and proctor registry, including qualifications, languages, and ToA validity.",
+    roles: REGISTRY_ROLES,
   },
   {
     id: "master-data",

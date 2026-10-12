@@ -91,3 +91,47 @@ export const RECOGNITION_ROLES: readonly Role[] = ["aa_admin", "mis", "ncvet_vie
 export function canWriteRecognition(role: Role): boolean {
   return role === "aa_admin" || role === "mis";
 }
+
+/**
+ * Assessor and proctor registry access.
+ * Server ASSESSOR_READ_ROLES: aa_admin, mis, assessor, ab_reviewer, ncvet_viewer
+ * Server PROCTOR_READ_ROLES: aa_admin, mis, proctor, ab_reviewer, ncvet_viewer
+ * Server MASTER_DATA_WRITE_ROLES: aa_admin, mis
+ */
+export const ASSESSOR_READ_ROLES: readonly Role[] = [
+  "aa_admin",
+  "mis",
+  "assessor",
+  "ab_reviewer",
+  "ncvet_viewer",
+];
+
+export const PROCTOR_READ_ROLES: readonly Role[] = [
+  "aa_admin",
+  "mis",
+  "proctor",
+  "ab_reviewer",
+  "ncvet_viewer",
+];
+
+export const REGISTRY_ROLES: readonly Role[] = [
+  "aa_admin",
+  "mis",
+  "assessor",
+  "proctor",
+  "ab_reviewer",
+  "ncvet_viewer",
+];
+
+export function canWriteRegistry(role: Role): boolean {
+  return role === "aa_admin" || role === "mis";
+}
+
+export function canReadAssessors(role: Role): boolean {
+  return ASSESSOR_READ_ROLES.includes(role);
+}
+
+export function canReadProctors(role: Role): boolean {
+  return PROCTOR_READ_ROLES.includes(role);
+}
+
