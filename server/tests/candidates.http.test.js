@@ -7,7 +7,7 @@ import { AaRecognition } from "../src/models/aa-recognition.model.js";
 import { Assessor } from "../src/models/assessor.model.js";
 import { AwardingBody } from "../src/models/awarding-body.model.js";
 import { Batch } from "../src/models/batch.model.js";
-import { Candidate } from "../src/models/candidate.model.js";
+import { Candidate, ensureCandidateIndexes } from "../src/models/candidate.model.js";
 import { Centre } from "../src/models/centre.model.js";
 import { Learner } from "../src/models/learner.model.js";
 import { Qualification } from "../src/models/qualification.model.js";
@@ -213,6 +213,69 @@ describe("batch candidates", () => {
       .set(bearer(admin.token))
       .send({ learnerId: first.body.learnerId });
     expectError(again, 409, "DUPLICATE_RESOURCE");
+  });
+
+  it("allows two candidates without externalRef on one batch", async () => {
+    const m = await masters();
+    const admin = await sessionFor("aa_admin");
+    const batch = await createBatch(admin.token, m);
+    const learners = await Learner.create([
+      { name: "No Ref One", active: true },
+      { name: "No Ref Two", active: true },
+    ]);
+
+    for (const learner of learners) {
+      const res = await request(app)
+        .post(`/api/v1/batches/${batch.id}/candidates`)
+        .set(bearer(admin.token))
+        .send({ learnerId: String(learner._id) });
+      expect(res.status, JSON.stringify(res.body)).toBe(201);
+      expect(res.body.externalRef).toBeNull();
+    }
+    expect(await Candidate.countDocuments({ batchId: batch.id })).toBe(2);
+  });
+
+  it("keeps externalRef unique on a batch when it is present", async () => {
+    const batchId = new mongoose.Types.ObjectId();
+    const row = (name) => ({
+      batchId,
+      learnerId: new mongoose.Types.ObjectId(),
+      name,
+      externalRef: "TP-SAME",
+    });
+    await Candidate.create(row("First"));
+    await expect(Candidate.create(row("Second"))).rejects.toMatchObject({ code: 11000 });
+    await Candidate.create({ ...row("Other batch"), batchId: new mongoose.Types.ObjectId() });
+  });
+
+  it("replaces the old sparse externalRef index on an existing database", async () => {
+    const key = { batchId: 1, externalRef: 1 };
+    const externalRefIndex = async () =>
+      (await Candidate.collection.indexes()).find(
+        (index) => JSON.stringify(index.key) === JSON.stringify(key),
+      );
+    const noRef = (name) => ({
+      batchId: new mongoose.Types.ObjectId(),
+      learnerId: new mongoose.Types.ObjectId(),
+      name,
+    });
+
+    await Candidate.collection.dropIndex("batchId_1_externalRef_1");
+    await Candidate.collection.createIndex(key, { unique: true, sparse: true });
+    const batchId = new mongoose.Types.ObjectId();
+    await Candidate.create({ ...noRef("Before"), batchId });
+    await expect(Candidate.create({ ...noRef("Blocked"), batchId })).rejects.toMatchObject({
+      code: 11000,
+    });
+
+    expect(await ensureCandidateIndexes()).toBe(true);
+    const index = await externalRefIndex();
+    expect(index.unique).toBe(true);
+    expect(index.sparse).toBeUndefined();
+    expect(index.partialFilterExpression).toEqual({ externalRef: { $type: "string" } });
+    await Candidate.create({ ...noRef("After"), batchId });
+
+    expect(await ensureCandidateIndexes()).toBe(false);
   });
 
   it("rejects Aadhaar and unknown keys", async () => {

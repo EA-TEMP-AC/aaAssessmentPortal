@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import { createApp } from "./app.js";
 import { assertProductionSecrets, env } from "./config/env.js";
+import { ensureCandidateIndexes } from "./models/candidate.model.js";
 import { startSlaBreachScheduler } from "./modules/batches/sla-breach-job.js";
 import { startEmailWorker } from "./modules/email/email-worker.js";
 import { smtpIsConfigured } from "./modules/email/email-transport.js";
@@ -13,6 +14,9 @@ async function main() {
   if (env.MONGO_URI) {
     await mongoose.connect(env.MONGO_URI);
     console.log("Connected to MongoDB");
+    if (await ensureCandidateIndexes()) {
+      console.log("Replaced the candidates externalRef index");
+    }
   } else {
     console.warn("MONGO_URI not set; starting without database connection");
   }
