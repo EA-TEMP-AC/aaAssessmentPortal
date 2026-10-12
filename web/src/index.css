@@ -760,6 +760,44 @@ textarea {
   margin-top: 1rem;
 }
 
+.result-section {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #d5dbe3;
+}
+
+.result-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.result-table th[scope="row"] {
+  text-align: left;
+  min-width: 10rem;
+}
+
+.result-mark {
+  width: 5.5rem;
+}
+
+.result-mark[aria-invalid="true"] {
+  border-color: #b91c1c;
+  outline: 2px solid #b91c1c;
+}
+
+.result-absent-check {
+  font-weight: 400;
+  margin-top: 0.25rem;
+}
+
+.result-warning {
+  color: #78350f;
+  font-weight: 600;
+}
+
+.result-review {
+  margin-top: 1.5rem;
+}
 
 @media (prefers-reduced-motion: reduce) {
   * {

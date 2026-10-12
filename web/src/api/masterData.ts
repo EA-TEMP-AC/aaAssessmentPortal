@@ -498,6 +498,11 @@ export async function listQualifications(
   return parseList(body, parseQualification);
 }
 
+export async function getQualification(id: string, signal?: AbortSignal): Promise<Qualification> {
+  const body = await apiRequest<unknown>(`/qualifications/${encodeURIComponent(id)}`, { signal });
+  return parseQualification(body);
+}
+
 export async function createQualification(input: QualificationWrite): Promise<Qualification> {
   const body = await apiRequest<unknown>("/qualifications", { method: "POST", body: input });
   return parseQualification(body);

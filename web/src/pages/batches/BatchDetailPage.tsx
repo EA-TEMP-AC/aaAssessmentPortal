@@ -12,6 +12,7 @@ import { SlaTimeline } from "./SlaCountdown";
 import { StatusBadge } from "./StatusBadge";
 import { useNow } from "./useNow";
 import { CandidateRoster } from "./CandidateRoster";
+import { ResultSection } from "./ResultSection";
 
 type Banner = { id: number; message: string };
 
@@ -224,6 +225,7 @@ export function BatchDetailPage() {
               </div>
             )}
             <CandidateRoster batch={batch} role={session.user.role} />
+            <ResultSection batch={batch} role={session.user.role} />
           </>
         ) : null}
       </div>
