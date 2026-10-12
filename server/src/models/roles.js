@@ -121,3 +121,6 @@ export const CANDIDATE_READ_ROLES = Object.freeze([
   "ab_reviewer",
   "ncvet_viewer",
 ]);
+
+/** Attendance and checklist writes. docs/SCHEMA.md §5: the assigned assessor only. */
+export const ATTENDANCE_WRITE_ROLES = Object.freeze(["assessor"]);
