@@ -10,6 +10,8 @@ import {
   markProblem,
   nosColumns,
   nosColumnsFromResult,
+  canReturnForCorrection,
+  canSeeResultSection,
   reviewActionFor,
   rowInput,
   sameDraft,
@@ -148,4 +150,23 @@ it("reads RESULT_INCOMPLETE details defensively", () => {
     incompleteMarks: ["b"],
   });
   expect(incompleteDetails(null)).toEqual({ missingCandidates: [], incompleteMarks: [] });
+});
+
+it("offers return for correction only to the reviewer of a submitted or validated result", () => {
+  const result = (status: ResultRecord["status"]) => ({ status }) as ResultRecord;
+  expect(canReturnForCorrection("ab_reviewer", "result_submitted", result("submitted"))).toBe(true);
+  expect(canReturnForCorrection("ab_reviewer", "ab_validated", result("validated"))).toBe(true);
+  expect(canReturnForCorrection("ab_reviewer", "published", result("published"))).toBe(false);
+  expect(canReturnForCorrection("ab_reviewer", "assessment_completed", result("draft"))).toBe(false);
+  // A batch and result that disagree (mid-reload) offer nothing.
+  expect(canReturnForCorrection("ab_reviewer", "result_submitted", result("draft"))).toBe(false);
+  expect(canReturnForCorrection("ab_reviewer", "result_submitted", null)).toBe(false);
+  expect(canReturnForCorrection("aa_admin", "result_submitted", result("submitted"))).toBe(false);
+});
+
+it("hides the result section from candidates only", () => {
+  expect(canSeeResultSection("candidate")).toBe(false);
+  expect(canSeeResultSection("tp")).toBe(true);
+  expect(canSeeResultSection("ab_reviewer")).toBe(true);
+  expect(canSeeResultSection("proctor")).toBe(true);
 });

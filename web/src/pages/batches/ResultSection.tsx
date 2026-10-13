@@ -1,4 +1,4 @@
-import { useId, useMemo, useState } from "react";
+import { useId, useMemo, useRef, useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { BatchRecord } from "../../api/batches";
 import { listCandidates, type CandidateRecord } from "../../api/candidates";
@@ -9,6 +9,7 @@ import {
   getResults,
   listAttendance,
   publishResult,
+  returnForCorrection,
   saveResults,
   submitResult,
   validateResult,
@@ -18,10 +19,12 @@ import {
 } from "../../api/results";
 import { slaExpiredPrompt } from "../../api/ruleErrors";
 import { RESULTS_ROLES, canReadCandidates, type Role } from "../../routing/access";
+import { Dialog } from "../masterData/dialog";
 import { formatMasterDataError } from "../masterData/formatApiError";
 import { canReadMasterCollection } from "../masterDataAccess";
 import {
   canEditMarks,
+  canReturnForCorrection,
   checkRow,
   draftFromRow,
   incompleteDetails,
@@ -64,6 +67,8 @@ const REVIEW_LABELS: Record<ReviewAction, { button: string; done: string }> = {
   validate: { button: "Validate result", done: "Result validated." },
   publish: { button: "Publish result", done: "Result published." },
 };
+
+const REASON_MAX = 2000;
 
 /** candidate and tp read a result only once it is published (Q125). */
 function isPublishedOnlyRole(role: Role): boolean {
@@ -442,20 +447,102 @@ function MarksEditor({ batch, result, candidates, columns, attendance, onSaved, 
   );
 }
 
+function ReturnDialog({
+  batch,
+  onCancel,
+  onReturned,
+}: {
+  batch: BatchRecord;
+  onCancel: () => void;
+  onReturned: () => void;
+}) {
+  const reasonId = useId();
+  const errorId = useId();
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<Banner | null>(null);
+  const errorSeq = useRef(0);
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (busy) return;
+    const trimmed = reason.trim();
+    if (trimmed.length < 1 || trimmed.length > REASON_MAX) {
+      setError({ id: ++errorSeq.current, message: `Enter a reason of 1 to ${REASON_MAX} characters.` });
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await returnForCorrection(batch.id, { reason: trimmed });
+      onReturned();
+    } catch (err) {
+      setError({ id: ++errorSeq.current, message: errorMessage(err) });
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog title="Return for correction" busy={busy} onCancel={onCancel}>
+      <form noValidate onSubmit={(event) => void handleSubmit(event)}>
+        <p>
+          The result goes back to the assessment agency as a draft. The marks are kept, and the agency must submit
+          again.
+        </p>
+        {error ? (
+          <p key={error.id} id={errorId} className="form-error" role="alert">
+            {error.message}
+          </p>
+        ) : null}
+        <div className="field">
+          <label htmlFor={reasonId}>Reason</label>
+          <textarea
+            id={reasonId}
+            name="reason"
+            value={reason}
+            required
+            maxLength={REASON_MAX}
+            disabled={busy}
+            aria-invalid={error ? true : undefined}
+            aria-describedby={error ? errorId : undefined}
+            onChange={(event) => {
+              setReason(event.target.value);
+              setError(null);
+            }}
+          />
+        </div>
+        <div className="dialog-actions">
+          <button type="button" data-dialog-cancel disabled={busy} onClick={onCancel}>
+            Cancel
+          </button>
+          <button type="submit" disabled={busy}>
+            Return result
+          </button>
+        </div>
+      </form>
+    </Dialog>
+  );
+}
+
 function ReviewPanel({
   batch,
   action,
+  canReturn,
   onMoved,
+  onReturned,
 }: {
   batch: BatchRecord;
   action: ReviewAction;
+  canReturn: boolean;
   onMoved: (result: ResultRecord, message: string) => void;
+  onReturned: () => void;
 }) {
   const reasonId = useId();
-  const returnHintId = useId();
+  const returnButton = useRef<HTMLButtonElement>(null);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [returning, setReturning] = useState(false);
 
   async function handleReview() {
     if (busy) return;
@@ -488,19 +575,31 @@ function ReviewPanel({
         <button type="button" disabled={busy} onClick={() => void handleReview()}>
           {REVIEW_LABELS[action].button}
         </button>
-        {/*
-          RETURN FOR CORRECTION PLACEHOLDER (B-05b).
-          The endpoint is not on this branch, so the button stays disabled and
-          calls nothing. The next task wires it to
-          POST /batches/:id/return-for-correction with a required reason.
-        */}
-        <button type="button" className="button-quiet" disabled aria-describedby={returnHintId}>
-          Return for correction
-        </button>
+        {canReturn ? (
+          <button
+            ref={returnButton}
+            type="button"
+            className="button-quiet"
+            disabled={busy}
+            onClick={() => setReturning(true)}
+          >
+            Return for correction
+          </button>
+        ) : null}
       </div>
-      <p id={returnHintId} className="field-hint">
-        Return for correction is not available yet. It will be added in a later update.
-      </p>
+      {returning ? (
+        <ReturnDialog
+          batch={batch}
+          onCancel={() => {
+            setReturning(false);
+            returnButton.current?.focus();
+          }}
+          onReturned={() => {
+            setReturning(false);
+            onReturned();
+          }}
+        />
+      ) : null}
     </div>
   );
 }
@@ -570,6 +669,14 @@ export function ResultSection({ batch, role }: Props) {
     if (moved) void queryClient.invalidateQueries({ queryKey: ["batches"] });
   }
 
+  /** The batch and the result both moved back, so both are read again. */
+  function handleReturned() {
+    announce("Result returned for correction.");
+    void queryClient.invalidateQueries({ queryKey: ["batch-results", batch.id] });
+    void queryClient.invalidateQueries({ queryKey: ["batch", batch.id] });
+    void queryClient.invalidateQueries({ queryKey: ["batches"] });
+  }
+
   const qualification = qualificationQuery.data;
   const columns = qualification ? nosColumns(qualification) : nosColumnsFromResult(result);
   const candidates = candidatesQuery.data?.items ?? [];
@@ -629,7 +736,9 @@ export function ResultSection({ batch, role }: Props) {
           key={review}
           batch={batch}
           action={review}
+          canReturn={canReturnForCorrection(role, batch.status, result)}
           onMoved={(next, message) => storeResult(next, message, true)}
+          onReturned={handleReturned}
         />
       ) : null}
     </>,

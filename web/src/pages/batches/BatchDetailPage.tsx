@@ -13,6 +13,7 @@ import { StatusBadge } from "./StatusBadge";
 import { useNow } from "./useNow";
 import { CandidateRoster } from "./CandidateRoster";
 import { ResultSection } from "./ResultSection";
+import { canSeeResultSection } from "./resultMarks";
 
 type Banner = { id: number; message: string };
 
@@ -225,7 +226,9 @@ export function BatchDetailPage() {
               </div>
             )}
             <CandidateRoster batch={batch} role={session.user.role} />
-            <ResultSection batch={batch} role={session.user.role} />
+            {canSeeResultSection(session.user.role) ? (
+              <ResultSection batch={batch} role={session.user.role} />
+            ) : null}
           </>
         ) : null}
       </div>
