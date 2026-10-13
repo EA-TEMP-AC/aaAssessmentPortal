@@ -1,7 +1,7 @@
 import type { DeviceInfo } from "../domain/device";
 import { MAX_CLOCK_SKEW_MS } from "../config/compliance";
 import type { GpsCapture, QueuedLoginEvent } from "../queue/types";
-import { readErrorBody, readJson } from "./http";
+import { isPermanentRejection, readErrorBody, readJson, type RejectedResult } from "./http";
 
 export type LoginEventSuccess = {
   kind: "success";
@@ -15,6 +15,7 @@ export type LoginEventSuccess = {
 export type LoginEventPostResult =
   | LoginEventSuccess
   | { kind: "conflict"; code: "CONFLICT_IDEMPOTENT"; message: string }
+  | RejectedResult
   | { kind: "retryable"; message: string }
   | { kind: "unauthorized"; message: string };
 
@@ -137,6 +138,9 @@ export function createLiveLoginEventApi(options: { baseUrl: string; fetchImpl?: 
       }
       if (response.status === 409 && error.code === "CONFLICT_IDEMPOTENT") {
         return { kind: "conflict", code: "CONFLICT_IDEMPOTENT", message: error.message };
+      }
+      if (isPermanentRejection(response.status, error.code)) {
+        return { kind: "rejected", status: response.status, code: error.code, message: error.message };
       }
       return { kind: "retryable", message: `${error.code}: ${error.message}` };
     },

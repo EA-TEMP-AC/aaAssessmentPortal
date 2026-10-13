@@ -50,6 +50,7 @@ const EMPTY_SNAPSHOT: QueueSnapshot = {
   pending: 0,
   lastSyncAt: null,
   conflicts: [],
+  parked: [],
   retryMessage: null,
 };
 
@@ -135,6 +136,16 @@ export default function FieldApp() {
   async function refreshSnapshot() {
     setSnapshot(await queue.snapshot());
     setQueueItems(await queue.list<QueuedItem>());
+  }
+
+  /** Deletes an event the server refused for good (open question 136). */
+  async function deleteParked(clientEventId: string) {
+    try {
+      await queue.removeParked(clientEventId);
+    } catch (err) {
+      setBanner(messageFrom(err, "Could not delete the event."));
+    }
+    await refreshSnapshot();
   }
 
   async function loadCachedBatch() {
@@ -629,6 +640,7 @@ export default function FieldApp() {
           banner={banner}
           loggingOut={loggingOut}
           onLogout={() => void onLogout()}
+          onDeleteParked={(clientEventId) => void deleteParked(clientEventId)}
         />
       );
     }

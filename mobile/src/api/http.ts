@@ -32,3 +32,16 @@ export function readErrorBody(payload: unknown, fallback: string): { code: strin
   }
   return { code: "UNKNOWN", message: fallback };
 }
+
+/** The server refused the request for good. Sending the same event again cannot succeed. */
+export type RejectedResult = { kind: "rejected"; status: number; code: string; message: string };
+
+/**
+ * Open question 136: 400, 403, 404, and 409 INVALID_TRANSITION are permanent.
+ * 401 (sign in again), 409 CONFLICT_IDEMPOTENT (kept as a conflict), 429, 5xx,
+ * and any other status stay with their own handling.
+ */
+export function isPermanentRejection(status: number, code: string): boolean {
+  if (status === 400 || status === 403 || status === 404) return true;
+  return status === 409 && code === "INVALID_TRANSITION";
+}

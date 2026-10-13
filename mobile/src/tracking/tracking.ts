@@ -126,14 +126,17 @@ export type TrackingHistoryRow = {
   type: LoginEventType;
   capturedAt: string;
   location: string;
-  state: "pending" | "synced" | "conflict";
-  /** Sync state in words, including a kept conflict or the last retry error. */
+  state: "pending" | "synced" | "conflict" | "parked";
+  /** Sync state in words, including a kept conflict, a server rejection, or the last retry error. */
   detail: string;
 };
 
 function syncDetail(event: QueuedLoginEvent): string {
   if (event.status === "conflict") {
     return `Conflict kept on this device: ${event.conflict?.message ?? event.lastError ?? "CONFLICT_IDEMPOTENT"}`;
+  }
+  if (event.status === "parked") {
+    return `Rejected by the server, not sent again: ${event.lastError ?? "no reason given"}`;
   }
   if (event.status === "synced") {
     const flags = [];
