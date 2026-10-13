@@ -366,18 +366,47 @@ A `published` result cannot be returned (`409 INVALID_TRANSITION`). So are a dra
 
 ### POST /batches/:id/reassessments
 
-Roles: `aa_admin` (initiator open Q22). New batch. Inherits `abId`, `qualificationId`, `type`, `mode`, `tpId`, `sector`, `ratioClass`, and `assessmentLanguage` from the parent. The request may set `assessmentLanguage`. Sets `firstAssessmentBatchId` from the root. The window is one year from the **publication** date of the original result (`publishedAt` on the root batch’s result), not from the assessment end. Guidelines 4.7. An unpublished original result is `REASSESS_NOT_ELIGIBLE` with `details.reason: "not_published"`. Recognition (§4.3) runs on this create as well.
+Owned by **B-09**. Roles: `aa_admin`, or `ab_reviewer` when the batch `abId` equals the reviewer's `abId` (Q22, decided 2026-10-13). Any other role, a reviewer of another awarding body, and a reviewer with no `abId` are `403 FORBIDDEN`. `:id` is the batch being reassessed (the parent). Guidelines 4.7; SCHEMA §4.2.
 
 ```json
 {
   "assessmentStartDate": "2027-02-01",
   "assessmentEndDate": "2027-02-01",
   "centreId": "66f0000000000000000000c1",
-  "learnerIds": ["66f0000000000000000000L2"]
+  "learnerIds": ["66f0000000000000000000L2"],
+  "assessmentLanguage": "Hindi",
+  "recognitionOverrideReason": "NCVET extension letter on file"
 }
 ```
 
-Response `201` new Batch. Errors: `REASSESS_NOT_ELIGIBLE`, `RULE_OUTSIDE_RECOGNITION`.
+- `assessmentStartDate` and `assessmentEndDate` are required (`YYYY-MM-DD`, end ≥ start).
+- `centreId` is optional and defaults to the parent's centre. It must be a centre of the parent's training partner (`400 VALIDATION_ERROR` otherwise). `state` is copied from that centre.
+- `learnerIds` is optional (1–500). When omitted, every learner whose outcome on the parent is `Fail` or `Absent` is taken.
+- `assessmentLanguage` is optional and defaults to the parent's.
+- `recognitionOverrideReason` works as on `POST /batches` (`aa_admin` only).
+- Unknown keys are `400 VALIDATION_ERROR`. `abId`, `qualificationId`, `type`, `mode`, `tpId`, `sector`, and `ratioClass` cannot be sent.
+
+Response `201`: a new Batch (the `POST /batches` shape) with `status: "allocated"`, `statusVersion: 1`, `isReassessment: true`, `reassessmentOf` = the parent id, and `firstAssessmentBatchId` = the parent's `firstAssessmentBatchId` (the root). It inherits `abId`, `qualificationId`, `type`, `mode`, `tpId`, `sector`, `ratioClass`, `assessmentLanguage`, and `accommodations` from the parent; `sector` and `ratioClass` are the parent's stored values and are not re-read from the qualification. `allocatedAt` is now and the three `sla` due instants are computed as on create. `candidateCount` is the number of roster rows copied. The parent batch is not changed.
+
+**Roster.** One `candidates` row per learner taken, copied from the parent row (`learnerId`, `name`, `externalRef`, `accommodations`), `active: true`, with `sourceOriginalCandidateId` pointing at the learner's row on the first assessment. The batch and its roster are written in one transaction.
+
+**Window.** `windowStart` is the IST calendar date of `publishedAt` on the result of the first assessment (`firstAssessmentBatchId`, not the parent when there is a chain). `windowEnd` is the same date `REASSESS_WINDOW_YEARS` (1) later; 29 February becomes 28 February. `assessmentStartDate` must satisfy `windowStart ≤ assessmentStartDate ≤ windowEnd`. `assessmentEndDate` is not checked against the window. Example: published `2026-11-25T19:00:00.000Z` is `2026-11-26` in IST, so the start may be `2026-11-26` through `2027-11-26`.
+
+| Check, in this order | Failure |
+|---|---|
+| Role is `aa_admin` or `ab_reviewer` | `403 FORBIDDEN` |
+| Body shape | `400 VALIDATION_ERROR` |
+| Parent batch exists | `404 NOT_FOUND` |
+| Reviewer's `abId` is the batch `abId` | `403 FORBIDDEN` |
+| Parent batch is `published` and its result is `published`; the first assessment's result is `published` | `409 REASSESS_NOT_ELIGIBLE`, `details: { "reason": "not_published" }` |
+| Start date inside the window | `409 REASSESS_NOT_ELIGIBLE`, `details: { "reason": "window", "windowStart": "2026-11-26", "windowEnd": "2027-11-26" }` |
+| Every named learner is `Fail` or `Absent` on the parent, and at least one learner is taken | `409 REASSESS_NOT_ELIGIBLE`, `details: { "reason": "outcome", "learnerIds": [ ... ] }` (the refused ids; empty when the parent has nobody to reassess) |
+| Centre exists, has a state, and belongs to the parent's training partner | `400 VALIDATION_ERROR` with `details.centreId` |
+| Recognition (SCHEMA §4.3), with the parent's `sector` and the centre's `state` | `409 RULE_OUTSIDE_RECOGNITION` |
+
+`details.reason: "type"` is reserved and is not returned yet (open Q140).
+
+**Audit.** `batch.reassess` on the new batch: `actorId` and `actorRole` are the initiator, `after` is the new batch, and `meta` holds `reassessmentOf`, `firstAssessmentBatchId`, `originalPublishedAt`, `windowStart`, `windowEnd`, and `learnerIds`. A recognition override also writes `recognition_override`.
 
 ### PUT /batches/:id/learner-feedback
 

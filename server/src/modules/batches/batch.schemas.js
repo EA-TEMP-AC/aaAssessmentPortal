@@ -75,6 +75,22 @@ export const assignBodySchema = z
 
 export const reassignBodySchema = assignBodySchema;
 
+/** POST /batches/:id/reassessments. Everything else is inherited from the parent batch. */
+export const reassessmentBodySchema = z
+  .object({
+    assessmentStartDate: calendarDate,
+    assessmentEndDate: calendarDate,
+    centreId: objectIdSchema.optional(),
+    learnerIds: z.array(objectIdSchema).min(1).max(500).optional(),
+    assessmentLanguage: z.string().trim().min(1).max(80).optional(),
+    recognitionOverrideReason: reasonSchema.optional(),
+  })
+  .strict()
+  .refine((body) => body.assessmentEndDate >= body.assessmentStartDate, {
+    message: "assessmentEndDate must be on or after assessmentStartDate",
+    path: ["assessmentEndDate"],
+  });
+
 export const listBatchesQuerySchema = z
   .object({
     status: z.preprocess(blankToUndefined, z.enum(BATCH_STATUSES).optional()),

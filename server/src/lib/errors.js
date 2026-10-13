@@ -103,3 +103,14 @@ export function outsideRecognition(checks) {
     checks,
   });
 }
+
+/**
+ * @param {"not_published"|"window"|"outcome"|"type"} reason
+ * @param {object} [details]
+ */
+export function reassessNotEligible(reason, details = {}) {
+  return new AppError(409, "REASSESS_NOT_ELIGIBLE", "Reassessment rules failed", {
+    reason,
+    ...details,
+  });
+}
