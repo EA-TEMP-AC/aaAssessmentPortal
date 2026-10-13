@@ -1,8 +1,14 @@
 import { Router } from "express";
 import { asyncHandler } from "../../lib/async-handler.js";
 import { AppError } from "../../lib/errors.js";
-import { login, logout, refresh } from "./auth.service.js";
-import { loginBodySchema, logoutBodySchema, refreshBodySchema } from "./auth.schemas.js";
+import { requireAuth } from "../../middleware/require-auth.js";
+import { changePassword, login, logout, refresh } from "./auth.service.js";
+import {
+  changePasswordBodySchema,
+  loginBodySchema,
+  logoutBodySchema,
+  refreshBodySchema,
+} from "./auth.schemas.js";
 import { clientIp } from "../../lib/client-ip.js";
 
 export const authRouter = Router();
@@ -69,6 +75,33 @@ authRouter.post(
           logOnFailure: true,
           meta: { device: body.device },
         };
+      }
+      throw err;
+    }
+  }),
+);
+
+authRouter.post(
+  "/change-password",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const body = changePasswordBodySchema.parse(req.body);
+    const actor = {
+      entity: "user",
+      entityId: String(req.user._id),
+      actorId: req.user._id,
+      actorRole: req.user.role,
+    };
+    try {
+      const changed = await changePassword(req.user, body);
+      // The audit middleware stores the request body with both passwords and the token as "***".
+      req.audit = { ...actor, action: "auth.password_changed", meta: changed.meta };
+      await res.status(200).json({ user: changed.user });
+    } catch (err) {
+      if (err instanceof AppError && err.code === "RATE_LIMITED") {
+        req.audit = { ...actor, action: "auth.password_change_rate_limited", logOnFailure: true };
+      } else if (err instanceof AppError && err.auditAction) {
+        req.audit = { ...actor, action: err.auditAction, logOnFailure: true };
       }
       throw err;
     }

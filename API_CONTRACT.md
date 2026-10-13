@@ -81,6 +81,47 @@ Response `200`:
 Request: `{ "refreshToken": "rt_8f3c...", "device": { "deviceId": "dev-9f3a", "platform": "android", "appVersion": "1.0.0" } }`  
 Response `200`: new tokens. `401` if revoked/expired/device mismatch.
 
+### POST /auth/change-password
+
+Owned by **B-13** (Q31). Any signed-in role, for their own password. Needs the access token.
+
+Request:
+```json
+{
+  "currentPassword": "Temporary-Pass-1",
+  "newPassword": "Battery-Staple-7",
+  "refreshToken": "rt_8f3c..."
+}
+```
+
+- `currentPassword` (1–200 characters) and `newPassword` (8–200 characters) are required. `newPassword` must differ from `currentPassword`.
+- `refreshToken` is optional: the refresh token of the session making the call. That token stays valid and every other refresh token of the user is revoked. When it is omitted, or is not an active token of this user, every refresh token of the user is revoked, including this session's.
+- Unknown keys are `400 VALIDATION_ERROR`.
+
+Response `200`:
+```json
+{
+  "user": {
+    "id": "66f000000000000000000001",
+    "role": "assessor",
+    "name": "Asha Devi",
+    "mustChangePassword": false
+  }
+}
+```
+
+The new password is stored hashed and `mustChangePassword` becomes `false`. No new tokens are issued; the access token in use keeps working until it expires. Access tokens already issued to other devices also work until they expire (`ACCESS_TOKEN_TTL_MS`), and those devices cannot refresh.
+
+| Check, in this order | Failure |
+|---|---|
+| Access token | `401 UNAUTHORIZED` |
+| Body shape | `400 VALIDATION_ERROR` |
+| Rate limit: `LOGIN_RATE_LIMIT_MAX` attempts per `LOGIN_RATE_LIMIT_WINDOW_MS`, per user. Every attempt counts, right or wrong | `429 RATE_LIMITED` |
+| `currentPassword` is the user's password | `400 VALIDATION_ERROR` with `details.currentPassword`. Not `401`, so a client does not treat it as an expired session |
+| `newPassword` differs from `currentPassword` | `400 VALIDATION_ERROR` with `details.newPassword` |
+
+**Audit.** `auth.password_changed` (entity `user`, the user as actor, `meta.revokedRefreshTokens`, `meta.keptCurrentSession`). A wrong current password writes `auth.password_change_failed` and a rate-limit block writes `auth.password_change_rate_limited`. No row holds a password, a hash, or a token: the request body is stored with those fields as `"***"`.
+
 ### POST /auth/logout
 
 Optional `{ "refreshToken": "..." }`. `204`.

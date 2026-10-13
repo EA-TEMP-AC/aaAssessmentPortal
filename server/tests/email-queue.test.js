@@ -3,6 +3,7 @@ import {
   EMAIL_MAX_ATTEMPTS,
   EMAIL_RETRY_BASE_MS,
   EMAIL_RETRY_MAX_DELAY_MS,
+  EMAIL_SENDING_STALE_MS,
   emailBackoffDelayMs,
 } from "../src/config/email.js";
 import { EmailQueue } from "../src/models/email-queue.model.js";
@@ -11,7 +12,9 @@ import {
   enqueueEmail,
   enqueueEmailSafely,
   processNextEmail,
+  reclaimStaleEmails,
 } from "../src/modules/email/email-queue.service.js";
+import { processDueEmails } from "../src/modules/email/email-worker.js";
 import {
   createSmtpTransport,
   createUnconfiguredTransport,
@@ -339,6 +342,115 @@ describe("email queue", () => {
       EmailQueue.create = original;
       spy.mockRestore();
     }
+  });
+
+  describe("stale sending jobs (Q43)", () => {
+    const claimedAt = new Date("2026-10-11T06:00:00.000Z");
+    const after = (ms) => new Date(claimedAt.getTime() + ms);
+
+    it("uses a ten-minute limit", () => {
+      expect(EMAIL_SENDING_STALE_MS).toBe(10 * 60 * 1000);
+    });
+
+    it("returns a job stuck in sending for more than 10 minutes to pending, and sends it", async () => {
+      const job = await queueJob({ nextAttemptAt: claimedAt });
+      // A worker claims the job and dies before it records a result.
+      const claimed = await claimNextEmail(claimedAt);
+      expect(claimed.status).toBe("sending");
+      const sent = [];
+      const transport = {
+        async send(mail) {
+          sent.push(mail);
+        },
+      };
+
+      // Still inside the limit: nothing is reclaimed and nothing is sent.
+      const early = after(EMAIL_SENDING_STALE_MS - 1);
+      expect(await reclaimStaleEmails(early)).toEqual({ requeued: 0, failed: 0 });
+      expect(await processDueEmails(transport, early)).toEqual([]);
+      expect((await EmailQueue.findById(job._id).lean()).status).toBe("sending");
+
+      const late = after(EMAIL_SENDING_STALE_MS + 1);
+      expect(await reclaimStaleEmails(late)).toEqual({ requeued: 1, failed: 0 });
+      const pending = await EmailQueue.findById(job._id).lean();
+      expect(pending).toMatchObject({
+        status: "pending",
+        attempts: 1,
+        lastError: "Email send interrupted (STALE_CLAIM)",
+        text: "capturedAt 2026-11-22T10:00:00.000Z",
+      });
+      expect(pending.nextAttemptAt).toEqual(late);
+
+      // A second pass has nothing left to reclaim.
+      expect(await reclaimStaleEmails(late)).toEqual({ requeued: 0, failed: 0 });
+
+      const results = await processDueEmails(transport, late);
+      expect(results).toEqual([{ claimed: true, status: "sent", id: job._id.toString() }]);
+      expect(sent).toHaveLength(1);
+      const done = await EmailQueue.findById(job._id).lean();
+      expect(done.status).toBe("sent");
+      expect(done.attempts).toBe(2);
+      expect(done.text).toBeUndefined();
+    });
+
+    it("lets the worker tick reclaim a stale job on its own", async () => {
+      const job = await queueJob({ nextAttemptAt: claimedAt });
+      await claimNextEmail(claimedAt);
+      let sends = 0;
+      const transport = {
+        async send() {
+          sends += 1;
+        },
+      };
+
+      const results = await processDueEmails(transport, after(EMAIL_SENDING_STALE_MS + 60_000));
+
+      expect(results.map((result) => result.status)).toEqual(["sent"]);
+      expect(sends).toBe(1);
+      expect((await EmailQueue.findById(job._id).lean()).status).toBe("sent");
+    });
+
+    it("fails a stale job that had already used its last attempt, and clears its text", async () => {
+      const job = await queueJob({ text: "Temporary password: Tmp-secret-value" });
+      await EmailQueue.updateOne(
+        { _id: job._id },
+        { $set: { status: "sending", attempts: EMAIL_MAX_ATTEMPTS, claimedAt } },
+      );
+
+      expect(await reclaimStaleEmails(after(EMAIL_SENDING_STALE_MS + 1))).toEqual({
+        requeued: 0,
+        failed: 1,
+      });
+
+      const failed = await EmailQueue.findById(job._id).lean();
+      expect(failed.status).toBe("failed");
+      expect(failed.lastError).toBe("Email send interrupted (STALE_CLAIM)");
+      expect(failed.text).toBeUndefined();
+    });
+
+    it("leaves pending, sent, and failed jobs alone however old they are", async () => {
+      const old = new Date("2026-01-01T00:00:00.000Z");
+      const pending = await queueJob({ subject: "pending", nextAttemptAt: after(3_600_000) });
+      const sentJob = await queueJob({ subject: "sent" });
+      const failedJob = await queueJob({ subject: "failed" });
+      await EmailQueue.updateOne({ _id: pending._id }, { $set: { claimedAt: old } });
+      await EmailQueue.updateOne(
+        { _id: sentJob._id },
+        { $set: { status: "sent", claimedAt: old } },
+      );
+      await EmailQueue.updateOne(
+        { _id: failedJob._id },
+        { $set: { status: "failed", claimedAt: old } },
+      );
+
+      expect(await reclaimStaleEmails(after(0))).toEqual({ requeued: 0, failed: 0 });
+      const statuses = await EmailQueue.find().sort({ subject: 1 }).lean();
+      expect(statuses.map((row) => [row.subject, row.status])).toEqual([
+        ["failed", "failed"],
+        ["pending", "pending"],
+        ["sent", "sent"],
+      ]);
+    });
   });
 
   it("keeps the SMTP password off the transport object", async () => {
