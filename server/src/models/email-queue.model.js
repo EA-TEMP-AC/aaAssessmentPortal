@@ -16,6 +16,8 @@ const emailQueueSchema = new mongoose.Schema(
     kind: { type: String, required: true },
     status: { type: String, required: true, enum: EMAIL_QUEUE_STATUSES, default: "pending" },
     attempts: { type: Number, required: true, default: 0 },
+    // Times the stale-`sending` reclaim has queued this job again (Q155).
+    reclaims: { type: Number, required: true, default: 0, min: 0 },
     nextAttemptAt: { type: Date, required: true },
     lastError: { type: String },
     sentAt: { type: Date },

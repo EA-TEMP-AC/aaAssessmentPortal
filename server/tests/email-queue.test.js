@@ -428,6 +428,75 @@ describe("email queue", () => {
       expect(failed.text).toBeUndefined();
     });
 
+    it("reclaims a stuck job at most twice, then fails it and clears its text (Q155)", async () => {
+      const job = await queueJob({
+        text: "Temporary password: Tmp-secret-value",
+        nextAttemptAt: claimedAt,
+      });
+      expect((await EmailQueue.findById(job._id).lean()).reclaims).toBe(0);
+
+      let now = claimedAt;
+      for (const expected of [1, 2]) {
+        const claimed = await claimNextEmail(now);
+        expect(claimed.status).toBe("sending");
+        now = new Date(now.getTime() + EMAIL_SENDING_STALE_MS + 1);
+        expect(await reclaimStaleEmails(now)).toEqual({ requeued: 1, failed: 0 });
+        const back = await EmailQueue.findById(job._id).lean();
+        expect(back).toMatchObject({ status: "pending", reclaims: expected });
+        expect(back.text).toBe("Temporary password: Tmp-secret-value");
+      }
+
+      // Claimed a third time and stuck again: no more reclaims.
+      expect((await claimNextEmail(now)).status).toBe("sending");
+      now = new Date(now.getTime() + EMAIL_SENDING_STALE_MS + 1);
+      expect(await reclaimStaleEmails(now)).toEqual({ requeued: 0, failed: 1 });
+      const failed = await EmailQueue.findById(job._id).lean();
+      expect(failed).toMatchObject({
+        status: "failed",
+        reclaims: 2,
+        attempts: 3,
+        lastError: "Email send interrupted (STALE_CLAIM)",
+      });
+      expect(failed.text).toBeUndefined();
+
+      // A failed job is never sent or reclaimed again.
+      const sent = [];
+      const transport = {
+        async send(mail) {
+          sent.push(mail);
+        },
+      };
+      expect(await processDueEmails(transport, new Date(now.getTime() + 3_600_000))).toEqual([]);
+      expect(sent).toHaveLength(0);
+    });
+
+    it("counts a job saved before reclaims existed as never reclaimed", async () => {
+      const job = await queueJob();
+      await EmailQueue.collection.updateOne(
+        { _id: job._id },
+        { $set: { status: "sending", attempts: 1, claimedAt }, $unset: { reclaims: "" } },
+      );
+      expect(await reclaimStaleEmails(after(EMAIL_SENDING_STALE_MS + 1))).toEqual({
+        requeued: 1,
+        failed: 0,
+      });
+      expect((await EmailQueue.findById(job._id).lean()).reclaims).toBe(1);
+    });
+
+    it("does not count a normal retry as a reclaim", async () => {
+      const job = await queueJob({ nextAttemptAt: claimedAt });
+      const transport = {
+        async send() {
+          throw new Error("smtp down");
+        },
+      };
+      await processDueEmails(transport, claimedAt);
+      expect(await EmailQueue.findById(job._id).lean()).toMatchObject({
+        status: "pending",
+        reclaims: 0,
+      });
+    });
+
     it("leaves pending, sent, and failed jobs alone however old they are", async () => {
       const old = new Date("2026-01-01T00:00:00.000Z");
       const pending = await queueJob({ subject: "pending", nextAttemptAt: after(3_600_000) });

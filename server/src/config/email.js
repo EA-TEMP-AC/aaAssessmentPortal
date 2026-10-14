@@ -26,6 +26,12 @@ export const EMAIL_WORKER_BATCH_LIMIT = 20;
 export const EMAIL_SENDING_STALE_MS = 600_000;
 
 /**
+ * A job may be returned to `pending` from `sending` by the stale reclaim at
+ * most this many times. The next stale claim marks it `failed`. Q155.
+ */
+export const EMAIL_MAX_RECLAIMS = 2;
+
+/**
  * Delay after a failed attempt. `attempts` is the count already recorded on the job.
  * Attempt 1 → base, attempt 2 → 2× base, then doubles until the cap.
  */

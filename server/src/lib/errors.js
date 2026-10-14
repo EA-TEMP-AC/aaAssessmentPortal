@@ -114,3 +114,16 @@ export function reassessNotEligible(reason, details = {}) {
     ...details,
   });
 }
+
+/**
+ * A learner already has a live reassessment batch from the same parent. Q144.
+ * @param {Array<{ learnerId: string, batchId: string }>} conflicts
+ */
+export function reassessAlreadyOpen(conflicts) {
+  return new AppError(
+    409,
+    "REASSESS_ALREADY_OPEN",
+    "A learner already has a live reassessment batch from this parent",
+    { reason: "already_open", conflicts },
+  );
+}

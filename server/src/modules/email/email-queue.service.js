@@ -1,5 +1,6 @@
 import {
   EMAIL_MAX_ATTEMPTS,
+  EMAIL_MAX_RECLAIMS,
   EMAIL_SENDING_STALE_MS,
   emailBackoffDelayMs,
 } from "../../config/email.js";
@@ -71,10 +72,12 @@ export async function claimNextEmail(now = new Date()) {
 const STALE_CLAIM_ERROR = "Email send interrupted (STALE_CLAIM)";
 
 /**
- * Reclaim jobs a crashed worker left in `sending` (open Q43). A job whose
+ * Reclaim jobs a crashed worker left in `sending` (open Q43, Q155). A job whose
  * claim is older than EMAIL_SENDING_STALE_MS returns to `pending` and is due
- * at once; the interrupted try stays counted in `attempts`. A job that had
- * already used its last attempt becomes `failed`, with `text` cleared.
+ * at once; the interrupted try stays counted in `attempts` and `reclaims`
+ * goes up by one. A job already reclaimed EMAIL_MAX_RECLAIMS times, or one that
+ * had used its last attempt, becomes `failed` instead, with `text` cleared.
+ * A job saved before `reclaims` existed counts as 0.
  * Safe to run from several workers: each update filters on `sending`.
  * @returns {Promise<{ requeued: number, failed: number }>}
  */
@@ -84,12 +87,22 @@ export async function reclaimStaleEmails(now = new Date()) {
     claimedAt: { $lte: new Date(now.getTime() - EMAIL_SENDING_STALE_MS) },
   };
   const failed = await EmailQueue.updateMany(
-    { ...stale, attempts: { $gte: EMAIL_MAX_ATTEMPTS } },
+    {
+      ...stale,
+      $or: [{ attempts: { $gte: EMAIL_MAX_ATTEMPTS } }, { reclaims: { $gte: EMAIL_MAX_RECLAIMS } }],
+    },
     { $set: { status: "failed", lastError: STALE_CLAIM_ERROR }, $unset: { text: "" } },
   );
   const requeued = await EmailQueue.updateMany(
-    { ...stale, attempts: { $lt: EMAIL_MAX_ATTEMPTS } },
-    { $set: { status: "pending", nextAttemptAt: now, lastError: STALE_CLAIM_ERROR } },
+    {
+      ...stale,
+      attempts: { $lt: EMAIL_MAX_ATTEMPTS },
+      reclaims: { $not: { $gte: EMAIL_MAX_RECLAIMS } },
+    },
+    {
+      $set: { status: "pending", nextAttemptAt: now, lastError: STALE_CLAIM_ERROR },
+      $inc: { reclaims: 1 },
+    },
   );
   return { requeued: requeued.modifiedCount, failed: failed.modifiedCount };
 }
