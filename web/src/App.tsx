@@ -8,6 +8,7 @@ import { NotFoundPage } from "./pages/NotFoundPage";
 import { PasswordGatePage } from "./pages/PasswordGatePage";
 import { AbQueuePage } from "./pages/AbQueuePage";
 import { AuditLogPage } from "./pages/AuditLogPage";
+import { ChangePasswordPage } from "./pages/ChangePasswordPage";
 import { MasterDataPage } from "./pages/MasterDataPage";
 import { RecognitionPage } from "./pages/RecognitionPage";
 import { RegistryPage } from "./pages/RegistryPage";
@@ -35,6 +36,7 @@ export function AppRoutes() {
           <Route path="/change-password" element={<PasswordGatePage />} />
           <Route element={<AppLayout />}>
             <Route path="/home" element={<RoleHomePage />} />
+            <Route path="/account/password" element={<ChangePasswordPage />} />
             {sections.map((item) => (
               <Route key={item.id} element={<RequireRole roles={item.accessRoles ?? item.roles} />}>
                 <Route

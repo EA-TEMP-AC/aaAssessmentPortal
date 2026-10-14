@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { logout } from "../api/auth";
 import { useSession } from "../api/session";
 import { ROLE_LABELS } from "../routing/access";
@@ -44,6 +44,7 @@ export function AppLayout() {
           {session.user.name}
           <span className="role-chip">{ROLE_LABELS[session.user.role]}</span>
         </p>
+        <Link to="/account/password">Change password</Link>
         <SignOutButton />
       </header>
       <div className="app-body">
