@@ -16,7 +16,10 @@ export type NavItem = {
   label: string;
   to: string;
   description: string;
+  /** Who sees the link in the navigation. */
   roles: readonly Role[];
+  /** Who may open the page when it is wider than the navigation. Defaults to `roles`. */
+  accessRoles?: readonly Role[];
 };
 
 export const NAV_ITEMS: readonly NavItem[] = [
@@ -33,6 +36,14 @@ export const NAV_ITEMS: readonly NavItem[] = [
     to: "/batches",
     description: "Filter batches, watch stored SLA due times, and take the actions your role and the current status allow.",
     roles: BATCH_ROLES,
+  },
+  {
+    id: "ab-queue",
+    label: "AB queue",
+    to: "/ab-queue",
+    description: "Batches with a result waiting for validation or publication.",
+    roles: ["ab_reviewer"],
+    accessRoles: ["ab_reviewer", "aa_admin", "mis"],
   },
   {
     id: "users",
