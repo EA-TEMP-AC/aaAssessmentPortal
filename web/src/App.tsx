@@ -6,6 +6,7 @@ import { AppLayout } from "./components/AppLayout";
 import { LoginPage } from "./pages/LoginPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import { PasswordGatePage } from "./pages/PasswordGatePage";
+import { AbQueuePage } from "./pages/AbQueuePage";
 import { AuditLogPage } from "./pages/AuditLogPage";
 import { MasterDataPage } from "./pages/MasterDataPage";
 import { RecognitionPage } from "./pages/RecognitionPage";
@@ -35,7 +36,7 @@ export function AppRoutes() {
           <Route element={<AppLayout />}>
             <Route path="/home" element={<RoleHomePage />} />
             {sections.map((item) => (
-              <Route key={item.id} element={<RequireRole roles={item.roles} />}>
+              <Route key={item.id} element={<RequireRole roles={item.accessRoles ?? item.roles} />}>
                 <Route
                   path={
                     item.id === "master-data"
@@ -47,7 +48,9 @@ export function AppRoutes() {
                           : item.to
                   }
                   element={
-                    item.id === "audit" ? (
+                    item.id === "ab-queue" ? (
+                      <AbQueuePage />
+                    ) : item.id === "audit" ? (
                       <AuditLogPage />
                     ) : item.id === "users" ? (
                       <UsersPage />
