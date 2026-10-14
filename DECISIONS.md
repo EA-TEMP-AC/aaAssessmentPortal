@@ -387,5 +387,11 @@
 170. **Names the reviewer cannot look up.** The batch list returns ids only. The queue names the qualification from `GET /qualifications` (first 100) and, for `aa_admin` and `mis`, the training partner from `GET /training-partners` (first 100). `ab_reviewer` cannot read training partners, so the training partner column shows the id for them, and a qualification beyond the first 100 shows its id. Should the batch list include `qualificationName` and `tpName`, or should `ab_reviewer` read training partners?
 171. **Who sees the queue.** The link is in the navigation for `ab_reviewer` only. `aa_admin` and `mis` open it by address (`/ab-queue`) and see every awarding body; the page has no action buttons for anyone. `ncvet_viewer` is sent to Home. The result actions are on the batch page, where `aa_admin` may or may not see them under F-07; F-08 did not change that. Confirm, or give `ncvet_viewer` the page too.
 
+Human decisions on 2026-10-14 (answers to Q161, Q166, Q167, Q171):
+172. **Q166 accepted.** A stuck email job is requeued twice and fails on the third stuck claim. Because a failed login mail must never block a user, aa_admin needs a "Resend credentials" action that issues a new temporary password and queues a fresh email (to be built in B-15).
+173. **Q167 changed.** A published earlier reassessment no longer blocks the learner. Only an unpublished live reassessment (not cancelled, rejected or published) blocks, so a learner who fails can be reassessed again once the earlier one is published. Still within one year of the original parent's publishedAt.
+174. **Q161 made a setting.** Default: ab_reviewer is denied assessor-payment reads. aa_admin can switch `abReviewerCanReadAssessorPayments` on later without a code change.
+175. **Q171 made a setting.** Default: ncvet_viewer does not get the AB queue. aa_admin can switch `ncvetViewerCanSeeAbQueue` on later without a code change.
+
 ## Not mandated by NCVET (TR s29), do not market as compliance features
 Specific language, DB, cloud, server architecture, API style, biometric or face-recognition tech, GPS hardware, payment gateway, CRM, help-desk software.
