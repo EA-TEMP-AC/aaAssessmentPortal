@@ -479,18 +479,24 @@ Response `200`: `{ "batchId": "...", "learnerFeedback": null }` until recorded, 
 
 ### PUT /batches/:id/assessor-payment
 
-Owned by **B-11**. Roles: write `aa_admin` | `mis`. The batch must already have `assessorId`. Does not change status.
+Owned by **B-11**. Roles: `aa_admin` | `mis`. The batch must already have `assessorId`, else `409 INVALID_TRANSITION`. Does not change batch status. One row per batch and assessor, replaced on each PUT.
 
 ```json
 {
-  "assessorId": "66f0000000000000000000a1",
   "amountDue": 4500,
   "amountPaid": 2000,
   "logisticsNote": "Rail ticket booked; boarding at the centre guest room"
 }
 ```
 
-`assessorId` must be the current or a previous assessor on this batch. Server sets `pending` to `amountDue - amountPaid`. Response `200`:
+| Field | Rule |
+|---|---|
+| `amountDue` | Required number of rupees, at least 0, at most 2 decimal places |
+| `amountPaid` | Required, same rules, and not above `amountDue` (`400 VALIDATION_ERROR`, `details.amountPaid`) |
+| `logisticsNote` | Optional, up to 2000 characters |
+| `assessorId` | Optional. Defaults to the batch's current assessor. May name a previous assessor only when that assessor already has a row on this batch; otherwise `400 VALIDATION_ERROR` |
+
+`pending` is set by the server to `amountDue - amountPaid` and is never accepted: a body that contains it is `400 VALIDATION_ERROR`. Unknown keys are `400`. Unknown batch is `404`. Response `200`:
 
 ```json
 {
@@ -500,11 +506,21 @@ Owned by **B-11**. Roles: write `aa_admin` | `mis`. The batch must already have 
   "amountDue": 4500,
   "amountPaid": 2000,
   "pending": 2500,
-  "logisticsNote": "Rail ticket booked; boarding at the centre guest room"
+  "logisticsNote": "Rail ticket booked; boarding at the centre guest room",
+  "updatedBy": "66f0000000000000000000u1",
+  "updatedAt": "2026-11-21T10:00:00.000Z"
 }
 ```
 
-`GET /batches/:id/assessor-payments` returns `{ "items": [ ... ] }` for `aa_admin`, `mis`, `ncvet_viewer`, and `ab_reviewer` (own `abId` only). Annexure IX(a) Financials sub-parameter 3 (docs/ERF.md row 19).
+`logisticsNote` is `null` when absent. **Audit:** `assessor_payment.save` on entity `assessorPayment`, with `batchId`, the batch's `abId`, and `before` (absent on first write) and `after` set to the row.
+
+### GET /assessor-payments and GET /batches/:id/assessor-payments
+
+Roles: `aa_admin`, `mis`, and `ncvet_viewer` read all rows. `assessor` reads only rows whose `assessorId` is their own `linkedProfileId`. `ab_reviewer`, `proctor`, `tp`, `candidate`, and `sme` get `403`. The first path lists across batches; the second is limited to one batch (unknown id `404`).
+
+Query: `page` (default 1), `pageSize` (default 20, max 100), `assessorId`, `pendingOnly` (`true` returns rows with `pending > 0`; `false` is the same as omitted). Unknown or malformed values are `400 VALIDATION_ERROR`. An assessor who passes another assessor's `assessorId` gets an empty page. Newest `updatedAt` first.
+
+Response `200`: `{ "page", "pageSize", "total", "items": [ <row as above> ] }`. Annexure IX(a) Financials sub-parameter 3 (docs/ERF.md row 19).
 
 ### GET|PUT /admin/recognition
 
