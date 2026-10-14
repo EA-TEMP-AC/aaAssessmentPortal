@@ -443,6 +443,8 @@ Indexes: `{ clientEventId: 1 }` unique; `{ batchId: 1, capturedAt: 1 }`; `{ acto
 
 Shape: `pending|sending|sent|failed`, attempts, nextAttemptAt. **B-08** owns worker + SMTP env (password-reset + AB login delivery). B-06 only inserts jobs.
 
+`reclaims` (number, default 0, B-14): times the stale-send reclaim has put the job back to `pending`. A job still in `sending` more than 10 minutes after `claimedAt` is returned to `pending` (due at once) while `reclaims` is below 2, and `reclaims` goes up by one. Past that, or after its last attempt, it becomes `failed` and its `text` is unset. A normal send failure and its backoff do not count as a reclaim. DECISIONS Q155.
+
 ### 3.13 `attendanceRecords` / `equipmentChecklists` (phase 1)
 
 Unchanged. Attendance `present=false` drives result `Absent`.

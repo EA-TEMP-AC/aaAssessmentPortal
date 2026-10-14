@@ -1,6 +1,12 @@
 import mongoose from "mongoose";
 import { compliance } from "../../config/compliance.js";
-import { forbidden, notFound, reassessNotEligible, validationError } from "../../lib/errors.js";
+import {
+  forbidden,
+  notFound,
+  reassessAlreadyOpen,
+  reassessNotEligible,
+  validationError,
+} from "../../lib/errors.js";
 import { withTransaction } from "../../lib/mongo-session.js";
 import { istCalendarDate } from "../../lib/working-days.js";
 import { recordAudit } from "../../middleware/audit.middleware.js";
@@ -94,11 +100,58 @@ async function eligibleRoster(parent, parentResult, learnerIds) {
   return wanted.map((id) => byLearner.get(id));
 }
 
+/** A reassessment batch in either of these statuses no longer blocks a new one. Q144. */
+const NOT_LIVE_STATUSES = Object.freeze(["cancelled", "rejected"]);
+
+/**
+ * Refuses the request when one of the roster's learners is on an active roster
+ * row of a live reassessment batch of the same parent.
+ * @throws REASSESS_ALREADY_OPEN with `details.conflicts: [{ learnerId, batchId }]`
+ */
+async function assertNoLiveReassessment(parent, roster) {
+  const live = await Batch.find({
+    reassessmentOf: parent._id,
+    status: { $nin: NOT_LIVE_STATUSES },
+  })
+    .select("_id")
+    .sort({ createdAt: 1, _id: 1 })
+    .lean();
+  if (live.length === 0) return;
+
+  const rows = await Candidate.find({
+    batchId: { $in: live.map((batch) => batch._id) },
+    learnerId: { $in: roster.map((row) => row.learnerId) },
+    active: true,
+  })
+    .select("batchId learnerId")
+    .lean();
+  if (rows.length === 0) return;
+
+  const order = new Map(live.map((batch, index) => [String(batch._id), index]));
+  const first = new Map();
+  for (const row of rows) {
+    const key = String(row.learnerId);
+    const seen = first.get(key);
+    if (!seen || order.get(String(row.batchId)) < order.get(String(seen))) {
+      first.set(key, row.batchId);
+    }
+  }
+  throw reassessAlreadyOpen(
+    roster
+      .filter((row) => first.has(String(row.learnerId)))
+      .map((row) => ({
+        learnerId: String(row.learnerId),
+        batchId: String(first.get(String(row.learnerId))),
+      })),
+  );
+}
+
 /**
  * POST /batches/:id/reassessments. docs/SCHEMA.md §4.2; Guidelines 4.7.
  * A reassessment is a new `allocated` batch, not a status of the parent.
  * Checks run in this order: parent exists, initiator, parent published,
- * window, outcome, centre, recognition.
+ * window, outcome, no live reassessment of the same learner (Q144), centre,
+ * recognition.
  * @param {object} user
  * @param {string} parentId
  * @param {object} body parsed reassessmentBodySchema
@@ -129,6 +182,7 @@ export async function createReassessment(user, parentId, body, context = {}) {
   }
 
   const roster = await eligibleRoster(parent, parentResult, body.learnerIds);
+  await assertNoLiveReassessment(parent, roster);
   const centreId = body.centreId ?? parent.centreId;
   const state = await loadCentreState(centreId, parent.tpId);
   const override = await recognitionDecision({

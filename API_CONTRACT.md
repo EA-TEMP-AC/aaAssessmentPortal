@@ -38,6 +38,7 @@ Phase 1 endpoints have examples. Phase 2+ stubs without full examples.
 | `RESULT_OUTCOME_MISMATCH` | 400 | Client `outcome` ≠ server |
 | `RESULT_INCOMPLETE` | 409 | Submit with an active roster candidate that has no row, or a row with marks missing |
 | `EVIDENCE_REQUIRED` | 409 | Flag true (Phase 2) |
+| `REASSESS_ALREADY_OPEN` | 409 | A learner being reassessed already has a live reassessment batch from the same parent. `details.conflicts` names each learner and the existing batch |
 | `REASSESS_NOT_ELIGIBLE` | 409 | Reassessment rules failed. `details.reason`: `not_published`, `window`, `outcome`, or `type`. Window is one year from the original result’s publication date (Guidelines 4.7) |
 | `CONFLICT_IDEMPOTENT` | 409 | Same `clientEventId`, different payload, path, or user |
 
@@ -442,8 +443,11 @@ Response `201`: a new Batch (the `POST /batches` shape) with `status: "allocated
 | Parent batch is `published` and its result is `published`; the first assessment's result is `published` | `409 REASSESS_NOT_ELIGIBLE`, `details: { "reason": "not_published" }` |
 | Start date inside the window | `409 REASSESS_NOT_ELIGIBLE`, `details: { "reason": "window", "windowStart": "2026-11-26", "windowEnd": "2027-11-26" }` |
 | Every named learner is `Fail` or `Absent` on the parent, and at least one learner is taken | `409 REASSESS_NOT_ELIGIBLE`, `details: { "reason": "outcome", "learnerIds": [ ... ] }` (the refused ids; empty when the parent has nobody to reassess) |
+| None of the learners taken is already on an active roster row of a live reassessment batch of the same parent (live = status not `cancelled` or `rejected`) | `409 REASSESS_ALREADY_OPEN`, `details: { "reason": "already_open", "conflicts": [ { "learnerId": "...", "batchId": "..." } ] }`. One entry per blocked learner, in roster order; `batchId` is that learner's earliest live reassessment batch |
 | Centre exists, has a state, and belongs to the parent's training partner | `400 VALIDATION_ERROR` with `details.centreId` |
 | Recognition (SCHEMA §4.3), with the parent's `sector` and the centre's `state` | `409 RULE_OUTSIDE_RECOGNITION` |
+
+A learner may be reassessed from the same parent again once the earlier reassessment batch is `cancelled` or `rejected`, or the learner was removed from its roster. The check is per learner: a request naming only learners with no live batch goes through. Only batches with the same `reassessmentOf` count; a reassessment of another parent in the chain does not.
 
 `details.reason: "type"` is reserved and is not returned yet (open Q140).
 
@@ -673,6 +677,8 @@ If `batchId` is `null`, batch lookup, assignment, status, and date-window checks
 **Status.** The first valid assessor event of `type: "login"` on an `assessor_assigned` batch moves it to `in_progress` (`statusVersion` + 1, audit `batch.login-event`). Logout, proctor, student events, and events with `batchId: null` never change batch status.
 
 **AB email.** An assessor `login` with a batch attached **enqueues** one `emailQueue` job (`kind: "assessor_login"`) to the AB's `notificationEmails`, with `capturedAt` and location (or unavailable reason) in the body, and sets `abEmailQueuedAt`. When `batchId` is `null`, no email is queued. Enqueue failure never fails this call: the response is still `200` with `abEmailQueuedAt: null`, and a replay of that event tries the enqueue again. Logout does not send mail. Worker/SMTP (B-08) delivers asynchronously. `abEmailSentAt` stays `null` (open Q107).
+
+**Stuck sends (B-14, Q155).** The worker returns a job that has been `sending` for over 10 minutes to `pending`, due at once, at most twice (`reclaims` on the job counts them). When it is stuck a third time, or had used its last attempt, it becomes `failed` and its `text` is unset. Not visible through the API.
 
 **Audit.** `loginEvent.create` or `loginEvent.replay` with the event as `after`. No mail body or recipients.
 

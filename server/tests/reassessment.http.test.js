@@ -349,6 +349,106 @@ describe("POST /batches/:id/reassessments", () => {
     });
   });
 
+  describe("a live reassessment of the same learner from the same parent (Q144)", () => {
+    async function firstReassessment(w, admin, learnerIds) {
+      const res = await reassess(admin.token, w.batch._id, {
+        ...dates("2027-02-01", "2027-02-02"),
+        ...(learnerIds ? { learnerIds: learnerIds.map(String) } : {}),
+      });
+      expect(res.status, JSON.stringify(res.body)).toBe(201);
+      return res.body.id;
+    }
+
+    it("refuses a second batch and names the existing one for each learner", async () => {
+      await recognition();
+      const w = await assessedBatch();
+      const admin = await sessionFor("aa_admin");
+      const first = await firstReassessment(w, admin);
+
+      const res = await reassess(admin.token, w.batch._id, dates("2027-03-01", "2027-03-02"));
+      expectError(res, 409, "REASSESS_ALREADY_OPEN");
+      expect(res.body.error.details.reason).toBe("already_open");
+      expect(res.body.error.details.conflicts).toEqual([
+        { learnerId: String(w.learnerIds[1]), batchId: first },
+        { learnerId: String(w.learnerIds[2]), batchId: first },
+      ]);
+      expect(await Batch.countDocuments({ reassessmentOf: w.batch._id })).toBe(1);
+    });
+
+    it("applies to the learners being added, and lets the others through", async () => {
+      await recognition();
+      const w = await assessedBatch();
+      const admin = await sessionFor("aa_admin");
+      const first = await firstReassessment(w, admin, [w.learnerIds[1]]);
+
+      const clash = await reassess(admin.token, w.batch._id, {
+        ...dates("2027-03-01"),
+        learnerIds: [String(w.learnerIds[1]), String(w.learnerIds[2])],
+      });
+      expectError(clash, 409, "REASSESS_ALREADY_OPEN");
+      expect(clash.body.error.details.conflicts).toEqual([
+        { learnerId: String(w.learnerIds[1]), batchId: first },
+      ]);
+
+      const other = await reassess(admin.token, w.batch._id, {
+        ...dates("2027-03-01"),
+        learnerIds: [String(w.learnerIds[2])],
+      });
+      expect(other.status, JSON.stringify(other.body)).toBe(201);
+    });
+
+    it("lets a learner be taken again once the earlier batch is cancelled or rejected", async () => {
+      await recognition();
+      const w = await assessedBatch();
+      const admin = await sessionFor("aa_admin");
+      for (const status of ["cancelled", "rejected"]) {
+        const id = await firstReassessment(w, admin);
+        await Batch.updateOne({ _id: id }, { $set: { status } });
+        const again = await reassess(admin.token, w.batch._id, dates("2027-03-01"));
+        expect(again.status, JSON.stringify(again.body)).toBe(201);
+        await Batch.updateOne({ _id: again.body.id }, { $set: { status: "cancelled" } });
+      }
+    });
+
+    it("keeps refusing while the earlier batch is in any later status", async () => {
+      await recognition();
+      const w = await assessedBatch();
+      const admin = await sessionFor("aa_admin");
+      const id = await firstReassessment(w, admin);
+      for (const status of ["accepted", "in_progress", "published"]) {
+        await Batch.updateOne({ _id: id }, { $set: { status } });
+        const res = await reassess(admin.token, w.batch._id, dates("2027-03-01"));
+        expectError(res, 409, "REASSESS_ALREADY_OPEN");
+      }
+    });
+
+    it("ignores a learner who was removed from the earlier batch's roster", async () => {
+      await recognition();
+      const w = await assessedBatch();
+      const admin = await sessionFor("aa_admin");
+      const first = await firstReassessment(w, admin, [w.learnerIds[1]]);
+      await Candidate.updateOne(
+        { batchId: first, learnerId: w.learnerIds[1] },
+        { $set: { active: false } },
+      );
+      const again = await reassess(admin.token, w.batch._id, {
+        ...dates("2027-03-01"),
+        learnerIds: [String(w.learnerIds[1])],
+      });
+      expect(again.status, JSON.stringify(again.body)).toBe(201);
+    });
+
+    it("does not count a reassessment of a different parent", async () => {
+      await recognition();
+      const w = await assessedBatch();
+      const other = await assessedBatch({ masters: w });
+      const admin = await sessionFor("aa_admin");
+      await firstReassessment(w, admin);
+      const res = await reassess(admin.token, other.batch._id, dates("2027-03-01"));
+      expect(res.status, JSON.stringify(res.body)).toBe(201);
+    });
+  });
+
   it("takes only the named learners and refuses one who passed", async () => {
     await recognition();
     const w = await assessedBatch();
