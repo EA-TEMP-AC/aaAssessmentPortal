@@ -1,4 +1,4 @@
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { QueueSnapshot } from "../queue/eventQueue";
 
 type Props = {
@@ -10,6 +10,8 @@ type Props = {
   banner: string | null;
   loggingOut: boolean;
   onLogout: () => void;
+  /** Deletes one parked event from this device. */
+  onDeleteParked: (clientEventId: string) => void;
 };
 
 function formatWhen(iso: string | null): string {
@@ -28,7 +30,19 @@ export function StatusScreen({
   banner,
   loggingOut,
   onLogout,
+  onDeleteParked,
 }: Props) {
+  function confirmDelete(clientEventId: string, type: string) {
+    Alert.alert(
+      "Delete this event?",
+      `The ${type} event was rejected by the server and was never stored there. Deleting removes it from this device for good.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Delete", style: "destructive", onPress: () => onDeleteParked(clientEventId) },
+      ],
+    );
+  }
+
   return (
     <ScrollView contentContainerStyle={styles.screen}>
       <Text style={styles.title}>Field session</Text>
@@ -60,6 +74,32 @@ export function StatusScreen({
             <Text key={conflict.clientEventId} style={styles.conflictItem}>
               {conflict.type} {conflict.clientEventId.slice(0, 8)} — {conflict.message}
             </Text>
+          ))}
+        </View>
+      ) : null}
+      {snapshot.parked.length > 0 ? (
+        <View style={styles.conflicts}>
+          <Text style={styles.conflictTitle}>Rejected by the server</Text>
+          <Text style={styles.parkedHint}>
+            These events were not accepted and will not be sent again. Later events keep syncing.
+          </Text>
+          {snapshot.parked.map((parked) => (
+            <View key={parked.clientEventId} style={styles.parkedItem}>
+              <Text style={styles.conflictItem}>
+                {parked.type} {parked.clientEventId.slice(0, 8)}, captured {formatWhen(parked.capturedAt)}
+              </Text>
+              <Text style={styles.conflictItem}>
+                Reason: {parked.code}: {parked.message}
+              </Text>
+              <Pressable
+                style={styles.deleteButton}
+                onPress={() => confirmDelete(parked.clientEventId, parked.type)}
+                accessibilityRole="button"
+                accessibilityLabel={`Delete rejected ${parked.type} event ${parked.clientEventId.slice(0, 8)}`}
+              >
+                <Text style={styles.deleteButtonText}>Delete</Text>
+              </Pressable>
+            </View>
           ))}
         </View>
       ) : null}
@@ -136,6 +176,32 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#8c1d18",
     marginBottom: 6,
+  },
+  parkedHint: {
+    fontSize: 13,
+    color: "#444",
+    marginBottom: 8,
+  },
+  parkedItem: {
+    borderTopWidth: 1,
+    borderTopColor: "#e5e5e0",
+    paddingTop: 8,
+    marginBottom: 8,
+  },
+  deleteButton: {
+    alignSelf: "flex-start",
+    minHeight: 44,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#8c1d18",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  deleteButtonText: {
+    color: "#8c1d18",
+    fontSize: 15,
+    fontWeight: "600",
   },
   button: {
     marginTop: 24,

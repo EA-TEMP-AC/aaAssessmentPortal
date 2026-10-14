@@ -99,7 +99,7 @@ export function TrackingScreen({
               {row.type === "login" ? "Login" : "Logout"} at {formatWhen(row.capturedAt)}
             </Text>
             <Text style={styles.value}>{row.location}</Text>
-            <Text style={row.state === "conflict" ? styles.conflict : styles.value}>{row.detail}</Text>
+            <Text style={row.state === "conflict" || row.state === "parked" ? styles.conflict : styles.value}>{row.detail}</Text>
           </View>
         ))
       )}

@@ -17,7 +17,14 @@ export type GpsCapture =
   | { status: "captured"; lat: number; lng: number; capturedAt: string }
   | { status: "unavailable"; reason: GpsUnavailableReason; detail?: string };
 
-export type QueueStatus = "pending" | "synced" | "conflict";
+/**
+ * `parked`: the server refused the event for good (open question 136). It is
+ * kept on the device, is not sent again, and does not hold back later events.
+ */
+export type QueueStatus = "pending" | "synced" | "conflict" | "parked";
+
+/** Why an event was parked: the server's status, code, and message, and when. */
+export type ParkedReason = { status: number; code: string; message: string; at: string };
 
 export type ServerLoginEvent = {
   replayed: boolean;
@@ -43,6 +50,8 @@ export type QueuedLoginEvent = {
   nextAttemptAt: number | null;
   lastError: string | null;
   conflict: { code: "CONFLICT_IDEMPOTENT"; message: string } | null;
+  /** Absent on events stored before M-03b. */
+  parked?: ParkedReason | null;
   syncedAt: string | null;
   server: ServerLoginEvent | null;
 };
@@ -67,6 +76,8 @@ export type QueuedAttendanceEvent = {
   nextAttemptAt: number | null;
   lastError: string | null;
   conflict: { code: "CONFLICT_IDEMPOTENT"; message: string } | null;
+  /** Absent on events stored before M-03b. */
+  parked?: ParkedReason | null;
   syncedAt: string | null;
   server?: unknown;
 };
@@ -92,6 +103,8 @@ export type QueuedChecklistEvent = {
   nextAttemptAt: number | null;
   lastError: string | null;
   conflict: { code: "CONFLICT_IDEMPOTENT"; message: string } | null;
+  /** Absent on events stored before M-03b. */
+  parked?: ParkedReason | null;
   syncedAt: string | null;
   server?: unknown;
 };

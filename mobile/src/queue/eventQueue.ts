@@ -26,12 +26,22 @@ export type QueueConflict = {
   message: string;
 };
 
+export type QueueParked = {
+  clientEventId: string;
+  type: string;
+  capturedAt: string;
+  code: string;
+  message: string;
+};
+
 export type QueueSnapshot = {
-  /** Events that are not synced. Includes conflicts so a failure stays visible. */
+  /** Events that are not synced. Includes conflicts and parked events so a failure stays visible. */
   queueLength: number;
   pending: number;
   lastSyncAt: string | null;
   conflicts: QueueConflict[];
+  /** Events the server refused for good, oldest first. */
+  parked: QueueParked[];
   retryMessage: string | null;
 };
 
@@ -49,6 +59,8 @@ export type EventQueue = {
   >;
   list<T extends QueuedItem = QueuedLoginEvent>(): Promise<T[]>;
   update(event: QueuedItem): Promise<void>;
+  /** Deletes one parked event from the device. Any other status is refused. */
+  removeParked(clientEventId: string): Promise<void>;
   setLastSyncAt(iso: string): Promise<void>;
   snapshot(): Promise<QueueSnapshot>;
   attachBatchId(batchId: string, userId?: string): Promise<number>;
@@ -214,6 +226,21 @@ export function createEventQueue(
       });
     },
 
+    removeParked(clientEventId) {
+      return exclusive(async () => {
+        const blob = await read();
+        const index = blob.events.findIndex((item) => item.clientEventId === clientEventId);
+        if (index < 0) {
+          throw new Error(`Unknown clientEventId ${clientEventId}`);
+        }
+        if (blob.events[index]?.status !== "parked") {
+          throw new Error("Only a parked event can be deleted");
+        }
+        blob.events.splice(index, 1);
+        await write(blob);
+      });
+    },
+
     setLastSyncAt(iso) {
       return exclusive(async () => {
         const blob = await read();
@@ -239,6 +266,15 @@ export function createEventQueue(
               clientEventId: event.clientEventId,
               type: event.type,
               message: event.conflict?.message ?? "Conflict",
+            })),
+          parked: events
+            .filter((event) => event.status === "parked")
+            .map((event) => ({
+              clientEventId: event.clientEventId,
+              type: event.type,
+              capturedAt: event.capturedAt,
+              code: event.parked?.code ?? "UNKNOWN",
+              message: event.parked?.message ?? event.lastError ?? "Rejected by the server",
             })),
           retryMessage: head?.lastError ?? null,
         };

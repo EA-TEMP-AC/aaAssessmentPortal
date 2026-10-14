@@ -3,12 +3,13 @@ import type {
   RosterCandidate,
 } from "../domain/batch";
 import type { AttendanceRecordInput, ChecklistItemInput } from "../queue/types";
-import { readErrorBody, readJson } from "./http";
+import { isPermanentRejection, readErrorBody, readJson, type RejectedResult } from "./http";
 import { stableStringify } from "./loginEvents";
 
 export type AttendancePostResult =
   | { kind: "success"; items: unknown[] }
   | { kind: "conflict"; code: "CONFLICT_IDEMPOTENT"; message: string }
+  | RejectedResult
   | { kind: "retryable"; message: string }
   | { kind: "unauthorized"; message: string };
 
@@ -21,6 +22,7 @@ export type ChecklistPostResult =
       checklist: unknown;
     }
   | { kind: "conflict"; code: "CONFLICT_IDEMPOTENT"; message: string }
+  | RejectedResult
   | { kind: "retryable"; message: string }
   | { kind: "unauthorized"; message: string };
 
@@ -148,6 +150,9 @@ export function createLiveBatchApi(options: {
       if (response.status === 409 && error.code === "CONFLICT_IDEMPOTENT") {
         return { kind: "conflict", code: "CONFLICT_IDEMPOTENT", message: error.message };
       }
+      if (isPermanentRejection(response.status, error.code)) {
+        return { kind: "rejected", status: response.status, code: error.code, message: error.message };
+      }
       return { kind: "retryable", message: `${error.code}: ${error.message}` };
     },
 
@@ -199,6 +204,9 @@ export function createLiveBatchApi(options: {
       }
       if (response.status === 409 && error.code === "CONFLICT_IDEMPOTENT") {
         return { kind: "conflict", code: "CONFLICT_IDEMPOTENT", message: error.message };
+      }
+      if (isPermanentRejection(response.status, error.code)) {
+        return { kind: "rejected", status: response.status, code: error.code, message: error.message };
       }
       return { kind: "retryable", message: `${error.code}: ${error.message}` };
     },
