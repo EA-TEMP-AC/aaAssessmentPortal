@@ -212,6 +212,8 @@
 
 - **F-14 change-password screen (2026-10-14):** Built by the integrator on branch `task/F-14-change-password`. `/change-password` (the gate for `mustChangePassword`) now shows the form plus a sign-out button; `/account/password` is the same form for any signed-in user, linked from the header. The client sends `currentPassword`, `newPassword` and the session `refreshToken`; the session keeps its tokens and only `mustChangePassword` is cleared. A wrong current password (`400` with `details.currentPassword`) is a field error, `429` shows a retry message. Passwords are never stored or logged client-side.
 
+- **Phase 4 review (2026-10-14, human):** (G-02) Awarding bodies issue certificates, so G-02 becomes a "Not a certificate" score card, built only if the awarding bodies agree; otherwise dropped. (G-01) Depends on the evidence store V-01; QR holds a random token only. (H-02, H-03) Expense claims, ledgers and client invoicing are out of compliance scope (Guidelines 4.3b only require logistics support and timely payment, tracked by B-11); they stay blocked.
+
 ## Open questions (need human / NCVET / AB)
 1. DEP and SIDH integration: API or file upload? Formats?
 2. Obtain Annexure B (Blended Learning Guidelines) for the full engine feature list.
