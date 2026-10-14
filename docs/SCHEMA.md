@@ -340,7 +340,7 @@ Indexes: `{ code: 1 }` unique; `{ sector: 1 }`.
 | ratioClass | RatioClass | Y | Copied from the qualification. Client cannot set it |
 | assessmentLanguage | string | Y | Trimmed, 1–80 characters. Scheduled language of this batch |
 | state | StateUt | Y | Copied from `centres.state` at create |
-| learnerFeedback | { collected: bool, reason: string\|null, recordedBy: ObjectId, recordedAt: Date } \| null | N | Null until recorded. Reason required when `collected` is false, otherwise null. NCVET:FR §J; Annexure IX(a) Governance sub-parameter 4; docs/ERF.md row 26 |
+| learnerFeedback | { collected: bool, reason: string\|null, note: string\|null, collectedOn: string\|null, recordedBy: ObjectId, recordedAt: Date } \| null | N | Null until recorded; one record, replaced on each PUT. Reason required when `collected` is false, otherwise null. `note` ≤2000 characters. `collectedOn` is `YYYY-MM-DD` IST, only when `collected` is true. Written by B-10 once the batch is `assessment_completed` or later (not `rejected` or `cancelled`). NCVET:FR §J; Annexure IX(a) Governance sub-parameter 4; docs/ERF.md row 26 |
 | recognitionOverride | { byUserId, reason, at, checks: string[] } \| null | N | Set when `aa_admin` overrides §4.3 |
 | status | BatchStatus | Y | |
 | statusVersion | number | Y | |

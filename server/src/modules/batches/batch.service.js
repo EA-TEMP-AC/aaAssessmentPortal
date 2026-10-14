@@ -17,6 +17,7 @@ import { TrainingPartner } from "../../models/training-partner.model.js";
 import { Batch } from "../../models/batch.model.js";
 import { BATCH_STATUSES, resolveTransition, rolesForAction } from "./batch-transitions.js";
 import { slaDueAtCreation } from "./batch-sla.js";
+import { presentLearnerFeedback } from "./learner-feedback.service.js";
 import { findBatchIdsForLearner, learnerIsOnBatch } from "../candidates/candidate-scope.js";
 import { recognitionDecision } from "../recognition/recognition.service.js";
 import { mergedBreachKeys, OPEN_SLA_STEPS, overdueCondition } from "./sla-breach-job.js";
@@ -110,8 +111,7 @@ export function presentBatch(doc, { now = new Date(), recompute = true } = {}) {
     ratioClass: doc.ratioClass,
     assessmentLanguage: doc.assessmentLanguage,
     state: doc.state,
-    // B-10 writes learnerFeedback. The contract example is null until then.
-    learnerFeedback: null,
+    learnerFeedback: presentLearnerFeedback(doc.learnerFeedback),
     recognitionOverride: presentRecognitionOverride(doc.recognitionOverride),
     status: doc.status,
     statusVersion: doc.statusVersion,

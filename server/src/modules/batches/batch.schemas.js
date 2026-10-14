@@ -108,3 +108,36 @@ export const listBatchesQuerySchema = z
     message: "from must be on or before to",
     path: ["from"],
   });
+
+/** PUT /batches/:id/learner-feedback. `reason` is required exactly when `collected` is false. */
+export const learnerFeedbackBodySchema = z
+  .object({
+    collected: z.boolean(),
+    reason: reasonSchema.nullish(),
+    note: z.string().trim().min(1).max(2000).nullish(),
+    collectedOn: calendarDate.nullish(),
+  })
+  .strict()
+  .superRefine((body, ctx) => {
+    if (body.collected === false && body.reason == null) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["reason"],
+        message: "reason is required when feedback was not collected",
+      });
+    }
+    if (body.collected === true && body.reason != null) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["reason"],
+        message: "reason must be empty when feedback was collected",
+      });
+    }
+    if (body.collected === false && body.collectedOn != null) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["collectedOn"],
+        message: "collectedOn is only for feedback that was collected",
+      });
+    }
+  });

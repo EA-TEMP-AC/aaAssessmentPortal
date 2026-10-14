@@ -56,6 +56,18 @@ const ratioOverrideSchema = new mongoose.Schema(
   { _id: false },
 );
 
+const learnerFeedbackSchema = new mongoose.Schema(
+  {
+    collected: { type: Boolean, required: true },
+    reason: { type: String, default: null, maxlength: 2000 },
+    note: { type: String, default: null, maxlength: 2000 },
+    collectedOn: { type: String, default: null, match: /^\d{4}-\d{2}-\d{2}$/ },
+    recordedBy: { type: mongoose.Schema.Types.ObjectId, required: true },
+    recordedAt: { type: Date, required: true },
+  },
+  { _id: false },
+);
+
 const batchSchema = new mongoose.Schema(
   {
     abId: { type: mongoose.Schema.Types.ObjectId, required: true, ref: "AwardingBody" },
@@ -75,6 +87,7 @@ const batchSchema = new mongoose.Schema(
     ratioClass: { type: String, required: true, enum: RATIO_CLASSES },
     assessmentLanguage: { type: String, required: true, trim: true, minlength: 1, maxlength: 80 },
     state: { type: String, required: true, enum: STATE_UTS },
+    learnerFeedback: { type: learnerFeedbackSchema, default: null },
     recognitionOverride: { type: recognitionOverrideSchema, default: null },
     status: { type: String, required: true, enum: BATCH_STATUSES },
     statusVersion: { type: Number, required: true, min: 1 },

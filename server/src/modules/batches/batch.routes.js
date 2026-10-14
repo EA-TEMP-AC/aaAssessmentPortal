@@ -6,6 +6,8 @@ import { requireRoles } from "../../middleware/require-roles.js";
 import {
   BATCH_CREATE_ROLES,
   BATCH_READ_ROLES,
+  LEARNER_FEEDBACK_READ_ROLES,
+  LEARNER_FEEDBACK_WRITE_ROLES,
   REASSESSMENT_CREATE_ROLES,
 } from "../../models/roles.js";
 import { rolesForAction } from "./batch-transitions.js";
@@ -14,6 +16,7 @@ import {
   assignBodySchema,
   batchIdParamSchema,
   createBatchBodySchema,
+  learnerFeedbackBodySchema,
   listBatchesQuerySchema,
   reasonBodySchema,
   reassessmentBodySchema,
@@ -25,6 +28,7 @@ import { mountCandidateRoutes } from "../candidates/candidate.routes.js";
 import { mountResultRoutes } from "../results/result.routes.js";
 import { assignAssessor, reassignAssessor } from "./assign.service.js";
 import { createBatch, getBatch, listBatches, transitionBatch } from "./batch.service.js";
+import { getLearnerFeedback, saveLearnerFeedback } from "./learner-feedback.service.js";
 import { createReassessment } from "./reassessment.service.js";
 
 function setAudit(req, entry) {
@@ -143,6 +147,35 @@ batchesRouter.post(
       meta: saved.meta,
     });
     await res.status(201).json(saved.batch);
+  }),
+);
+
+batchesRouter.put(
+  "/:id/learner-feedback",
+  requireRoles(...LEARNER_FEEDBACK_WRITE_ROLES),
+  asyncHandler(async (req, res) => {
+    const { id } = batchIdParamSchema.parse(req.params);
+    const body = learnerFeedbackBodySchema.parse(req.body ?? {});
+    const saved = await saveLearnerFeedback(req.user, id, body);
+    setAudit(req, {
+      action: "batch.learner_feedback",
+      entity: "batch",
+      entityId: saved.batch.id,
+      abId: saved.batch.abId,
+      batchId: saved.batch.id,
+      before: { learnerFeedback: saved.before },
+      after: { learnerFeedback: saved.after },
+    });
+    await res.status(200).json(saved.batch);
+  }),
+);
+
+batchesRouter.get(
+  "/:id/learner-feedback",
+  requireRoles(...LEARNER_FEEDBACK_READ_ROLES),
+  asyncHandler(async (req, res) => {
+    const { id } = batchIdParamSchema.parse(req.params);
+    await res.status(200).json(await getLearnerFeedback(req.user, id));
   }),
 );
 

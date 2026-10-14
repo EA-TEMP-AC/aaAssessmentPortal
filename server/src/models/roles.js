@@ -150,3 +150,19 @@ export const RESULT_PUBLISHED_ONLY_ROLES = Object.freeze(["candidate", "tp"]);
 
 /** GET /results/:id/change-log. API_CONTRACT.md. */
 export const RESULT_CHANGE_LOG_ROLES = Object.freeze(["aa_admin", "ab_reviewer", "mis"]);
+
+/** PUT /batches/:id/learner-feedback. docs/SCHEMA.md §3.8. */
+export const LEARNER_FEEDBACK_WRITE_ROLES = Object.freeze(["aa_admin", "mis"]);
+
+/**
+ * GET /batches/:id/learner-feedback. Rows follow batch scope. candidate, tp,
+ * and sme get nothing.
+ */
+export const LEARNER_FEEDBACK_READ_ROLES = Object.freeze([
+  "aa_admin",
+  "mis",
+  "assessor",
+  "proctor",
+  "ab_reviewer",
+  "ncvet_viewer",
+]);

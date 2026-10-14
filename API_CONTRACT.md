@@ -451,13 +451,31 @@ Response `201`: a new Batch (the `POST /batches` shape) with `status: "allocated
 
 ### PUT /batches/:id/learner-feedback
 
-Owned by **B-10**. Roles: `aa_admin` | `mis`. Batch status must be `assessment_completed` or later (not `rejected` or `cancelled`). Does not change status.
+Owned by **B-10**. Roles: `aa_admin` | `mis`. Everyone else is `403`. The batch status must be `assessment_completed`, `result_submitted`, `ab_validated`, `published`, or `disputed`; any other status is `409 INVALID_TRANSITION`. Does not change status or `statusVersion`. One record per batch: each PUT replaces it.
 
 ```json
-{ "collected": false, "reason": "Learners had left before the form was handed out" }
+{ "collected": false, "reason": "Learners had left before the form was handed out", "note": "Optional free text" }
+```
+```json
+{ "collected": true, "note": "Forms returned by all learners", "collectedOn": "2026-11-21" }
 ```
 
-`collected: true` requires `reason` null or omitted. `collected: false` requires `reason` (1–2000 characters). Response `200`: the batch, with `learnerFeedback` set. Audit-logged. Annexure IX(a) Governance & Manpower sub-parameter 4 (docs/ERF.md row 26).
+| Field | Rule |
+|---|---|
+| `collected` | Required boolean |
+| `reason` | Required (1–2000 characters) when `collected` is `false`; must be null or omitted when `true` |
+| `note` | Optional, 1–2000 characters |
+| `collectedOn` | Optional `YYYY-MM-DD` (IST calendar date); only with `collected: true` |
+
+Unknown keys, a missing `reason`, a `reason` with `collected: true`, or a `collectedOn` with `collected: false` are `400 VALIDATION_ERROR` with `details` naming the field. An unknown batch is `404`; a batch outside the caller's scope is `403`.
+
+Response `200`: the batch, with `learnerFeedback` set to `{ collected, reason, note, collectedOn, recordedBy, recordedAt }` (`reason`, `note`, `collectedOn` are `null` when absent; `recordedBy` is the caller, `recordedAt` the write time). **Audit:** `batch.learner_feedback` on the batch, with `before` and `after` each `{ learnerFeedback }`. Annexure IX(a) Governance & Manpower sub-parameter 4 (docs/ERF.md row 26).
+
+### GET /batches/:id/learner-feedback
+
+Roles: `aa_admin`, `mis`, `ncvet_viewer` (all batches), `ab_reviewer` (own awarding body), `assessor` (assigned batch), `proctor` (assigned batch). `candidate`, `tp`, and `sme` get `403`. Any batch status; unknown id `404`; outside scope `403`.
+
+Response `200`: `{ "batchId": "...", "learnerFeedback": null }` until recorded, otherwise `learnerFeedback` is the object above. The same object is in `learnerFeedback` on `GET /batches/:id`.
 
 ### PUT /batches/:id/assessor-payment
 
