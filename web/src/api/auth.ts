@@ -15,7 +15,10 @@ export function createDevice(): Device {
   };
 }
 
-export async function login(email: string, password: string): Promise<ClientSession> {
+export async function login(
+  email: string,
+  password: string,
+): Promise<ClientSession> {
   const device = createDevice();
   const body = await apiRequest<unknown>("/auth/login", {
     method: "POST",
@@ -25,7 +28,11 @@ export async function login(email: string, password: string): Promise<ClientSess
   });
   const session = parseAuthSession(body);
   if (!session) {
-    throw new ApiError(502, "INVALID_RESPONSE", "Sign-in response was not recognised.");
+    throw new ApiError(
+      502,
+      "INVALID_RESPONSE",
+      "Sign-in response was not recognised.",
+    );
   }
   const stored: ClientSession = { ...session, device };
   setSession(stored);
@@ -43,5 +50,43 @@ export async function logout(): Promise<void> {
     });
   } finally {
     clearSession();
+  }
+}
+
+/**
+ * POST /auth/change-password. The server issues no new tokens, so the session
+ * keeps its tokens and only the user's mustChangePassword flag is replaced.
+ * Passwords are never logged or stored by the client.
+ */
+export async function changePassword(
+  currentPassword: string,
+  newPassword: string,
+): Promise<void> {
+  const current = getSnapshot();
+  const body = await apiRequest<unknown>("/auth/change-password", {
+    method: "POST",
+    body: {
+      currentPassword,
+      newPassword,
+      ...(current?.refreshToken ? { refreshToken: current.refreshToken } : {}),
+    },
+  });
+  const user =
+    body && typeof body === "object"
+      ? (body as { user?: { mustChangePassword?: unknown } }).user
+      : undefined;
+  if (!user || typeof user.mustChangePassword !== "boolean") {
+    throw new ApiError(
+      502,
+      "INVALID_RESPONSE",
+      "Password change response was not recognised.",
+    );
+  }
+  const latest = getSnapshot();
+  if (latest) {
+    setSession({
+      ...latest,
+      user: { ...latest.user, mustChangePassword: user.mustChangePassword },
+    });
   }
 }
