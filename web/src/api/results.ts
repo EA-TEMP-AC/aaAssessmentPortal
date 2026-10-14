@@ -175,6 +175,14 @@ export async function publishResult(batchId: string, input: { reason?: string } 
   return postMove(batchId, "publish", input.reason ? { reason: input.reason } : {});
 }
 
+/**
+ * POST /batches/:id/return-for-correction (B-05b). The awarding body reviewer
+ * sends a submitted or validated result back to draft. `reason` is required.
+ */
+export async function returnForCorrection(batchId: string, input: { reason: string }): Promise<ResultMoveRecord> {
+  return postMove(batchId, "return-for-correction", { reason: input.reason });
+}
+
 /** GET /batches/:id/attendance (B-06c). `present: false` is the result outcome Absent. */
 export async function listAttendance(batchId: string, signal?: AbortSignal): Promise<AttendanceRecord[]> {
   const body = await apiRequest<unknown>(`/batches/${encodeURIComponent(batchId)}/attendance`, { signal });

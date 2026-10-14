@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { expect, it, vi } from "vitest";
 import type { BatchRecord } from "../api/batches";
@@ -336,7 +336,7 @@ it("shows the RESULT_INCOMPLETE message from the server with candidate names", a
   expect(within(region).getByText(/Result status: Draft/)).toBeInTheDocument();
 });
 
-it("lets the AB reviewer validate then publish, and keeps Return for correction as a disabled placeholder", async () => {
+it("lets the AB reviewer validate then publish, and offers Return for correction until published", async () => {
   const user = userEvent.setup();
   const world = makeWorld({
     batch: batchRecord({ status: "result_submitted", statusVersion: 6 }),
@@ -363,10 +363,7 @@ it("lets the AB reviewer validate then publish, and keeps Return for correction 
   expect(within(region).queryByRole("button", { name: "Save draft" })).not.toBeInTheDocument();
   expect(within(region).queryByRole("button", { name: "Submit result" })).not.toBeInTheDocument();
 
-  const placeholder = within(region).getByRole("button", { name: "Return for correction" });
-  expect(placeholder).toBeDisabled();
-  expect(within(region).getByText(/Return for correction is not available yet/)).toBeInTheDocument();
-  await user.click(placeholder);
+  expect(within(region).getByRole("button", { name: "Return for correction" })).toBeEnabled();
 
   await user.type(within(region).getByLabelText("Reason (optional)"), "Checked against the marks sheet");
   await user.click(within(region).getByRole("button", { name: "Validate result" }));
@@ -415,10 +412,10 @@ it.each(["mis", "ncvet_viewer", "assessor"] as const)("gives %s a read-only view
   expect(askedQualification).toBe(role !== "assessor");
 });
 
-it.each(["candidate", "tp"] as const)("shows %s nothing until the result is published", async (role) => {
-  // The server answers 404 to these roles while the result is unpublished.
+it("shows tp nothing until the result is published", async () => {
+  // The server answers 404 to this role while the result is unpublished.
   const hidden = makeWorld({ batch: batchRecord({ status: "ab_validated" }), result: null });
-  open(role, hidden);
+  open("tp", hidden);
   const region = await resultRegion();
   expect(await within(region).findByText("No published result for this batch.")).toBeInTheDocument();
   expect(within(region).queryByRole("table")).not.toBeInTheDocument();
@@ -426,12 +423,12 @@ it.each(["candidate", "tp"] as const)("shows %s nothing until the result is publ
   expect(within(region).queryAllByRole("button")).toEqual([]);
 });
 
-it.each(["candidate", "tp"] as const)("shows %s the published result, read only", async (role) => {
+it("shows tp the published result, read only", async () => {
   const world = makeWorld({
     batch: batchRecord({ status: "published" }),
     result: resultRecord({ status: "published", publishedAt: "2026-11-26T06:00:00.000Z" }),
   });
-  open(role, world);
+  open("tp", world);
   const region = await resultRegion();
   expect(await within(region).findByText(/Result status: Published/)).toBeInTheDocument();
   expect(await within(region).findByRole("row", { name: /Asha Devi/ })).toHaveTextContent("Pass");
@@ -453,3 +450,148 @@ it("tells a proctor that results are not available", async () => {
   expect(within(region).getByText("Results are not available for this role.")).toBeInTheDocument();
   expect(world.calls.some((call) => call.path.endsWith("/results"))).toBe(false);
 });
+
+/** A reviewer's batch with a submitted result; `return-for-correction` answers through `respond`. */
+function returnWorld(respond: (call: Call, world: World) => Response | undefined) {
+  return makeWorld({
+    batch: batchRecord({ status: "result_submitted", statusVersion: 6 }),
+    result: resultRecord({ status: "submitted", submittedAt: "2026-11-24T06:00:00.000Z" }),
+    onWrite: (call, w) => (call.path.endsWith("/return-for-correction") ? respond(call, w) : undefined),
+  });
+}
+
+async function openReturnDialog(user: ReturnType<typeof userEvent.setup>) {
+  const region = await resultRegion();
+  await user.click(await within(region).findByRole("button", { name: "Return for correction" }));
+  return { region, dialog: await screen.findByRole("dialog", { name: "Return for correction" }) };
+}
+
+it("returns a submitted result for correction with a reason, then reloads the batch and the result", async () => {
+  const user = userEvent.setup();
+  const world = returnWorld((_call, w) => {
+    w.batch = { ...w.batch, status: "assessment_completed", statusVersion: 7 };
+    w.result = resultRecord({ status: "draft", updatedAt: "2026-11-25T06:00:00.000Z" });
+    return jsonResponse(200, { ...w.result, batchStatus: "assessment_completed", batchStatusVersion: 7 });
+  });
+  open("ab_reviewer", world);
+  const { region, dialog } = await openReturnDialog(user);
+
+  await user.type(within(dialog).getByLabelText("Reason"), "  NOS-01 theory marks do not match the marks sheet  ");
+  const before = world.calls.length;
+  await user.click(within(dialog).getByRole("button", { name: "Return result" }));
+
+  expect(await within(region).findByText("Result returned for correction.")).toBeInTheDocument();
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(writes(world)).toEqual([
+    {
+      method: "POST",
+      path: `/batches/${IDS.batch}/return-for-correction`,
+      body: { reason: "NOS-01 theory marks do not match the marks sheet" },
+    },
+  ]);
+
+  // Both the batch and the result are read again, and the review actions go away.
+  expect(await within(region).findByText(/Result status: Draft/)).toBeInTheDocument();
+  await waitFor(() =>
+    expect(within(region).queryByRole("button", { name: "Return for correction" })).not.toBeInTheDocument(),
+  );
+  await waitFor(() =>
+    expect(within(region).queryByRole("button", { name: "Validate result" })).not.toBeInTheDocument(),
+  );
+  const reloaded = world.calls.slice(before).filter((call) => call.method === "GET");
+  expect(reloaded.some((call) => call.path === `/batches/${IDS.batch}`)).toBe(true);
+  expect(reloaded.some((call) => call.path === `/batches/${IDS.batch}/results`)).toBe(true);
+}, 15000);
+
+it("offers Return for correction on a validated result", async () => {
+  const user = userEvent.setup();
+  const world = makeWorld({
+    batch: batchRecord({ status: "ab_validated", statusVersion: 7 }),
+    result: resultRecord({ status: "validated", validatedAt: "2026-11-25T06:00:00.000Z" }),
+  });
+  open("ab_reviewer", world);
+  const { dialog } = await openReturnDialog(user);
+  expect(within(dialog).getByLabelText("Reason")).toBeRequired();
+});
+
+it("blocks a blank reason and sends nothing", async () => {
+  const user = userEvent.setup();
+  const world = returnWorld(() => jsonResponse(500, { error: { code: "INTERNAL", message: "Should not be called" } }));
+  open("ab_reviewer", world);
+  const { region, dialog } = await openReturnDialog(user);
+
+  await user.click(within(dialog).getByRole("button", { name: "Return result" }));
+  expect(await within(dialog).findByRole("alert")).toHaveTextContent("Enter a reason of 1 to 2000 characters.");
+
+  await user.type(within(dialog).getByLabelText("Reason"), "   ");
+  await user.click(within(dialog).getByRole("button", { name: "Return result" }));
+  expect(await within(dialog).findByRole("alert")).toHaveTextContent("Enter a reason of 1 to 2000 characters.");
+  expect(within(dialog).getByLabelText("Reason")).toHaveAttribute("maxlength", "2000");
+  expect(writes(world)).toEqual([]);
+
+  // Cancel closes the dialog and leaves the result as it was.
+  await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(within(region).getByRole("button", { name: "Return for correction" })).toHaveFocus();
+  expect(within(region).getByText(/Result status: Submitted/)).toBeInTheDocument();
+});
+
+it.each([
+  [403, "FORBIDDEN", "Role or row scope denied"],
+  [409, "INVALID_TRANSITION", "Illegal status change"],
+] as const)("shows the server's message when the return is refused with %i", async (status, code, message) => {
+  const user = userEvent.setup();
+  const world = returnWorld(() => jsonResponse(status, { error: { code, message } }));
+  open("ab_reviewer", world);
+  const { region, dialog } = await openReturnDialog(user);
+
+  await user.type(within(dialog).getByLabelText("Reason"), "Marks do not match");
+  await user.click(within(dialog).getByRole("button", { name: "Return result" }));
+
+  expect(await within(dialog).findByRole("alert")).toHaveTextContent(message);
+  // The dialog stays open with the reason, and nothing is announced as returned.
+  expect(within(dialog).getByLabelText("Reason")).toHaveValue("Marks do not match");
+  expect(within(dialog).getByRole("button", { name: "Return result" })).toBeEnabled();
+  expect(within(region).queryByText("Result returned for correction.")).not.toBeInTheDocument();
+});
+
+it("hides Return for correction once the result is published", async () => {
+  const world = makeWorld({
+    batch: batchRecord({ status: "published", statusVersion: 8 }),
+    result: resultRecord({ status: "published", publishedAt: "2026-11-26T06:00:00.000Z" }),
+  });
+  open("ab_reviewer", world);
+  const region = await resultRegion();
+  expect(await within(region).findByText(/Result status: Published/)).toBeInTheDocument();
+  expect(await within(region).findByRole("row", { name: /Asha Devi/ })).toBeInTheDocument();
+  expect(within(region).queryByRole("button", { name: "Return for correction" })).not.toBeInTheDocument();
+  expect(within(region).queryAllByRole("button")).toEqual([]);
+});
+
+it.each(["aa_admin", "mis", "ncvet_viewer"] as const)("does not offer Return for correction to %s", async (role) => {
+  const world = makeWorld({
+    batch: batchRecord({ status: "result_submitted", statusVersion: 6 }),
+    result: resultRecord({ status: "submitted" }),
+  });
+  open(role, world);
+  const region = await resultRegion();
+  expect(await within(region).findByText(/Result status: Submitted/)).toBeInTheDocument();
+  expect(within(region).queryByRole("button", { name: "Return for correction" })).not.toBeInTheDocument();
+});
+
+it.each(["ab_validated", "published"] as const)(
+  "hides the whole Result section from a candidate (batch %s)",
+  async (status) => {
+    const world = makeWorld({
+      batch: batchRecord({ status }),
+      result: resultRecord({ status: status === "published" ? "published" : "validated" }),
+    });
+    open("candidate", world);
+    // The rest of the batch page still renders for the candidate.
+    expect(await screen.findByRole("heading", { name: "SLA timeline" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Result" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Result" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Result status/)).not.toBeInTheDocument();
+    expect(world.calls.some((call) => call.path.endsWith("/results"))).toBe(false);
+  },
+);

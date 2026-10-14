@@ -37,6 +37,22 @@ export function reviewActionFor(role: Role, status: BatchStatus): ReviewAction |
   return null;
 }
 
+/**
+ * Return for correction (B-05b): the awarding body reviewer, while the result
+ * is submitted or validated. Never once it is published.
+ */
+export function canReturnForCorrection(role: Role, status: BatchStatus, result: ResultRecord | null): boolean {
+  if (role !== "ab_reviewer" || !result) return false;
+  if (status === "result_submitted") return result.status === "submitted";
+  if (status === "ab_validated") return result.status === "validated";
+  return false;
+}
+
+/** Q135: candidates do not see the Result section in the web app in Phase 1. */
+export function canSeeResultSection(role: Role): boolean {
+  return role !== "candidate";
+}
+
 /** A NOS column group. `ceilings` is null when the role cannot read the qualification. */
 export type NosColumn = {
   nosId: string;
