@@ -91,6 +91,12 @@ export const ASSESSOR_AVAILABLE_ROLES = Object.freeze(["aa_admin", "mis", "ncvet
 export const BATCH_CREATE_ROLES = Object.freeze(["aa_admin", "ab_reviewer"]);
 
 /**
+ * POST /batches/:id/reassessments. Open Q22, decided 2026-10-13: aa_admin, or
+ * the ab_reviewer of the batch's awarding body (enforced in the service).
+ */
+export const REASSESSMENT_CREATE_ROLES = Object.freeze(["aa_admin", "ab_reviewer"]);
+
+/**
  * Batch list, get, and the compliance dashboard stub. docs/SCHEMA.md §5.
  * sme is denied. candidate matches batches whose roster contains their learner.
  */
