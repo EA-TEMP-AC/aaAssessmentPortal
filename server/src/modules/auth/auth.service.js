@@ -1,9 +1,10 @@
 import { compliance } from "../../config/compliance.js";
-import { AppError } from "../../lib/errors.js";
+import { AppError, validationError } from "../../lib/errors.js";
 import { hashPassword, verifyPassword } from "../../lib/password.js";
 import { generateRefreshToken, hashRefreshToken, signAccessToken } from "../../lib/tokens.js";
 import { RefreshToken } from "../../models/refresh-token.model.js";
 import { User } from "../../models/user.model.js";
+import { assertChangePasswordAllowed } from "./change-password-rate-limit.js";
 import { assertLoginAllowed } from "./login-rate-limit.js";
 
 let dummyPasswordHash;
@@ -135,6 +136,63 @@ export async function refresh({ refreshToken, device }) {
 
   const nextRefreshToken = await issueRefreshToken(user, device);
   return sessionBody(user, signAccessToken(user), nextRefreshToken);
+}
+
+/**
+ * POST /auth/change-password. The signed-in user proves the current password
+ * and sets a new one. Clears `mustChangePassword` and revokes the user's other
+ * refresh tokens; the one sent in `refreshToken` (this session) stays valid.
+ * Without it, every refresh token of the user is revoked.
+ * A wrong current password is `400 VALIDATION_ERROR`, not 401, so a client
+ * does not mistake it for an expired access token.
+ * @param {object} actor the authenticated user
+ * @param {{ currentPassword: string, newPassword: string, refreshToken?: string }} body
+ * @param {Date} [now]
+ */
+export async function changePassword(actor, body, now = new Date()) {
+  assertChangePasswordAllowed(actor._id, now.getTime());
+
+  const user = await User.findById(actor._id).select("+passwordHash");
+  if (!user || !user.active) throw new AppError(401, "UNAUTHORIZED", "Invalid session");
+
+  const matches = await verifyPassword(body.currentPassword, user.passwordHash);
+  if (!matches) {
+    const err = validationError("Current password is incorrect", {
+      currentPassword: ["Current password is incorrect"],
+    });
+    err.auditAction = "auth.password_change_failed";
+    throw err;
+  }
+  if (body.newPassword === body.currentPassword) {
+    throw validationError("New password must differ from the current password", {
+      newPassword: ["Must differ from the current password"],
+    });
+  }
+
+  user.passwordHash = await hashPassword(body.newPassword);
+  user.mustChangePassword = false;
+  user.passwordResetTokenHash = undefined;
+  user.passwordResetExpiresAt = undefined;
+  await user.save();
+
+  const keepHash = body.refreshToken ? hashRefreshToken(body.refreshToken) : null;
+  const kept = keepHash
+    ? await RefreshToken.exists({
+        userId: user._id,
+        tokenHash: keepHash,
+        revokedAt: null,
+        expiresAt: { $gt: now },
+      })
+    : null;
+  const revoked = await RefreshToken.updateMany(
+    { userId: user._id, revokedAt: null, ...(kept ? { _id: { $ne: kept._id } } : {}) },
+    { $set: { revokedAt: now } },
+  );
+
+  return {
+    user: publicUser(user),
+    meta: { revokedRefreshTokens: revoked.modifiedCount, keptCurrentSession: Boolean(kept) },
+  };
 }
 
 /**

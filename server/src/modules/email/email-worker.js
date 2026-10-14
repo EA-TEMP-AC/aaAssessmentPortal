@@ -1,10 +1,10 @@
 import { EMAIL_WORKER_BATCH_LIMIT, EMAIL_WORKER_INTERVAL_MS } from "../../config/email.js";
 import { safeErrorCode } from "../../lib/safe-error.js";
 import { createDefaultTransport } from "./email-transport.js";
-import { processNextEmail } from "./email-queue.service.js";
+import { processNextEmail, reclaimStaleEmails } from "./email-queue.service.js";
 
 /**
- * Drain due jobs. A second call in parallel is safe: each job is claimed atomically.
+ * Reclaim stale `sending` jobs, then drain due jobs. A second call in parallel is safe: each job is claimed atomically.
  * Send failures are recorded on the job and do not reject this promise.
  */
 export async function processDueEmails(
@@ -12,6 +12,8 @@ export async function processDueEmails(
   now = new Date(),
   limit = EMAIL_WORKER_BATCH_LIMIT,
 ) {
+  // A job left in `sending` by a crashed worker becomes due again before the drain.
+  await reclaimStaleEmails(now);
   const results = [];
   for (let i = 0; i < limit; i += 1) {
     const result = await processNextEmail(transport, now);

@@ -1,4 +1,8 @@
-import { EMAIL_MAX_ATTEMPTS, emailBackoffDelayMs } from "../../config/email.js";
+import {
+  EMAIL_MAX_ATTEMPTS,
+  EMAIL_SENDING_STALE_MS,
+  emailBackoffDelayMs,
+} from "../../config/email.js";
 import { safeErrorCode } from "../../lib/safe-error.js";
 import { EmailQueue } from "../../models/email-queue.model.js";
 
@@ -62,6 +66,32 @@ export async function claimNextEmail(now = new Date()) {
     },
     { sort: { nextAttemptAt: 1, _id: 1 }, new: true },
   );
+}
+
+const STALE_CLAIM_ERROR = "Email send interrupted (STALE_CLAIM)";
+
+/**
+ * Reclaim jobs a crashed worker left in `sending` (open Q43). A job whose
+ * claim is older than EMAIL_SENDING_STALE_MS returns to `pending` and is due
+ * at once; the interrupted try stays counted in `attempts`. A job that had
+ * already used its last attempt becomes `failed`, with `text` cleared.
+ * Safe to run from several workers: each update filters on `sending`.
+ * @returns {Promise<{ requeued: number, failed: number }>}
+ */
+export async function reclaimStaleEmails(now = new Date()) {
+  const stale = {
+    status: "sending",
+    claimedAt: { $lte: new Date(now.getTime() - EMAIL_SENDING_STALE_MS) },
+  };
+  const failed = await EmailQueue.updateMany(
+    { ...stale, attempts: { $gte: EMAIL_MAX_ATTEMPTS } },
+    { $set: { status: "failed", lastError: STALE_CLAIM_ERROR }, $unset: { text: "" } },
+  );
+  const requeued = await EmailQueue.updateMany(
+    { ...stale, attempts: { $lt: EMAIL_MAX_ATTEMPTS } },
+    { $set: { status: "pending", nextAttemptAt: now, lastError: STALE_CLAIM_ERROR } },
+  );
+  return { requeued: requeued.modifiedCount, failed: failed.modifiedCount };
 }
 
 function safeSendError(err) {

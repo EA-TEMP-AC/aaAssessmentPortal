@@ -17,6 +17,15 @@ export const refreshBodySchema = z.object({
   device: deviceSchema,
 });
 
+/** `refreshToken` names this session's token, which is kept; the user's others are revoked. */
+export const changePasswordBodySchema = z
+  .object({
+    currentPassword: z.string().min(1).max(200),
+    newPassword: z.string().min(8).max(200),
+    refreshToken: z.string().min(1).max(500).optional(),
+  })
+  .strict();
+
 export const logoutBodySchema = z
   .object({
     refreshToken: z.string().min(1).max(500).optional(),
