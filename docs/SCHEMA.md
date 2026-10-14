@@ -575,7 +575,7 @@ Schema and contract only. **B-10** writes `learnerFeedback` once the batch is `a
 | Holidays / working-day | A | A | D | D | D | D | D | D | D | audit on change |
 | Recognition GET/PUT | A | A | D | D | D | D | D | D | R | audit on PUT |
 | Learner feedback write | A | A | D | D | D | D | D | D | D | B-10; batch readers may read it on the batch |
-| Assessor payment read/write | A | A | D | D | D | D | D | R | R | B-11; write is aa_admin and mis; AB and NCVET read own scope |
+| Assessor payment read/write | A | A | D | own | D | D | D | D | R | B-11; write is aa_admin and mis; ncvet_viewer reads; an assessor reads only their own rows; ab_reviewer is denied (Q161) |
 
 **Batch row scope:** aa_admin/mis/ncvet_viewer=all; ab=`abId`; tp=`tpId`; assessor=`assessorId`; proctor=`proctorId`; candidate=batches containing their learner’s candidate row.
 

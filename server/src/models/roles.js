@@ -150,3 +150,17 @@ export const RESULT_PUBLISHED_ONLY_ROLES = Object.freeze(["candidate", "tp"]);
 
 /** GET /results/:id/change-log. API_CONTRACT.md. */
 export const RESULT_CHANGE_LOG_ROLES = Object.freeze(["aa_admin", "ab_reviewer", "mis"]);
+
+/** PUT /batches/:id/assessor-payment. docs/SCHEMA.md §3.18 and §5. */
+export const ASSESSOR_PAYMENT_WRITE_ROLES = Object.freeze(["aa_admin", "mis"]);
+
+/**
+ * Assessor payment lists. ncvet_viewer reads; an assessor reads only rows with
+ * their own assessor id (enforced in the service). Everyone else is denied.
+ */
+export const ASSESSOR_PAYMENT_READ_ROLES = Object.freeze([
+  "aa_admin",
+  "mis",
+  "ncvet_viewer",
+  "assessor",
+]);

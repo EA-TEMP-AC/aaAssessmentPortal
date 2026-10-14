@@ -21,6 +21,7 @@ import {
   rejectBodySchema,
 } from "./batch.schemas.js";
 import { mountBatchChildReadRoutes } from "../attendance/attendance.routes.js";
+import { mountAssessorPaymentRoutes } from "../assessor-payments/assessor-payment.routes.js";
 import { mountCandidateRoutes } from "../candidates/candidate.routes.js";
 import { mountResultRoutes } from "../results/result.routes.js";
 import { assignAssessor, reassignAssessor } from "./assign.service.js";
@@ -146,6 +147,7 @@ batchesRouter.post(
   }),
 );
 
+mountAssessorPaymentRoutes(batchesRouter);
 mountCandidateRoutes(batchesRouter);
 mountBatchChildReadRoutes(batchesRouter);
 mountResultRoutes(batchesRouter);
