@@ -123,3 +123,18 @@ A-03 Phase 2 notes (not Phase 1 scope): live NCVET monitoring link for online as
 | S-02 | Security audit tracker + content-theft controls (watermarking, no bulk export, signed URLs) | backend | S-01 | todo | "Zero content theft" is a goal; track audits |
 | T-03 | Phase 3 tests | qa | all P,N,C,W,X,S | todo | |
 | R-03 | Review Phase 3 branches | reviewer | each | todo | |
+
+## Phase 4: Documents, schemes, assessor expenses (from old-project comparison, 2026-10-14)
+Source: comparison of the legacy ASP.NET portal (Administrator and Account flows) against this list. Legacy code is a reference for the workflow only; do not copy its schema. Do not store Aadhaar or passwords on candidate rows (SCHEMA PII rule).
+
+| ID | Task | Owner | Depends | Status | Acceptance |
+|---|---|---|---|---|---|
+| A-04 | Resolve open checks and update SCHEMA/contract: (1) assessors restricted by sector; (2) AB approval step for generated test papers before use; (3) practical/viva/safety/attitude marks fit NOS/PC marks; (4) per-learner feedback beyond batch-level B-10; (5) decide if assessor expenses and client invoicing are in scope (record in DECISIONS.md) | architect | A-03 | todo | Docs only. Each check ends as a decision or a new task row. H-02/H-03 stay blocked until (5) is decided |
+| H-01 | Scheme and project master: schemes, projects, authorised signatories; optional `schemeId`/`projectId` on batches | backend | B-07a | todo | CRUD + contract examples + audit. Nullable on batches so existing flows are unchanged |
+| H-01f | Scheme/project master screens | frontend | H-01,F-06 | todo | aa_admin and mis write; others read |
+| G-01 | Admit card and ID card PDF: single and batch-wise, printed/downloaded flag, photo and QR for verification | backend+frontend | B-07b | todo | Candidate photo from evidence store. No Aadhaar or password printed. Every generation audit-logged |
+| G-02 | Result certificate and score card PDF for published results only; QR verification endpoint | backend+frontend | B-05,G-01 | todo | Blocked until certificate format is confirmed with AB. Not issued for disputed or unpublished results. Accessible variants follow X-02 |
+| H-02 | Assessor expense claims, advances, vouchers, ledger (travel, rail, hotel, food, petrol, office; enclosures; approve then pay) | backend | B-11,A-04 | blocked | Only if A-04 decision (5) says in scope. Extends `assessorPayments`; pending = due − paid stays true |
+| H-03 | Reimbursement letter generator and client invoice (per-candidate fee, advance, balance) | backend+frontend | H-02 | blocked | Letter number sequence, printable PDF, total matches the approved vouchers |
+| T-04 | Tests for Phase 4 rules | qa | H-01,G-01,G-02 | todo | Unpublished results never produce certificates; blocked rows tested once unblocked |
+| R-04 | Review Phase 4 branches | reviewer | each | todo | |
