@@ -181,6 +181,8 @@ Implement in B-02. No magic numbers in feature code.
 | `REFRESH_TOKEN_TTL_MS` | `2592000000` | 30d |
 | `LOGIN_RATE_LIMIT_WINDOW_MS` | `900000` | 15m window |
 | `LOGIN_RATE_LIMIT_MAX` | `20` | Max attempts / window / IP+email |
+| `PUBLIC_RATE_LIMIT_WINDOW_MS` | `60000` | W-01. Window for `/public/*` per client IP |
+| `PUBLIC_RATE_LIMIT_MAX` | `120` | W-01. Max `/public/*` requests / window / IP |
 | `DEFAULT_PASS_MARK_UNIT` | `percent` | Qualification may override |
 
 ### 2.1 Working-day counting convention
@@ -499,6 +501,26 @@ Reserved: `questions`, `tests`, `attempts`, `evidence`; `proctoringSessions`, `p
 
 The old `sectors` placeholder is replaced by `aaRecognition` plus `SectorName` on the qualification (§3.17, §1.5).
 
+### 3.23 Public website content (phase 1) — NCVET:TR s22
+
+Nine collections, all with `published` (bool, default false), `sortOrder` (number 0 to 100000, default 0), `createdBy`, `updatedBy`, `createdAt`, `updatedAt`; index `{ published: 1, sortOrder: 1 }`. File, photo and logo fields are text references (max 500 characters); nothing is uploaded or stored by the API.
+
+| Collection | Fields |
+|---|---|
+| `publicTeamMembers` | name, designation, department, bio, photoRef |
+| `publicOrganogram` | name, title, parentId (another node, null for the top), photoRef |
+| `publicPeople` | kind (`assessor` \| `proctor`), registryId (the `assessors` or `proctors` record), name, roleLabel, sector (SectorName or null), photoRef. Unique `{ kind, registryId }` |
+| `publicSamplePapers` | title, qualificationId, fileRef |
+| `publicIndustryLinkages` | name, description, websiteUrl, logoRef |
+| `publicGrievance` | title, body, contactName, contactEmail, contactPhone, fileRef |
+| `publicPosh` | kind (`policy` \| `committee_member`), title, body, memberName, memberRole, fileRef |
+| `publicOfficeDocuments` | category (ownership, lease, telephone_bill, internet_bill, electricity_bill, other), title, note, fileRef |
+| `publicEvents` | title, description, date and endDate (`YYYY-MM-DD`), location. Extra index `{ published: 1, date: 1 }` |
+
+**PII rule:** `publicPeople` copies the registry `name` once and links by id. It never holds the registry email, phone, code, qualifications, experience, ToA or any ID. The public API does not return `registryId`. Grievance and POSH contact fields are organisation contacts typed by `aa_admin` for publication, not registry data.
+
+---
+
 ### 3.17 `aaRecognition` (phase 1)
 
 One document, `key: "default"`. Guidelines recognition: sectors, geography, and dates.
@@ -595,6 +617,7 @@ Schema and contract only. **B-10** writes `learnerFeedback` once the batch is `a
 | Learner feedback write | A | A | D | D | D | D | D | D | D | B-10; batch readers may read it on the batch |
 | Assessor payment read/write | A | A | D | own | D | D | D | R° | R | B-11; write is aa_admin and mis; ncvet_viewer reads; an assessor reads only their own rows; ° ab_reviewer reads own-AB rows only when `abReviewerCanReadAssessorPayments` is on, else denied (Q161, decision 174) |
 | Settings access GET / PUT | A / A | R / D | D | D | D | D | D | R / D | R / D | §3.22; PUT is aa_admin only and audited |
+| Public site content (admin) | A | R | D | D | D | D | D | D | D | W-01; `/admin/public-site/*`, audited; `/public/*` is anonymous, published items only |
 | Resend credentials | A | D | D | D | D | D | D | D | D | aa_admin only; refused for disabled users |
 
 **Batch row scope:** aa_admin/mis/ncvet_viewer=all; ab=`abId`; tp=`tpId`; assessor=`assessorId`; proctor=`proctorId`; candidate=batches containing their learner’s candidate row.

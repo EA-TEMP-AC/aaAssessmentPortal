@@ -402,5 +402,15 @@ B-15 open questions (2026-10-15):
 
 Human decision on 2026-10-15: Q176, Q177, Q178, Q179 and Q180 accepted as built.
 
+W-01 open questions (2026-10-15):
+240. **Where files and photos live is undecided.** W-01 stores only a text reference (`fileRef`, `photoRef`, `logoRef`) and does not upload, fetch, scan or check it. Hosting for sample papers, office documents and photos (object storage, region, public or signed links, virus scanning, size limits) must be decided before the website can show them; see also open question 6 (hosting region and object storage).
+241. **Qualifications and experience of assessors and proctors.** TR s22 B asks the website to show assessors' and proctors' educational qualifications and relevant experience. W-01 publishes only name, role label, sector and photo reference, as instructed. The registry holds `qualifications` and `yearsOfExperience`. Should the public entry carry a short education and experience text, typed by `aa_admin` (not copied), and with whose consent?
+242. **Consent and removal for people shown publicly.** Publishing a name and photo of an assessor or proctor is personal data under the DPDP Act. Is consent recorded outside the system, and should unpublishing be the only removal step (the row and its audit trail remain)?
+243. **The public name is a copy.** The registry name is copied once when the entry is created and is not kept in step. If the assessor is deactivated, their ToA expires or their name changes, the entry stays public until `aa_admin` unpublishes or edits it. Should an inactive registry record hide the entry automatically?
+244. **Rate limit and cache behind a proxy.** The limit is per server process, in memory, keyed on `req.ip`. Behind a reverse proxy or CDN `trust proxy` must be set or every caller shares one address, and several instances each allow the full rate. Public answers may be cached for 5 minutes, so an unpublished item can stay visible that long. Confirm the limit (120 per minute) and the cache time, or move both to the proxy.
+245. **Utility bills as public documents.** TR s22 G asks for proof of commercial premises (telephone, internet, electricity bills), and `office-documents` has those categories. A bill shows account numbers and addresses. Should the website show the bill itself, a redacted copy, or only that the proof is on file?
+246. **Contacts typed into grievance and POSH items.** `contactEmail`, `contactPhone` and POSH committee member names are published exactly as typed. Confirm these are meant to be public, and whether a named person's consent is needed.
+247. **Who can publish.** Only `aa_admin` creates, edits, publishes and deletes; `mis` reads drafts and published items. Should `mis` draft content, with `aa_admin` approving the publish? Deleting is permanent (audited, with the old content in `before`); should items be unpublished only?
+
 ## Not mandated by NCVET (TR s29), do not market as compliance features
 Specific language, DB, cloud, server architecture, API style, biometric or face-recognition tech, GPS hardware, payment gateway, CRM, help-desk software.

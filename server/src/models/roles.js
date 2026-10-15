@@ -194,3 +194,7 @@ export const ACCESS_SETTINGS_READ_ROLES = Object.freeze([
 
 /** PUT /settings/access. aa_admin only. */
 export const ACCESS_SETTINGS_WRITE_ROLES = Object.freeze(["aa_admin"]);
+
+/** /admin/public-site/*. W-01. aa_admin writes the public website content, mis reads it. */
+export const PUBLIC_SITE_WRITE_ROLES = Object.freeze(["aa_admin"]);
+export const PUBLIC_SITE_READ_ROLES = Object.freeze(["aa_admin", "mis"]);
