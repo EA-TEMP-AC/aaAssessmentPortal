@@ -34,6 +34,8 @@ export const createBatchBodySchema = z
     assessmentEndDate: calendarDate,
     tpId: objectIdSchema,
     centreId: objectIdSchema,
+    schemeId: objectIdSchema.nullish(),
+    projectId: objectIdSchema.nullish(),
     candidateCount: z.number().int().positive(),
     assessmentLanguage: z.string().trim().min(1).max(80),
     recognitionOverrideReason: reasonSchema.optional(),
@@ -97,6 +99,8 @@ export const listBatchesQuerySchema = z
     from: z.preprocess(blankToUndefined, calendarDate.optional()),
     to: z.preprocess(blankToUndefined, calendarDate.optional()),
     tpId: z.preprocess(blankToUndefined, objectIdSchema.optional()),
+    schemeId: z.preprocess(blankToUndefined, objectIdSchema.optional()),
+    projectId: z.preprocess(blankToUndefined, objectIdSchema.optional()),
     page: queryNumber({ min: 1, max: 1_000_000, fallback: 1 }),
     pageSize: queryNumber({
       min: 1,

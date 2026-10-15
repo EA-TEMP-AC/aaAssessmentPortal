@@ -367,6 +367,8 @@ Indexes: `{ code: 1 }` unique; `{ sector: 1 }`.
 | assessmentEndDate | string | Y | ≥ start |
 | tpId | ObjectId | Y | |
 | centreId | ObjectId | Y | |
+| schemeId | ObjectId | N | `schemes` (§3.24). Null when not tagged. Must exist and be active at create; set from the project when only `projectId` is sent (H-01) |
+| projectId | ObjectId | N | `projects` (§3.24). Null when not tagged. Must exist, be active, and belong to `schemeId` (H-01) |
 | candidateCount | number | Y | |
 | sector | SectorName | Y | Copied from the qualification. Client cannot set it |
 | ratioClass | RatioClass | Y | Copied from the qualification. Client cannot set it |
@@ -392,7 +394,7 @@ Indexes: `{ code: 1 }` unique; `{ sector: 1 }`.
 | assignedAt | Date | N | |
 | cancelledAt | Date | N | |
 
-Indexes: `{ status: 1, assessmentStartDate: 1 }`; `{ assessorId: 1, assessmentStartDate: 1, assessmentEndDate: 1 }`; `{ tpId: 1 }`; `{ abId: 1 }`; `{ sector: 1 }`; `{ reassessmentOf: 1 }` sparse; `{ firstAssessmentBatchId: 1 }`; `{ assessmentStartDate: 1 }` (N-01: every analytics query starts with a range on this field; the result join uses the existing unique `results.batchId` index, and the `abId` filter for `ab_reviewer` uses `{ abId: 1 }`).
+Indexes: `{ status: 1, assessmentStartDate: 1 }`; `{ assessorId: 1, assessmentStartDate: 1, assessmentEndDate: 1 }`; `{ tpId: 1 }`; `{ abId: 1 }`; `{ schemeId: 1 }` sparse; `{ projectId: 1 }` sparse; `{ sector: 1 }`; `{ reassessmentOf: 1 }` sparse; `{ firstAssessmentBatchId: 1 }`; `{ assessmentStartDate: 1 }` (N-01: every analytics query starts with a range on this field; the result join uses the existing unique `results.batchId` index, and the `abId` filter for `ab_reviewer` uses `{ abId: 1 }`).
 
 **Analytics (N-01).** `GET /analytics/*` aggregates over `batches`, joined to `results` with `status: "published"` on `batchId`. Date range: `assessmentStartDate` between `from` and `to`. Turnaround: `results.submittedAt` minus the end of `assessmentEndDate` (IST). Late: `sla.breached` contains `result`. No collection is added and nothing is stored: every call is computed live.
 
@@ -586,6 +588,48 @@ Read scope: aa_admin, mis, ncvet_viewer all rows; ab_reviewer `abId`; assessor a
 One interface: `put`, `get` (stream) and `signedUrl`. There is no delete and no overwrite. Drivers: local disk (`EVIDENCE_STORAGE_DRIVER=local`, development and tests only) and S3-compatible (`s3`, AWS SDK v3 with configurable endpoint, region, bucket, path-style and credentials from the environment). Production must name a driver and may not use `local`. Hosting provider and region (India) are open (DECISIONS 6, 240, 322).
 
 ---
+### 3.24 `schemes` / `projects` / `authorisedSignatories` (phase 1) — H-01
+
+Never deleted; `active: false` is the deactivated state. Dates are `YYYY-MM-DD` IST. No signature images, no personal ID numbers.
+
+`schemes`
+
+| Field | Type | Req | Notes |
+|---|---|---|---|
+| name | string | Y | ≤200 |
+| code | string | Y | unique, ≤64 |
+| fundingBody | string | Y | ≤200 |
+| active | bool | Y | default true |
+
+Indexes: `{ code: 1 }` unique.
+
+`projects`
+
+| Field | Type | Req | Notes |
+|---|---|---|---|
+| name | string | Y | ≤200 |
+| code | string | Y | unique across all projects |
+| schemeId | ObjectId | Y | `schemes`; active at create and when changed |
+| startDate | string | Y | |
+| endDate | string or null | N | null = open-ended; on or after `startDate` |
+| active | bool | Y | default true |
+
+Indexes: `{ code: 1 }` unique; `{ schemeId: 1 }`.
+
+`authorisedSignatories`
+
+| Field | Type | Req | Notes |
+|---|---|---|---|
+| name | string | Y | personal data; redacted in audit rows (Q383) |
+| designation | string | Y | ≤200 |
+| scope | `scheme`, `project` or `agency` | Y | |
+| schemeId | ObjectId or null | N | required when scope is `scheme`, else null |
+| projectId | ObjectId or null | N | required when scope is `project`, else null |
+| validFrom | string | Y | |
+| validTo | string or null | N | null = no end; on or after `validFrom` |
+| active | bool | Y | default true |
+
+Indexes: `{ scope: 1, schemeId: 1, projectId: 1 }`. Collection name `authorisedSignatories`.
 
 ### 3.16 Phase 2 / 3 collections
 
@@ -778,6 +822,7 @@ Schema and contract only. **B-10** writes `learnerFeedback` once the batch is `a
 | Settings access GET / PUT | A / A | R / D | D | D | D | D | D | R / D | R / D | §3.22; PUT is aa_admin only and audited |
 | Public site content (admin) | A | R | D | D | D | D | D | D | D | W-01; `/admin/public-site/*`, audited; `/public/*` is anonymous, published items only |
 | Resend credentials | A | D | D | D | D | D | D | D | D | aa_admin only; refused for disabled users |
+| Schemes / projects / signatories CRUD (`/schemes`, `/projects`, `/signatories`) | A | A | D | D | D | D | D | R | R | H-01; deactivate, never delete; audited (signatory name redacted); Q380 |
 | Question bank write / import | A | D | A | D | D | D | D | D | D | Q-01; aa_admin and sme only; audited (content redacted) |
 | Question bank approve | A | D | D | D | D | D | D | A | D | Q-01; ab_reviewer and aa_admin; audited |
 | Evidence upload (`POST /batches/:id/evidence`) | A | D | D | own | own | D | D | D | D | V-01; assessor and proctor of the batch; not into `cancelled` or `rejected` batches |
@@ -802,6 +847,7 @@ awardingBodies.notificationEmails ← emailQueue ← assessor loginEvents
 batches → assessorDayLocks; results; reassessmentOf/firstAssessmentBatchId
 batches.sector + centre.state + aaRecognition → RULE_OUTSIDE_RECOGNITION
 batches.assessmentLanguage + assessors.languages → RULE_ASSESSOR_LANGUAGE
+batches.schemeId, batches.projectId (optional) → schemes, projects; projects.schemeId → schemes; authorisedSignatories.schemeId or projectId (by scope)
 batches.learnerFeedback; assessorPayments (pending = due − paid)
 workingDayConfig + holidays → SLA dueAts (no retroactive rewrite)
 original result.publishedAt → reassessment window

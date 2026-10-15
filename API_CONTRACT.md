@@ -250,10 +250,14 @@ Request:
   "assessmentEndDate": "2026-11-21",
   "tpId": "66f0000000000000000000tp",
   "centreId": "66f0000000000000000000c1",
+  "schemeId": "66f0000000000000000000s1",
+  "projectId": "66f0000000000000000000p1",
   "candidateCount": 24,
   "assessmentLanguage": "Hindi"
 }
 ```
+
+`schemeId` and `projectId` are optional (omit or `null`; H-01). Each must exist and be active, and a project must belong to the given scheme; otherwise `400 VALIDATION_ERROR` with `details.schemeId` or `details.projectId`. If only `projectId` is sent, `schemeId` is set to the project's scheme. They cannot be changed after creation yet, and a reassessment does not copy them (Q384, Q385).
 
 `sector` and `ratioClass` are not accepted on this body. The server copies them from the qualification. `state` is copied from the centre. Optional `recognitionOverrideReason` (1–2000 characters) is honoured only for `aa_admin` when §4.3 of the schema fails; otherwise that failure is `RULE_OUTSIDE_RECOGNITION`.
 
@@ -269,6 +273,8 @@ Response `201` (STT; assign due is 7 working days after allocation, result due i
   "assessmentEndDate": "2026-11-21",
   "tpId": "66f0000000000000000000tp",
   "centreId": "66f0000000000000000000c1",
+  "schemeId": "66f0000000000000000000s1",
+  "projectId": "66f0000000000000000000p1",
   "candidateCount": 24,
   "sector": "Electronics",
   "ratioClass": "manufacturing",
@@ -299,7 +305,9 @@ Response `201` (STT; assign due is 7 working days after allocation, result due i
 
 An LTT batch with the same dates would set `assignDueAt` to `2026-10-09T18:29:59.999Z` (30 working days before `2026-11-20`) and `resultDueAt` to `2026-11-27T18:29:59.999Z` (5 working days after that exam date). SCHEMA §2.3.
 
-### GET /batches?status=&from=&to=&tpId=&page=&pageSize=
+### GET /batches?status=&from=&to=&tpId=&schemeId=&projectId=&page=&pageSize=
+
+`schemeId` and `projectId` (H-01) filter on the batch's own link, on top of the caller's row scope. An empty value is ignored; a value that is not an id is `400 VALIDATION_ERROR`. Batches with no link are never matched by these filters.
 
 ### GET /batches/:id
 
@@ -1343,6 +1351,66 @@ Roles: `aa_admin`, `ab_reviewer`. Draft to approved. `409 TEST_ALREADY_APPROVED`
 
 ### POST /api/v1/tests/:id/regenerate-check
 Roles: `aa_admin`, `sme`, `ab_reviewer`. Re-runs the selection with the stored seed and rules on the current bank. Returns `reproducible` (same questions, versions and order), `poolUnchanged` (bank pool is identical to generation time), `missing` and `extra` (`id:version`), and `stale` (stored questions no longer approved and current). If `poolUnchanged` is true and `reproducible` is false, the generator is broken. Audit: `test.regenerate_check`.
+## Schemes, projects, authorised signatories (H-01)
+
+Master data for funding schemes, projects under a scheme, and the people who may sign for a scheme, a project, or the whole agency. Nothing is deleted: `DELETE` deactivates (`active: false`). Every write is audited with `before` and `after` (`scheme.create|update|deactivate`, `project.*`, `signatory.*`). Unknown request keys are `400 VALIDATION_ERROR`. No signature images and no personal ID numbers are accepted.
+
+Roles (all three resources): write `aa_admin`, `mis` (the master-data pattern; Q380); read `aa_admin`, `mis`, `ab_reviewer`, `ncvet_viewer`; every other role `403 FORBIDDEN`. Lists are paged (`page`, `pageSize` max 100, default 20), newest first, and take `active=true|false`.
+
+### /schemes
+
+`POST /schemes`, `GET /schemes?active=&page=&pageSize=`, `GET /schemes/:id`, `PATCH /schemes/:id`, `DELETE /schemes/:id` (deactivate, returns the row).
+
+Create request (`name`, `code`, `fundingBody` required; `active` optional, default true):
+```json
+{ "name": "State Skill Scheme", "code": "SSS-01", "fundingBody": "State Skill Mission" }
+```
+Response `201`:
+```json
+{
+  "id": "66f0000000000000000000s1",
+  "name": "State Skill Scheme",
+  "code": "SSS-01",
+  "fundingBody": "State Skill Mission",
+  "active": true,
+  "createdAt": "2026-10-15T08:00:00.000Z",
+  "updatedAt": "2026-10-15T08:00:00.000Z"
+}
+```
+`code` is unique: a repeat on create or `PATCH` is `409 DUPLICATE_RESOURCE`. `PATCH` takes any of `name`, `code`, `fundingBody`, `active` (at least one).
+
+### /projects
+
+`POST /projects`, `GET /projects?schemeId=&active=&page=&pageSize=`, `GET /projects/:id`, `PATCH /projects/:id`, `DELETE /projects/:id` (deactivate).
+
+Create request (`endDate` optional or `null` for open-ended; dates are `YYYY-MM-DD` IST, `endDate` on or after `startDate`):
+```json
+{
+  "name": "Project One",
+  "code": "PRJ-01",
+  "schemeId": "66f0000000000000000000s1",
+  "startDate": "2026-04-01",
+  "endDate": "2027-03-31"
+}
+```
+Response `201`: the same fields plus `id`, `active`, `createdAt`, `updatedAt`. `schemeId` must exist and be active on create and when `PATCH` changes it (`400 VALIDATION_ERROR`, `details.schemeId`). `code` is unique across all projects (`409 DUPLICATE_RESOURCE`).
+
+### /signatories
+
+`POST /signatories`, `GET /signatories?scope=&schemeId=&projectId=&active=&page=&pageSize=`, `GET /signatories/:id`, `PATCH /signatories/:id`, `DELETE /signatories/:id` (deactivate).
+
+Create request:
+```json
+{
+  "name": "A. Signer",
+  "designation": "Director",
+  "scope": "scheme",
+  "schemeId": "66f0000000000000000000s1",
+  "validFrom": "2026-04-01",
+  "validTo": "2027-03-31"
+}
+```
+`scope` is `scheme` (needs `schemeId`, no `projectId`), `project` (needs `projectId`, no `schemeId`), or `agency` (neither). `validTo` is optional or `null` (no end) and must be on or after `validFrom`. A referenced scheme or project must exist and be active when set or changed. Response `201`: `id`, `name`, `designation`, `scope`, `schemeId`, `projectId` (the unused one is `null`), `validFrom`, `validTo`, `active`, `createdAt`, `updatedAt`. `PATCH` may change the scope; the merged row must still satisfy the rules above. A signatory's name is personal data, so audit rows and the logged request body show `"[redacted]"` for `name` (Q383).
 
 ---
 

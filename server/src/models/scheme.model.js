@@ -1,0 +1,19 @@
+import mongoose from "mongoose";
+
+/**
+ * schemes. docs/SCHEMA.md §3.24. Funding schemes that batches can be tagged with.
+ * `code` is unique. Never deleted, only deactivated.
+ */
+const schemeSchema = new mongoose.Schema(
+  {
+    name: { type: String, required: true, trim: true, maxlength: 200 },
+    code: { type: String, required: true, trim: true, maxlength: 64 },
+    fundingBody: { type: String, required: true, trim: true, maxlength: 200 },
+    active: { type: Boolean, required: true, default: true },
+  },
+  { timestamps: true },
+);
+
+schemeSchema.index({ code: 1 }, { unique: true });
+
+export const Scheme = mongoose.model("Scheme", schemeSchema, "schemes");

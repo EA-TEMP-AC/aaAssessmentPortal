@@ -83,6 +83,8 @@ const batchSchema = new mongoose.Schema(
     tpId: { type: mongoose.Schema.Types.ObjectId, required: true, ref: "TrainingPartner" },
     centreId: { type: mongoose.Schema.Types.ObjectId, required: true, ref: "Centre" },
     candidateCount: { type: Number, required: true, min: 0 },
+    schemeId: { type: mongoose.Schema.Types.ObjectId, default: null, ref: "Scheme" },
+    projectId: { type: mongoose.Schema.Types.ObjectId, default: null, ref: "Project" },
     sector: { type: String, required: true, enum: SECTOR_NAMES },
     ratioClass: { type: String, required: true, enum: RATIO_CLASSES },
     assessmentLanguage: { type: String, required: true, trim: true, minlength: 1, maxlength: 80 },
@@ -114,6 +116,8 @@ batchSchema.index({ status: 1, assessmentStartDate: 1 });
 batchSchema.index({ assessorId: 1, assessmentStartDate: 1, assessmentEndDate: 1 });
 batchSchema.index({ tpId: 1 });
 batchSchema.index({ abId: 1 });
+batchSchema.index({ schemeId: 1 }, { sparse: true });
+batchSchema.index({ projectId: 1 }, { sparse: true });
 // N-01 analytics: every query is a range on the IST start date, alone or with abId.
 batchSchema.index({ assessmentStartDate: 1 });
 batchSchema.index({ sector: 1 });

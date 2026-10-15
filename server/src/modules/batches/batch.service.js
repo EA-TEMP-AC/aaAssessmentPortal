@@ -19,6 +19,7 @@ import { BATCH_STATUSES, resolveTransition, rolesForAction } from "./batch-trans
 import { slaDueAtCreation } from "./batch-sla.js";
 import { presentLearnerFeedback } from "./learner-feedback.service.js";
 import { findBatchIdsForLearner, learnerIsOnBatch } from "../candidates/candidate-scope.js";
+import { resolveBatchLinks } from "../schemes/schemes.service.js";
 import { recognitionDecision } from "../recognition/recognition.service.js";
 import { mergedBreachKeys, OPEN_SLA_STEPS, overdueCondition } from "./sla-breach-job.js";
 
@@ -80,6 +81,8 @@ async function listFilter(user, query) {
     if (filter.tpId && String(filter.tpId) !== query.tpId) return { _id: { $in: [] } };
     filter.tpId = query.tpId;
   }
+  if (query.schemeId) filter.schemeId = query.schemeId;
+  if (query.projectId) filter.projectId = query.projectId;
   if (query.from || query.to) {
     const range = {};
     if (query.from) range.$gte = query.from;
@@ -106,6 +109,8 @@ export function presentBatch(doc, { now = new Date(), recompute = true } = {}) {
     assessmentEndDate: doc.assessmentEndDate,
     tpId: idOf(doc.tpId),
     centreId: idOf(doc.centreId),
+    schemeId: idOf(doc.schemeId),
+    projectId: idOf(doc.projectId),
     candidateCount: doc.candidateCount,
     sector: doc.sector,
     ratioClass: doc.ratioClass,
@@ -202,6 +207,7 @@ export async function createBatch(user, input, context = {}) {
   const now = context.now ?? new Date();
   assertCreator(user, input.abId);
   const copied = await loadBatchSources(input);
+  const links = await resolveBatchLinks(input);
   const override = await recognitionDecision({
     sector: copied.sector,
     state: copied.state,
@@ -227,6 +233,8 @@ export async function createBatch(user, input, context = {}) {
     assessmentEndDate: input.assessmentEndDate,
     tpId: input.tpId,
     centreId: input.centreId,
+    schemeId: links.schemeId,
+    projectId: links.projectId,
     candidateCount: input.candidateCount,
     sector: copied.sector,
     ratioClass: copied.ratioClass,

@@ -211,6 +211,14 @@ export const ANALYTICS_READ_ROLES = Object.freeze([
 /** /admin/public-site/*. W-01. aa_admin writes the public website content, mis reads it. */
 export const PUBLIC_SITE_WRITE_ROLES = Object.freeze(["aa_admin"]);
 export const PUBLIC_SITE_READ_ROLES = Object.freeze(["aa_admin", "mis"]);
+/**
+ * Scheme, project and authorised signatory master data. H-01.
+ * Writes follow the master-data pattern (aa_admin and mis). Reads add ab_reviewer and
+ * ncvet_viewer; everyone else is denied. Open question 380.
+ */
+export const SCHEME_WRITE_ROLES = MASTER_DATA_WRITE_ROLES;
+export const SCHEME_READ_ROLES = Object.freeze(["aa_admin", "mis", "ab_reviewer", "ncvet_viewer"]);
+
 /** Question bank writes and imports. Q-01: aa_admin and sme only. */
 export const QUESTION_WRITE_ROLES = Object.freeze(["aa_admin", "sme"]);
 
