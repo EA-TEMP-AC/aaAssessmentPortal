@@ -1341,7 +1341,7 @@ Runs once a day in the server process (same pattern as the SLA job; not an endpo
 
 ## Evidence vault (Phase 2, V-01)
 
-Backend only. The browser screen is V-02. Files live in object storage (local disk in development, an S3-compatible bucket in production; see README) under random keys. The API never returns a storage key, never uses a client file name as a path, and offers no way to replace or delete a file.
+The browser screen is `/evidence` in the web app (V-02, no API change). Files live in object storage (local disk in development, an S3-compatible bucket in production; see README) under random keys. The API never returns a storage key, never uses a client file name as a path, and offers no way to replace or delete a file.
 
 Read roles: `aa_admin`, `mis` and `ncvet_viewer` see every row; `ab_reviewer` sees rows of its own awarding body (no `abId` means no rows); `assessor` and `proctor` see only rows they uploaded. `candidate`, `tp` and `sme` get `403`. A row outside the caller's scope is `403`; an unknown id is `404`.
 

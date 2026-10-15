@@ -10,6 +10,7 @@ import { AbQueuePage } from "./pages/AbQueuePage";
 import { AnalyticsPage } from "./pages/AnalyticsPage";
 import { AuditLogPage } from "./pages/AuditLogPage";
 import { ChangePasswordPage } from "./pages/ChangePasswordPage";
+import { EvidencePage } from "./pages/EvidencePage";
 import { MasterDataPage } from "./pages/MasterDataPage";
 import { RecognitionPage } from "./pages/RecognitionPage";
 import { RegistryPage } from "./pages/RegistryPage";
@@ -60,6 +61,8 @@ export function AppRoutes() {
                       <AnalyticsPage />
                     ) : item.id === "audit" ? (
                       <AuditLogPage />
+                    ) : item.id === "evidence" ? (
+                      <EvidencePage />
                     ) : item.id === "users" ? (
                       <UsersPage />
                     ) : item.id === "registry" ? (
