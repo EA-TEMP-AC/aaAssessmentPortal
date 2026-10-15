@@ -114,6 +114,8 @@ batchSchema.index({ status: 1, assessmentStartDate: 1 });
 batchSchema.index({ assessorId: 1, assessmentStartDate: 1, assessmentEndDate: 1 });
 batchSchema.index({ tpId: 1 });
 batchSchema.index({ abId: 1 });
+// N-01 analytics: every query is a range on the IST start date, alone or with abId.
+batchSchema.index({ assessmentStartDate: 1 });
 batchSchema.index({ sector: 1 });
 batchSchema.index({ reassessmentOf: 1 }, { sparse: true });
 batchSchema.index({ firstAssessmentBatchId: 1 });

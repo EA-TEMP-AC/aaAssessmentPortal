@@ -402,5 +402,14 @@ B-15 open questions (2026-10-15):
 
 Human decision on 2026-10-15: Q176, Q177, Q178, Q179 and Q180 accepted as built.
 
+N-01 open questions (2026-10-15):
+220. **Which date puts a batch in the range.** `from` and `to` are matched against the batch `assessmentStartDate`. A batch that starts before `from` but ends inside the range is left out, and so is a batch published inside the range but assessed before it. Should the range use the assessment end date, or the result `publishedAt`?
+221. **What "turnaround" measures.** Calendar days from the end of the last assessment day (IST) to the result `submittedAt`, never below 0, averaged over published results. It stops at submission, not at validation or publication. Should it count working days (SCHEMA 2.1), or run to `publishedAt`?
+222. **On time versus late.** A published result is late when its batch has `result` in `sla.breached`, which includes one that `aa_admin` submitted late with a reason. It is not a comparison of `submittedAt` with `resultDueAt`. Confirm, or compare the timestamps.
+223. **Who is counted as a learner.** `learnersAssessed` is Pass plus Fail rows of published results; Absent is shown apart and left out of the pass rate. A learner reassessed after a Fail is counted again in the reassessment batch, so one person can appear twice and the rate is per attempt, not per person. Is per attempt right, or should a first-attempt rate be added?
+224. **What a batch and a breach count.** `batches` counts every status, including cancelled and rejected; `slaBreaches` adds one per breach key, so a batch late to accept and late with its result adds 2. Should cancelled and rejected batches be left out, and should breaches count batches instead?
+225. **Small groups.** The numbers are counts and rates, but an assessor, training partner or state with one assessed learner shows that learner's outcome. Should groups below a minimum size (for example 5 learners) hide their rates? Assessor names and pass rates are also shown to `ncvet_viewer` and, for their own batches, to `ab_reviewer`; confirm that is allowed under the assessor terms.
+226. **Live aggregation.** Each request runs the aggregation over the range, with one added index on `assessmentStartDate` and no cache or stored summary. This is fine at Phase 1 volumes; at what batch count should a nightly summary collection replace it?
+
 ## Not mandated by NCVET (TR s29), do not market as compliance features
 Specific language, DB, cloud, server architecture, API style, biometric or face-recognition tech, GPS hardware, payment gateway, CRM, help-desk software.

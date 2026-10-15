@@ -151,7 +151,7 @@ export const RESULT_PUBLISHED_ONLY_ROLES = Object.freeze(["candidate", "tp"]);
 /** GET /results/:id/change-log. API_CONTRACT.md. */
 export const RESULT_CHANGE_LOG_ROLES = Object.freeze(["aa_admin", "ab_reviewer", "mis"]);
 
-/** PUT /batches/:id/learner-feedback. docs/SCHEMA.md ง3.8. */
+/** PUT /batches/:id/learner-feedback. docs/SCHEMA.md ยง3.8. */
 export const LEARNER_FEEDBACK_WRITE_ROLES = Object.freeze(["aa_admin", "mis"]);
 
 /**
@@ -194,3 +194,14 @@ export const ACCESS_SETTINGS_READ_ROLES = Object.freeze([
 
 /** PUT /settings/access. aa_admin only. */
 export const ACCESS_SETTINGS_WRITE_ROLES = Object.freeze(["aa_admin"]);
+
+/**
+ * GET /analytics/*. N-01. ab_reviewer is limited to their own awarding body in the service;
+ * a reviewer with no abId is refused. Everyone else is denied.
+ */
+export const ANALYTICS_READ_ROLES = Object.freeze([
+  "aa_admin",
+  "mis",
+  "ncvet_viewer",
+  "ab_reviewer",
+]);

@@ -112,7 +112,7 @@ A-03 Phase 2 notes (not Phase 1 scope): live NCVET monitoring link for online as
 | P-07 | Device/object detection (phone, earphone, book, extra screen) | backend | P-01 | todo | Model behind replaceable interface |
 | P-08 | Human review queue + decisions (dismiss/warn/invalidate) + candidate warnings | backend+frontend | P-04 | todo | No auto-invalidation; all decisions audit logged |
 | P-04 | Malpractice detection hooks, record + flag, proctor report | backend | P-01 | todo | TR s7 |
-| N-01 | Analytics API + graphs: assessor, TP, job role, state, date range | backend+frontend | B-05 | todo | TR s10 |
+| N-01 | Analytics API + graphs: assessor, TP, job role, state, date range | backend+frontend | B-05 | review | TR s10. Backend only; web graphs pending. Branch: `task/N-01-analytics-api` |
 | C-01 | ERF score tracker (+4/-1/-2/-4, max 400, grades) and risk plan | backend | B-05 | todo | Use the 31 Annexure IX(b) marks in docs/ERF.md (blank marks add 0; rows 02 and 20 are 0). Score is weight × category points. Excellence has no fixed multiplier. Grades are Table 15; scores 324 and 171 are open Q85. Grade B, C, or D starts the risk plan. |
 | C-02 | DEP export | backend | C-01 | todo | Blocked until format known |
 | W-01 | Public site data model + admin CRUD (team, organogram, assessors, proctors, sample papers, industry linkages, grievance, POSH, office docs) | backend | B-04 | todo | TR s22 |

@@ -360,7 +360,9 @@ Indexes: `{ code: 1 }` unique; `{ sector: 1 }`.
 | assignedAt | Date | N | |
 | cancelledAt | Date | N | |
 
-Indexes: `{ status: 1, assessmentStartDate: 1 }`; `{ assessorId: 1, assessmentStartDate: 1, assessmentEndDate: 1 }`; `{ tpId: 1 }`; `{ abId: 1 }`; `{ sector: 1 }`; `{ reassessmentOf: 1 }` sparse; `{ firstAssessmentBatchId: 1 }`.
+Indexes: `{ status: 1, assessmentStartDate: 1 }`; `{ assessorId: 1, assessmentStartDate: 1, assessmentEndDate: 1 }`; `{ tpId: 1 }`; `{ abId: 1 }`; `{ sector: 1 }`; `{ reassessmentOf: 1 }` sparse; `{ firstAssessmentBatchId: 1 }`; `{ assessmentStartDate: 1 }` (N-01: every analytics query starts with a range on this field; the result join uses the existing unique `results.batchId` index, and the `abId` filter for `ab_reviewer` uses `{ abId: 1 }`).
+
+**Analytics (N-01).** `GET /analytics/*` aggregates over `batches`, joined to `results` with `status: "published"` on `batchId`. Date range: `assessmentStartDate` between `from` and `to`. Turnaround: `results.submittedAt` minus the end of `assessmentEndDate` (IST). Late: `sla.breached` contains `result`. No collection is added and nothing is stored: every call is computed live.
 
 **Clash:** overlapping `[start,end]` + different `centreId` → `RULE_ASSESSOR_CLASH` via `assessorDayLocks` txn. The same centre on the same day still merges into one lock. Whether two batches at that centre should block, warn, or stay allowed is open Q79 (Annexure IX(a) Assessment Delivery sub-parameter 9).
 
@@ -594,6 +596,7 @@ Schema and contract only. **B-10** writes `learnerFeedback` once the batch is `a
 | Recognition GET/PUT | A | A | D | D | D | D | D | D | R | audit on PUT |
 | Learner feedback write | A | A | D | D | D | D | D | D | D | B-10; batch readers may read it on the batch |
 | Assessor payment read/write | A | A | D | own | D | D | D | R° | R | B-11; write is aa_admin and mis; ncvet_viewer reads; an assessor reads only their own rows; ° ab_reviewer reads own-AB rows only when `abReviewerCanReadAssessorPayments` is on, else denied (Q161, decision 174) |
+| Analytics GET (summary, by assessor / training partner / job role / state) | A | R | D | D | D | D | D | R° | R | N-01; ° own `abId` only; counts and rates, no learner data |
 | Settings access GET / PUT | A / A | R / D | D | D | D | D | D | R / D | R / D | §3.22; PUT is aa_admin only and audited |
 | Resend credentials | A | D | D | D | D | D | D | D | D | aa_admin only; refused for disabled users |
 

@@ -971,6 +971,63 @@ Secrets redacted. Append-only.
 
 ---
 
+## Analytics
+
+Read-only. Roles: `aa_admin`, `mis` and `ncvet_viewer` read everything; `ab_reviewer` reads only batches of their own `abId` (a reviewer with no `abId` is `403`); every other role is `403`. All five endpoints are `GET` and need `from` and `to`.
+
+Query: `from`, `to` (required, IST calendar dates `YYYY-MM-DD`, both inclusive). A batch is in range when its `assessmentStartDate` is between them. `from` after `to`, a date that is not real, a missing date, an unknown parameter, or a range of three years or more (`to` on or after `from` plus 3 years) is `400 VALIDATION_ERROR`. The list endpoints also take `page` (default 1) and `pageSize` (default 20, max 100).
+
+Rules for every measure: only results with `status: "published"` count towards learners assessed, pass rate and turnaround. Responses hold counts and rates only. No learner, candidate or result row is returned.
+
+### GET /analytics/summary
+
+```json
+{
+  "from": "2026-01-01",
+  "to": "2026-12-31",
+  "batches": { "total": 4, "byStatus": { "allocated": 0, "published": 3, "result_submitted": 1, "...": 0 } },
+  "publishedResults": { "total": 3, "onTime": 2, "late": 1 },
+  "learnersAssessed": 7,
+  "passRate": 0.7143,
+  "slaBreaches": 2
+}
+```
+
+`byStatus` lists every batch status, with 0 where none. `late` is a published result whose batch has `result` in `sla.breached`; `onTime` is the rest. `passRate` is `null` when no learner was assessed.
+
+### GET /analytics/by-assessor, /by-training-partner, /by-job-role, /by-state
+
+Paged, busiest first (`batches` descending, then id). `by-assessor` leaves out batches with no assessor. Job role is the batch qualification.
+
+```json
+{
+  "from": "2026-01-01", "to": "2026-12-31", "page": 1, "pageSize": 20, "total": 3,
+  "items": [
+    {
+      "id": "66f000000000000000000a01", "name": "Assessor One", "code": "AS-1",
+      "batches": 2, "publishedBatches": 2,
+      "learnersAssessed": 5, "passed": 3, "failed": 2, "absent": 1,
+      "passRate": 0.6, "avgTurnaroundDays": 2.25, "slaBreaches": 1
+    }
+  ]
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `id`, `name`, `code` | The assessor, training partner or qualification. For `by-state`, `id` and `name` are the state name and `code` is `null`. `name` is `null` if the record is gone |
+| `batches` | Batches in range, in any status |
+| `publishedBatches` | Of those, batches with a published result |
+| `passed`, `failed`, `absent` | Rows of published results by outcome |
+| `learnersAssessed` | `passed + failed` (absent learners are not assessed) |
+| `passRate` | `passed / learnersAssessed`, 4 decimals, `null` when 0 learners |
+| `avgTurnaroundDays` | Mean calendar days from the end of the last assessment day (IST) to result `submittedAt`, floored at 0, 2 decimals, `null` when no published result |
+| `slaBreaches` | Total entries in `sla.breached` across the batches (one batch can add up to 3) |
+
+Empty range: `total: 0`, `items: []`. Summary with no batches: zeros and `passRate: null`.
+
+---
+
 ## Compliance stubs
 
 `GET /compliance/dashboard`; ERF/risk-plan Phase 3.
