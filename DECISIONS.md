@@ -450,6 +450,7 @@ Task F-16 (web only). Q182 is fixed: the shell loads `GET /settings/access` once
 301. **Charts show the top 10 rows only.** Each tab charts the first 10 rows (busiest first, the API order) as a pass rate or batch count, whichever page of the table is open. Rows are not re-sorted in the browser, so "highest pass rate" is not offered; groups with no learners assessed show "no data". Should the table be sortable by pass rate (needs a server sort parameter), and should small groups be hidden (see Q225)?
 302. **Table page size.** The tables use 10 rows per page so the chart and page 1 share one request; the API allows up to 100. Confirm 10, or add a page-size choice.
 303. **Settings request for `ncvet_viewer` on every page.** The shell now requests the access settings for `ncvet_viewer` after sign-in and on every window focus (not only on `/ab-queue`, which answers Q182). The `/ab-queue` page still reads the same endpoint for its own guard. Is one extra small request per focus acceptable, or should it be refreshed on a timer or after sign-in only?
+Human decisions on 2026-10-15 (F-16): Q300, Q301, Q303 accepted. Q302 accepted with a change: every paged table in the analytics page gets a rows-per-page drop-down (10, 20, 50), default 10 (task F-17).
 
 ## Not mandated by NCVET (TR s29), do not market as compliance features
 Specific language, DB, cloud, server architecture, API style, biometric or face-recognition tech, GPS hardware, payment gateway, CRM, help-desk software.
