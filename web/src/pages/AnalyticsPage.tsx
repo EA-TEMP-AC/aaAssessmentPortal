@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useId, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
   defaultRange,
@@ -11,7 +11,35 @@ import {
 import { errorMessage } from "../api/client";
 import { BarChart } from "../components/BarChart";
 
-const PAGE_SIZE = 10;
+/** The chart always shows the top 10 rows, whatever rows-per-page the tables use. */
+const CHART_ROWS = 10;
+
+const ANALYTICS_PAGE_SIZES = [10, 20, 50] as const;
+type AnalyticsPageSize = (typeof ANALYTICS_PAGE_SIZES)[number];
+const DEFAULT_PAGE_SIZE: AnalyticsPageSize = 10;
+const PAGE_SIZE_KEY = "analytics.rowsPerPage";
+
+function isPageSize(value: number): value is AnalyticsPageSize {
+  return (ANALYTICS_PAGE_SIZES as readonly number[]).includes(value);
+}
+
+/** One choice for every table, kept for the browser session only. Storage may be blocked. */
+function readPageSize(): AnalyticsPageSize {
+  try {
+    const stored = Number(window.sessionStorage.getItem(PAGE_SIZE_KEY));
+    return isPageSize(stored) ? stored : DEFAULT_PAGE_SIZE;
+  } catch {
+    return DEFAULT_PAGE_SIZE;
+  }
+}
+
+function storePageSize(value: AnalyticsPageSize) {
+  try {
+    window.sessionStorage.setItem(PAGE_SIZE_KEY, String(value));
+  } catch {
+    // The choice then lasts until the table is reopened.
+  }
+}
 
 const TABS: readonly { id: AnalyticsDimension; label: string; noun: string }[] = [
   { id: "assessor", label: "By assessor", noun: "Assessor" },
@@ -112,16 +140,18 @@ function BreakdownPanel({
 }) {
   const [page, setPage] = useState(1);
   const [metric, setMetric] = useState<Metric>("passRate");
+  const [pageSize, setPageSize] = useState<AnalyticsPageSize>(readPageSize);
+  const pageSizeId = useId();
 
   const table = useQuery({
-    queryKey: ["analytics", dimension, from, to, page, PAGE_SIZE],
-    queryFn: ({ signal }) => listAnalytics(dimension, { from, to, page, pageSize: PAGE_SIZE }, signal),
+    queryKey: ["analytics", dimension, from, to, page, pageSize],
+    queryFn: ({ signal }) => listAnalytics(dimension, { from, to, page, pageSize }, signal),
     placeholderData: keepPreviousData,
   });
   // The chart always shows the top 10 rows (page 1), whichever table page is open.
   const top = useQuery({
-    queryKey: ["analytics", dimension, from, to, 1, PAGE_SIZE],
-    queryFn: ({ signal }) => listAnalytics(dimension, { from, to, page: 1, pageSize: PAGE_SIZE }, signal),
+    queryKey: ["analytics", dimension, from, to, 1, CHART_ROWS],
+    queryFn: ({ signal }) => listAnalytics(dimension, { from, to, page: 1, pageSize: CHART_ROWS }, signal),
   });
 
   if (table.isPending) return <p role="status">Loading {noun.toLowerCase()} figures.</p>;
@@ -189,6 +219,26 @@ function BreakdownPanel({
       <p className="audit-summary">
         Page {result.page} of {pages}. {result.total} {result.total === 1 ? "row" : "rows"}, busiest first.
       </p>
+      <div className="field analytics-page-size">
+        <label htmlFor={pageSizeId}>Rows per page</label>
+        <select
+          id={pageSizeId}
+          value={pageSize}
+          onChange={(event) => {
+            const next = Number(event.target.value);
+            if (!isPageSize(next)) return;
+            storePageSize(next);
+            setPageSize(next);
+            setPage(1);
+          }}
+        >
+          {ANALYTICS_PAGE_SIZES.map((size) => (
+            <option key={size} value={size}>
+              {size}
+            </option>
+          ))}
+        </select>
+      </div>
       <div className="table-scroll">
         <table className="master-table">
           <caption className="visually-hidden">{noun} figures, most batches first</caption>
