@@ -43,6 +43,7 @@ import {
   signatoriesRouter,
 } from "./modules/schemes/schemes.routes.js";
 import { questionBankRouter } from "./modules/question-bank/question-bank.routes.js";
+import { attemptsRouter } from "./modules/attempts/attempt.routes.js";
 import { testGeneratorRouter } from "./modules/test-generator/test-generator.routes.js";
 import { weightProfileRouter } from "./modules/weight-profiles/weight-profiles.routes.js";
 
@@ -84,6 +85,7 @@ export function createApp() {
   app.use("/api/v1/evidence", evidenceRouter);
   app.use("/api/v1/tests", testGeneratorRouter);
   app.use("/api/v1/weight-profiles", weightProfileRouter);
+  app.use("/api/v1/attempts", attemptsRouter);
   app.use("/api/v1/schemes", schemesRouter);
   app.use("/api/v1/projects", projectsRouter);
   app.use("/api/v1/signatories", signatoriesRouter);

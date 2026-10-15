@@ -70,6 +70,11 @@ const envSchema = z.object({
     emptyToUndefined,
     z.coerce.number().int().min(10).max(900).default(120),
   ),
+  /** Attempt grace after the deadline, in seconds (E-03). Unset uses compliance.js. */
+  ATTEMPT_GRACE_SECONDS: z.preprocess(
+    emptyToUndefined,
+    z.coerce.number().int().min(0).max(300).optional(),
+  ),
 });
 
 const parsed = envSchema.safeParse(process.env);
