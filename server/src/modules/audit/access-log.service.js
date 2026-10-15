@@ -1,7 +1,16 @@
 import crypto from "node:crypto";
 import { clientIp } from "../../lib/client-ip.js";
 import { toObjectIdOrNull } from "../../lib/object-id.js";
+import { maskEmail, maskPhone } from "../../lib/redact.js";
 import { AccessLog } from "../../models/access-log.model.js";
+
+function sanitizeSubjectId(id) {
+  if (typeof id !== "string") return id;
+  if (id.includes("@")) return maskEmail(id);
+  const digits = id.replace(/\D/g, "");
+  if (digits.length >= 10 && id.length <= 15) return maskPhone(id);
+  return id;
+}
 
 /** Contract lists `page` and `pageSize`. Same default and cap as the other lists. */
 export const ACCESS_LOG_DEFAULT_PAGE_SIZE = 20;
@@ -15,7 +24,9 @@ export const ACCESS_LOG_DEFAULT_PAGE_SIZE = 20;
  * @param {{ subjectType: string, subjectIds: Array<string|object>, kind: "list"|"detail", fields: string[] }} entry
  */
 export async function recordAccess(req, entry) {
-  const ids = [...new Set(entry.subjectIds.filter(Boolean).map((id) => String(id)))];
+  const ids = [
+    ...new Set(entry.subjectIds.filter(Boolean).map((id) => sanitizeSubjectId(String(id)))),
+  ];
   if (ids.length === 0) return 0;
 
   const requestId = crypto.randomUUID();

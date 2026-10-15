@@ -24,6 +24,7 @@ export const PEOPLE_KINDS = Object.freeze(["assessor", "proctor"]);
 
 const common = {
   published: { type: Boolean, required: true, default: false },
+  archived: { type: Boolean, required: true, default: false },
   sortOrder: { type: Number, required: true, default: 0, min: 0, max: 100000 },
   createdBy: { type: mongoose.Schema.Types.ObjectId },
   updatedBy: { type: mongoose.Schema.Types.ObjectId },
@@ -34,6 +35,7 @@ const text = (max, required = false) => ({ type: String, trim: true, maxlength: 
 function model(name, collection, fields, indexes = []) {
   const schema = new mongoose.Schema({ ...fields, ...common }, { timestamps: true });
   schema.index({ published: 1, sortOrder: 1 });
+  schema.index({ archived: 1, published: 1, sortOrder: 1 });
   for (const [spec, options] of indexes) schema.index(spec, options);
   return mongoose.model(name, schema, collection);
 }
@@ -63,6 +65,8 @@ export const PublicPerson = model(
     roleLabel: text(100, true),
     sector: { type: String, enum: [...SECTOR_NAMES, null], default: null },
     photoRef: text(500),
+    consentRecorded: { type: Boolean, required: true, default: false },
+    consentNote: text(1000),
   },
   [[{ kind: 1, registryId: 1 }, { unique: true }]],
 );
@@ -96,6 +100,8 @@ export const PoshItem = model("PoshItem", "publicPosh", {
   memberName: text(200),
   memberRole: text(200),
   fileRef: text(500),
+  consentRecorded: { type: Boolean, default: false },
+  consentNote: text(1000),
 });
 
 export const OfficeDocument = model("OfficeDocument", "publicOfficeDocuments", {

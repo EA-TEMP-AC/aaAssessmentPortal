@@ -208,8 +208,8 @@ export const ANALYTICS_READ_ROLES = Object.freeze([
   "ncvet_viewer",
   "ab_reviewer",
 ]);
-/** /admin/public-site/*. W-01. aa_admin writes the public website content, mis reads it. */
-export const PUBLIC_SITE_WRITE_ROLES = Object.freeze(["aa_admin"]);
+/** /admin/public-site/*. W-01/B-16. aa_admin publishes; mis creates and edits drafts. */
+export const PUBLIC_SITE_WRITE_ROLES = Object.freeze(["aa_admin", "mis"]);
 export const PUBLIC_SITE_READ_ROLES = Object.freeze(["aa_admin", "mis"]);
 /**
  * Scheme, project and authorised signatory master data. H-01.

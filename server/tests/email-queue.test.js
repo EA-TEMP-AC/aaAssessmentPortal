@@ -170,6 +170,7 @@ describe("email queue", () => {
     expect(job.kind).toBe("password_reset");
     expect(job.subject).toBe("Your assessment portal password was reset");
     expect(job.text).toBeUndefined();
+    expect(job.to).toEqual(["a***@example.com"]);
     expect(JSON.stringify(job)).not.toContain(secret);
     expect(logged.join("\n")).not.toContain(secret);
   });
@@ -201,6 +202,7 @@ describe("email queue", () => {
           const pending = await EmailQueue.findOne().lean();
           expect(pending.status).toBe("pending");
           expect(pending.text).toContain(secret);
+          expect(pending.to).toEqual(["ab@example.com"]);
           cursor = new Date(cursor.getTime() + result.delayMs);
         } else {
           expect(result.status).toBe("failed");
@@ -217,7 +219,9 @@ describe("email queue", () => {
     expect(job.kind).toBe("password_reset");
     expect(job.subject).toBe("Your assessment portal password was reset");
     expect(job.text).toBeUndefined();
+    expect(job.to).toEqual(["a***@example.com"]);
     expect(JSON.stringify(job)).not.toContain(secret);
+
     expect(logged.join("\n")).not.toContain(secret);
   });
 

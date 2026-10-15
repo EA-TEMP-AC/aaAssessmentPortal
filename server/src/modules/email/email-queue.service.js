@@ -5,6 +5,7 @@ import {
   emailBackoffDelayMs,
 } from "../../config/email.js";
 import { safeErrorCode } from "../../lib/safe-error.js";
+import { maskEmail } from "../../lib/redact.js";
 import { EmailQueue } from "../../models/email-queue.model.js";
 
 /**
@@ -86,13 +87,26 @@ export async function reclaimStaleEmails(now = new Date()) {
     status: "sending",
     claimedAt: { $lte: new Date(now.getTime() - EMAIL_SENDING_STALE_MS) },
   };
-  const failed = await EmailQueue.updateMany(
-    {
-      ...stale,
-      $or: [{ attempts: { $gte: EMAIL_MAX_ATTEMPTS } }, { reclaims: { $gte: EMAIL_MAX_RECLAIMS } }],
-    },
-    { $set: { status: "failed", lastError: STALE_CLAIM_ERROR }, $unset: { text: "" } },
-  );
+  const staleFailedJobs = await EmailQueue.find({
+    ...stale,
+    $or: [{ attempts: { $gte: EMAIL_MAX_ATTEMPTS } }, { reclaims: { $gte: EMAIL_MAX_RECLAIMS } }],
+  })
+    .select("_id to")
+    .lean();
+
+  let failedCount = 0;
+  for (const fJob of staleFailedJobs) {
+    const maskedTo = Array.isArray(fJob.to) ? fJob.to.map(maskEmail) : fJob.to;
+    const res = await EmailQueue.updateOne(
+      { _id: fJob._id, status: "sending" },
+      {
+        $set: { status: "failed", lastError: STALE_CLAIM_ERROR, to: maskedTo },
+        $unset: { text: "" },
+      },
+    );
+    failedCount += res.modifiedCount;
+  }
+
   const requeued = await EmailQueue.updateMany(
     {
       ...stale,
@@ -104,7 +118,7 @@ export async function reclaimStaleEmails(now = new Date()) {
       $inc: { reclaims: 1 },
     },
   );
-  return { requeued: requeued.modifiedCount, failed: failed.modifiedCount };
+  return { requeued: requeued.modifiedCount, failed: failedCount };
 }
 
 function safeSendError(err) {
@@ -120,12 +134,13 @@ export async function processNextEmail(transport, now = new Date()) {
   if (!job) return { claimed: false };
 
   const id = job._id.toString();
+  const maskedTo = Array.isArray(job.to) ? job.to.map(maskEmail) : job.to;
   try {
     await transport.send({ to: job.to, subject: job.subject, text: job.text });
     await EmailQueue.updateOne(
       { _id: job._id, status: "sending" },
       {
-        $set: { status: "sent", sentAt: now, lastError: null },
+        $set: { status: "sent", sentAt: now, lastError: null, to: maskedTo },
         $unset: { text: "" },
       },
     );
@@ -137,7 +152,7 @@ export async function processNextEmail(transport, now = new Date()) {
       if (attempts >= EMAIL_MAX_ATTEMPTS) {
         await EmailQueue.updateOne(
           { _id: job._id, status: "sending" },
-          { $set: { status: "failed", lastError }, $unset: { text: "" } },
+          { $set: { status: "failed", lastError, to: maskedTo }, $unset: { text: "" } },
         );
         console.error(`email job ${id} failed`, safeErrorCode(err, "SEND_FAILED"));
         return { claimed: true, status: "failed", id, attempts };
