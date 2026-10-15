@@ -11,6 +11,9 @@ export const USER_ROLES = Object.freeze([
   "ncvet_viewer",
 ]);
 
+/** GET /audit/access-log. S-01: who read whose personal data. aa_admin only. */
+export const ACCESS_LOG_READ_ROLES = Object.freeze(["aa_admin"]);
+
 /** Audit read. docs/SCHEMA.md Â§5 permission matrix. */
 export const AUDIT_READ_ROLES = Object.freeze(["aa_admin", "mis", "ab_reviewer", "ncvet_viewer"]);
 
@@ -151,7 +154,7 @@ export const RESULT_PUBLISHED_ONLY_ROLES = Object.freeze(["candidate", "tp"]);
 /** GET /results/:id/change-log. API_CONTRACT.md. */
 export const RESULT_CHANGE_LOG_ROLES = Object.freeze(["aa_admin", "ab_reviewer", "mis"]);
 
-/** PUT /batches/:id/learner-feedback. docs/SCHEMA.md §3.8. */
+/** PUT /batches/:id/learner-feedback. docs/SCHEMA.md ï¿½3.8. */
 export const LEARNER_FEEDBACK_WRITE_ROLES = Object.freeze(["aa_admin", "mis"]);
 
 /**

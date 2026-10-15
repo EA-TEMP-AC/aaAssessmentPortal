@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { encryptedFieldsPlugin, normalizeEmail } from "../lib/encrypted-fields.plugin.js";
 
 /**
  * assessors. docs/SCHEMA.md §3.5. NCVET:FR §D; NCVET:TR s25.
@@ -19,7 +20,8 @@ const assessorSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true, maxlength: 200 },
     code: { type: String, trim: true, maxlength: 64 },
-    email: { type: String, trim: true, lowercase: true, maxlength: 320 },
+    // Encrypted at rest (S-01). Length is checked in the request schema.
+    email: { type: String },
     qualifications: { type: [{ type: String, trim: true, maxlength: 200 }], default: [] },
     yearsOfExperience: { type: Number, min: 0, max: 80, default: null },
     languages: { type: [{ type: String, trim: true, maxlength: 80 }], default: [] },
@@ -32,7 +34,12 @@ const assessorSchema = new mongoose.Schema(
 );
 
 assessorSchema.index({ code: 1 }, { unique: true, sparse: true });
-assessorSchema.index({ email: 1 }, { unique: true, sparse: true });
+assessorSchema.plugin(encryptedFieldsPlugin, {
+  collection: "assessors",
+  fields: { email: { hash: "emailHash", normalize: normalizeEmail } },
+});
+
+assessorSchema.index({ emailHash: 1 }, { unique: true, sparse: true });
 assessorSchema.index({ name: 1 });
 
 export const Assessor = mongoose.model("Assessor", assessorSchema, "assessors");

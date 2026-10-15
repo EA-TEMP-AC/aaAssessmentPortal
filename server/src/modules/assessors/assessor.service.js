@@ -20,7 +20,8 @@ function throwWriteError(err) {
   if (err instanceof AppError) throw err;
   if (err?.code === 11000) {
     const pattern = err.keyPattern ?? {};
-    if (pattern.email) throw duplicateResource("A record with this email already exists");
+    if (pattern.email || pattern.emailHash)
+      throw duplicateResource("A record with this email already exists");
     if (pattern.code) throw duplicateResource("A record with this code already exists");
     throw duplicateResource("Unique constraint");
   }

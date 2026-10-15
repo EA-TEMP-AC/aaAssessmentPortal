@@ -6,9 +6,36 @@ Single-AA deployment. BSON types. Instant timestamps are UTC `Date` unless noted
 
 **Status transitions:** atomic compare-and-set on `batches.status` (and `statusVersion`); illegal CAS → `INVALID_TRANSITION`.
 
+**Personal data at rest (S-01):** sensitive personal fields are encrypted field by field (AES-256-GCM) and, where they must be searchable or unique, shadowed by a keyed hash column. See §7. Access to personal data is logged in `accessLogs` (§3.23).
+
 **auditLogs:** append-only (no update/delete). Snapshots in `before`/`after` **must redact** `passwordHash` and other secrets (replace with `"***"`).
 
 Phases tag each collection: `1` = Phase 1, `2` = Phase 2, `3` = Phase 3.
+
+## 7. Data protection (S-01) — NCVET:TR s18 to s20; DPDP Act 2023
+
+**Field-level encryption.** The fields below are stored as `enc:v1:<keyId>:<iv>:<tag>:<ciphertext>` (AES-256-GCM, random 96-bit IV per value, the field label as authenticated data so a value cannot be moved to another field). Services and API responses see plain text: hydrated documents decrypt through a getter and lean results through a post hook, both in `lib/encrypted-fields.plugin.js`.
+
+| Collection | Field | Hash column | Searchable |
+|---|---|---|---|
+| `users` | `email` | `emailHash` | equality only (login, duplicate check) |
+| `assessors` | `email` | `emailHash` | equality only |
+| `proctors` | `email` | `emailHash` | equality only |
+| `learners` | `phone` | none | no |
+
+Not encrypted, on purpose or not yet: names, `externalRef`, `accommodations`, training-partner and centre contact fields, `awardingBodies.notificationEmails`, `loginEvents` (location), `emailQueue` (`to`, `text`), and the snapshots in `auditLogs`. See decisions 260 and 261. The schema has no candidate or learner date of birth, address or email; the plugin can take such a field when one is added (decision 260).
+
+**Keys.** `FIELD_ENCRYPTION_KEYS` holds one or more 32-byte keys by id; `FIELD_ENCRYPTION_KEY_ID` names the one used for new writes; older ids stay readable, which is how keys rotate. `FIELD_HASH_KEY` keys the lookup hash. Keys live in the environment, never in the database. README "Key management" has the procedure.
+
+**Lookup hash.** `HMAC-SHA256(FIELD_HASH_KEY, "<collection>.<field>#hash" + NUL + normalisedValue)`, hex. The hash is deterministic so equality lookups and unique indexes work, and is domain-separated per field so the same address in two collections gives different hashes. Filters on the plain path (`{ email: "..." }`) are rewritten to the hash path by the plugin; other operators (regex, range, `$inc`) on an encrypted path are refused. Hash columns are `select: false` and are removed from lean results.
+
+**Rules for model authors.** An encrypted path must not set `lowercase`, `trim` or `maxlength` (setters run on update casting after encryption and would corrupt the ciphertext); normalisation is the plugin's `normalize`, and the length limit lives in the request schema. `aggregate`, `bulkWrite` and `Model.collection.*` bypass the plugin and must not touch these paths.
+
+**Migration.** `npm run migrate:encrypt` (`--dry-run` to report only) encrypts rows still in plain text, fills missing hashes, re-encrypts rows written under an older key id, and replaces the old unique `email_1` index with the hash index. It is safe to run twice. A row it cannot decrypt is reported and left alone.
+
+**Retention.** `server/src/config/retention.js` lists a period per data class (§3.23 and the file header). `npm run retention:dry-run` reports counts of records past their period. Nothing is deleted (decision 263).
+
+---
 
 Requirement tags: `NCVET:FR §…` (docs/FEATURE_REPORT.md) or `NCVET:TR s…` (docs/TRACEABILITY.md). Untagged items are project choices.
 
@@ -235,7 +262,8 @@ ObjectIds unless noted. Common: `createdAt`, `updatedAt`.
 
 | Field | Type | Req | Notes |
 |---|---|---|---|
-| email | string | Y | unique |
+| email | string | Y | unique. **Stored encrypted** (§7); lowercased and trimmed before encryption |
+| emailHash | string | Y* | keyed hash of the normalised email (§7). Never in an API response. *Absent only on rows not yet migrated |
 | passwordHash | string | Y | never in API; redacted in audit |
 | name | string | Y | |
 | role | UserRole | Y | |
@@ -247,7 +275,7 @@ ObjectIds unless noted. Common: `createdAt`, `updatedAt`.
 | passwordResetTokenHash | string | N | |
 | passwordResetExpiresAt | Date | N | |
 
-Indexes: `{ email: 1 }` unique; `{ role: 1, active: 1 }`.
+Indexes: `{ emailHash: 1 }` unique (partial: only rows that have a hash); `{ role: 1, active: 1 }`. The plain `{ email: 1 }` unique index is dropped by the S-01 migration.
 
 For `role=candidate`, `linkedProfileId` → **`learners._id`** (stable person), not `candidates._id`.
 
@@ -274,7 +302,7 @@ Stable person across batches.
 |---|---|---|---|
 | name | string | Y | |
 | externalRef | string | N | TP/AB stable id; **not** Aadhaar |
-| phone | string | N | |
+| phone | string | N | **Stored encrypted** (§7). Not searchable |
 | accommodations | string[] | N | default accommodations |
 | active | bool | Y | |
 
@@ -294,6 +322,8 @@ Indexes: `{ code: 1 }` sparse unique.
 ### 3.5 `assessors` / `proctors` (phase 1)
 
 ToA + undertaking on assessors; proctors without ToA. No Aadhaar.
+
+`email` on assessors and proctors is **stored encrypted** with an `emailHash` shadow column (§7). Unique index: `{ emailHash: 1 }` sparse unique (replaces `{ email: 1 }`).
 
 Assessors also store `languages: string[]` (may be empty). Each entry is trimmed. Comparison with `batches.assessmentLanguage` is case-insensitive after trim. NCVET:FR §D; Annexure IX(a) Assessment Delivery sub-parameter 4; docs/ERF.md row 04.
 
@@ -493,6 +523,29 @@ Writes are `aa_admin` only and audited with `before` and `after`.
 
 ---
 
+### 3.23 `accessLogs` (phase 3, S-01) — NCVET:TR s20; DPDP
+
+One row per person whose personal data a read endpoint returned. Append-only (update and delete are rejected, as for `auditLogs`). The row holds ids and field names, never the data read.
+
+| Field | Type | Notes |
+|---|---|---|
+| `actorId` | ObjectId | user who read |
+| `actorRole` | string | role at the time |
+| `subjectType` | string | `user`, `learner`, `assessor`, `proctor` |
+| `subjectId` | string | id of the person read (`users._id`, `learners._id`, ...). The roster endpoint logs `learnerId`, not the candidate row id |
+| `kind` | string | `list` or `detail` |
+| `fields` | string[] | names of the personal fields the response carried, for example `["name","phone","externalRef"]` |
+| `route` | string | route template with method, no query string, for example `GET /api/v1/learners/:id` |
+| `requestId` | string | shared by all rows of one list response |
+| `ip` | string | |
+| `createdAt` | Date | |
+
+Indexes: `{ subjectType: 1, subjectId: 1, createdAt: -1 }`; `{ actorId: 1, createdAt: -1 }`; `{ createdAt: -1 }`.
+
+Logged reads: `GET /users`, `/users/:id`, `/learners`, `/learners/:id`, `/assessors`, `/assessors/:id`, `/assessors/available`, `/proctors`, `/proctors/:id`, `GET /batches/:id/candidates`. Not logged: refused requests, empty lists, results, attendance, login events, batch reads (see DPDP_CHECKLIST.md and decision 266). A read whose log row cannot be written is not served (decision 267).
+
+---
+
 ### 3.16 Phase 2 / 3 collections
 
 Reserved: `questions`, `tests`, `attempts`, `evidence`; `proctoringSessions`, `proctoringFlags`, `grievances`, `erfScores`, `siteDocuments`, `securityAudits`, `exportCredentials`.
@@ -590,6 +643,7 @@ Schema and contract only. **B-10** writes `learnerFeedback` once the batch is `a
 | Results read | A | R | D | R | D | R‡ | R | R | R | ‡ own row |
 | Results PUT | A | D | D | D | D | D | D | D | D | assessment_completed+draft |
 | Audit read | A | A | D | D | D | D | D | R§ | R§ | § scoped |
+| Access log read (`GET /audit/access-log`) | A | D | D | D | D | D | D | D | D | S-01; aa_admin only, no personal values in the rows |
 | Holidays / working-day | A | A | D | D | D | D | D | D | D | audit on change |
 | Recognition GET/PUT | A | A | D | D | D | D | D | D | R | audit on PUT |
 | Learner feedback write | A | A | D | D | D | D | D | D | D | B-10; batch readers may read it on the batch |
@@ -615,4 +669,6 @@ workingDayConfig + holidays → SLA dueAts (no retroactive rewrite)
 original result.publishedAt → reassessment window
 sla.breached ← late actions + on-read compute + nightly job
 auditLogs append-only (secrets redacted)
+accessLogs append-only (who read which person's data; no values)
+users / assessors / proctors .email and learners .phone encrypted at rest; *Hash columns hold the lookup hash
 ```

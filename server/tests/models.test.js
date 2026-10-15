@@ -30,9 +30,9 @@ describe("models and dev seed", () => {
 
   it("creates the indexes listed in SCHEMA.md", async () => {
     expect(indexKeys(await User.collection.indexes())).toEqual(
-      expect.arrayContaining([{ _id: 1 }, { email: 1 }, { role: 1, active: 1 }]),
+      expect.arrayContaining([{ _id: 1 }, { emailHash: 1 }, { role: 1, active: 1 }]),
     );
-    const userEmail = (await User.collection.indexes()).find((index) => index.key.email === 1);
+    const userEmail = (await User.collection.indexes()).find((index) => index.key.emailHash === 1);
     expect(userEmail.unique).toBe(true);
 
     expect(indexKeys(await RefreshToken.collection.indexes())).toEqual(

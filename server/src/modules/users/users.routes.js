@@ -4,6 +4,7 @@ import { AppError } from "../../lib/errors.js";
 import { requireAuth } from "../../middleware/require-auth.js";
 import { requireRoles } from "../../middleware/require-roles.js";
 import { USER_ADMIN_ROLES } from "../../models/roles.js";
+import { recordAccess } from "../audit/access-log.service.js";
 import { assertPasswordResetAllowed } from "./password-reset-rate-limit.js";
 import {
   createUserBodySchema,
@@ -23,6 +24,8 @@ import {
 } from "./users.service.js";
 
 export const usersRouter = Router();
+
+const USER_PII_FIELDS = ["email", "name"];
 
 usersRouter.use(requireAuth, requireRoles(...USER_ADMIN_ROLES));
 
@@ -45,7 +48,14 @@ usersRouter.get(
   "/",
   asyncHandler(async (req, res) => {
     const query = listUsersQuerySchema.parse(req.query);
-    await res.status(200).json(await listUsers(query));
+    const body = await listUsers(query);
+    await recordAccess(req, {
+      subjectType: "user",
+      subjectIds: body.items.map((item) => item.id),
+      kind: "list",
+      fields: USER_PII_FIELDS,
+    });
+    await res.status(200).json(body);
   }),
 );
 
@@ -53,7 +63,14 @@ usersRouter.get(
   "/:id",
   asyncHandler(async (req, res) => {
     const { id } = userIdParamSchema.parse(req.params);
-    await res.status(200).json(await getUser(id));
+    const body = await getUser(id);
+    await recordAccess(req, {
+      subjectType: "user",
+      subjectIds: [body.id],
+      kind: "detail",
+      fields: USER_PII_FIELDS,
+    });
+    await res.status(200).json(body);
   }),
 );
 

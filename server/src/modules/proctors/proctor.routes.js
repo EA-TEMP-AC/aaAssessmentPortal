@@ -3,6 +3,7 @@ import { asyncHandler } from "../../lib/async-handler.js";
 import { requireAuth } from "../../middleware/require-auth.js";
 import { requireRoles } from "../../middleware/require-roles.js";
 import { MASTER_DATA_WRITE_ROLES, PROCTOR_READ_ROLES } from "../../models/roles.js";
+import { recordAccess } from "../audit/access-log.service.js";
 import {
   createProctorSchema,
   listProctorsQuerySchema,
@@ -22,6 +23,8 @@ function setAudit(req, entry) {
 }
 
 export const proctorsRouter = Router();
+
+const PROCTOR_PII_FIELDS = ["name", "email"];
 
 proctorsRouter.use(requireAuth);
 
@@ -46,7 +49,14 @@ proctorsRouter.get(
   requireRoles(...PROCTOR_READ_ROLES),
   asyncHandler(async (req, res) => {
     const query = listProctorsQuerySchema.parse(req.query);
-    await res.status(200).json(await listProctors(req.user, query));
+    const body = await listProctors(req.user, query);
+    await recordAccess(req, {
+      subjectType: "proctor",
+      subjectIds: body.items.map((item) => item.id),
+      kind: "list",
+      fields: PROCTOR_PII_FIELDS,
+    });
+    await res.status(200).json(body);
   }),
 );
 
@@ -55,7 +65,14 @@ proctorsRouter.get(
   requireRoles(...PROCTOR_READ_ROLES),
   asyncHandler(async (req, res) => {
     const { id } = proctorIdParamSchema.parse(req.params);
-    await res.status(200).json(await getProctor(req.user, id));
+    const body = await getProctor(req.user, id);
+    await recordAccess(req, {
+      subjectType: "proctor",
+      subjectIds: [body.id],
+      kind: "detail",
+      fields: PROCTOR_PII_FIELDS,
+    });
+    await res.status(200).json(body);
   }),
 );
 

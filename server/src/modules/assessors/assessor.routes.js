@@ -7,6 +7,7 @@ import {
   ASSESSOR_READ_ROLES,
   MASTER_DATA_WRITE_ROLES,
 } from "../../models/roles.js";
+import { recordAccess } from "../audit/access-log.service.js";
 import {
   assessorIdParamSchema,
   availableAssessorsQuerySchema,
@@ -28,6 +29,8 @@ function setAudit(req, entry) {
 }
 
 export const assessorsRouter = Router();
+
+const ASSESSOR_PII_FIELDS = ["name", "email"];
 
 assessorsRouter.use(requireAuth);
 
@@ -52,7 +55,14 @@ assessorsRouter.get(
   requireRoles(...ASSESSOR_AVAILABLE_ROLES),
   asyncHandler(async (req, res) => {
     const query = availableAssessorsQuerySchema.parse(req.query);
-    await res.status(200).json(await listAvailableAssessors(query));
+    const body = await listAvailableAssessors(query);
+    await recordAccess(req, {
+      subjectType: "assessor",
+      subjectIds: body.items.map((item) => item.id),
+      kind: "list",
+      fields: ASSESSOR_PII_FIELDS,
+    });
+    await res.status(200).json(body);
   }),
 );
 
@@ -61,7 +71,14 @@ assessorsRouter.get(
   requireRoles(...ASSESSOR_READ_ROLES),
   asyncHandler(async (req, res) => {
     const query = listAssessorsQuerySchema.parse(req.query);
-    await res.status(200).json(await listAssessors(req.user, query));
+    const body = await listAssessors(req.user, query);
+    await recordAccess(req, {
+      subjectType: "assessor",
+      subjectIds: body.items.map((item) => item.id),
+      kind: "list",
+      fields: ASSESSOR_PII_FIELDS,
+    });
+    await res.status(200).json(body);
   }),
 );
 
@@ -70,7 +87,14 @@ assessorsRouter.get(
   requireRoles(...ASSESSOR_READ_ROLES),
   asyncHandler(async (req, res) => {
     const { id } = assessorIdParamSchema.parse(req.params);
-    await res.status(200).json(await getAssessor(req.user, id));
+    const body = await getAssessor(req.user, id);
+    await recordAccess(req, {
+      subjectType: "assessor",
+      subjectIds: [body.id],
+      kind: "detail",
+      fields: ASSESSOR_PII_FIELDS,
+    });
+    await res.status(200).json(body);
   }),
 );
 
