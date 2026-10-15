@@ -212,6 +212,8 @@ Implement in B-02. No magic numbers in feature code.
 | `PUBLIC_RATE_LIMIT_MAX` | `120` | W-01. Max `/public/*` requests / window / IP |
 | `DEFAULT_PASS_MARK_UNIT` | `percent` | Qualification may override |
 | `SECTOR_MIN_COVERAGE_PERCENT` | `5` | Project (Q-05). A sector passes the coverage check when at least this percent of its NQR qualifications have an approved question set. Open Q360 |
+| `ATTEMPT_DEFAULT_DURATION_MINUTES` | `60` | Project (E-03). Attempt length when the test paper gives none. Open Q421 |
+| `ATTEMPT_GRACE_SECONDS` | `30` | Project (E-03). Seconds after the deadline when a save or submit is still taken; env `ATTEMPT_GRACE_SECONDS` overrides. Open Q422 |
 
 ### 2.1 Working-day counting convention
 
@@ -761,6 +763,28 @@ One generated test paper. Holds the seed, the rules and the chosen question ids 
 Indexes: `{ qualificationId: 1, status: 1, createdAt: -1 }`.
 
 Selection: pool is approved, latest, non-retired questions of the qualification in the language, one per `rootQuestionId`. Quotas run in canonical order on one seeded stream (mulberry32). Inside a quota the PCs are visited round-robin in a seeded order, so every PC with a question is used before any PC is used twice. A question is never taken twice in a paper.
+### 3.21 `attempts` (phase 2) — Task E-03
+
+One candidate's attempt at one approved test paper. Holds the stored question order, saved answers and scores. It never holds question text or the answer key; those are read from `questions` by id.
+
+| Field | Type | Req | Notes |
+|---|---|---|---|
+| testPaperId | ObjectId | Y | Ref: `testPapers` |
+| batchId, abId | ObjectId | Y | Batch and its awarding body, copied at start |
+| candidateId | ObjectId | Y | Roster row (`candidates`) |
+| learnerId, userId | ObjectId | Y | Learner and the candidate's login user |
+| status | enum | Y | `in_progress`, `submitted`, `timed_out` |
+| durationMinutes | Number | Y | Paper's `durationMinutes`, else `ATTEMPT_DEFAULT_DURATION_MINUTES` |
+| graceSeconds | Number | Y | `ATTEMPT_GRACE_SECONDS` at start (env override) |
+| startedAt, deadlineAt, acceptUntil | Date | Y | `deadlineAt` = start + duration; `acceptUntil` = deadline + grace |
+| closedAt, closeReason | Date, enum | N | `submit` or `timeout` |
+| questions[] | {questionId, version, nosId, pcId, type, marks, answer, answeredAt, awardedMarks, scoreStatus, scoredBy, markedBy, markedAt} | Y | In the stored (shuffled) order. `scoreStatus` is `pending` or `scored`; `scoredBy` is `auto` or `manual` |
+| scores | {maxMarks, obtainedMarks, pendingMarks, pendingCount, complete, byNos[], byType[]} | N | Set when the attempt closes, recomputed after manual marks. Groups are {key, maxMarks, obtainedMarks, pendingMarks, pendingCount}, sorted by key |
+| rev | Number | Y | Bumped by every write; closing and marking compare it so a save is never lost |
+
+Indexes: unique `{ testPaperId: 1, candidateId: 1 }` (one attempt per paper), `{ batchId, status }`, `{ abId, startedAt }`, `{ status, acceptUntil }`.
+`testPapers` (§3.20) gains optional `durationMinutes` (1 to 600, default null).
+
 ### 3.25 `sectorConfigs` (phase 2) — Task Q-05
 
 One row per Annexure II sector on the recognition record. `sector` is a `SectorName`, never a `RatioClass`. Only a sector listed in `aaRecognition.sectors` can be added (`409 SECTOR_NOT_RECOGNISED`). Writes: `aa_admin`. Audited with before and after.

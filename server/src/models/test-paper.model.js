@@ -58,6 +58,7 @@ const testPaperSchema = new mongoose.Schema(
     items: { type: [itemSchema], default: [] },
     totalMarks: { type: Number, required: true },
     shortages: { type: [shortageSchema], default: [] },
+    durationMinutes: { type: Number, default: null, min: 1, max: 600 },
     marksTargetMet: { type: Boolean, default: true },
     complete: { type: Boolean, required: true, default: true },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },

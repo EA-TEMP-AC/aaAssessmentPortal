@@ -260,3 +260,23 @@ export const SECTOR_COVERAGE_READ_ROLES = QUESTION_READ_ROLES;
 
 /** Sector config and NQR qualification import. Q-05: aa_admin only. */
 export const SECTOR_COVERAGE_WRITE_ROLES = Object.freeze(["aa_admin"]);
+
+/** POST /attempts/start, PUT answers, POST submit. E-03: the candidate on the roster only. */
+export const ATTEMPT_CANDIDATE_ROLES = Object.freeze(["candidate"]);
+
+/** GET /attempts/:id. E-03: the candidate sees their own attempt, staff follow batch scope. */
+export const ATTEMPT_READ_ROLES = Object.freeze([
+  "aa_admin",
+  "assessor",
+  "ab_reviewer",
+  "candidate",
+]);
+
+/** GET /attempts. E-03: aa_admin, assessor (own batches), ab_reviewer (own awarding body). */
+export const ATTEMPT_LIST_ROLES = Object.freeze(["aa_admin", "assessor", "ab_reviewer"]);
+
+/** PUT /attempts/:id/manual-marks. E-03: aa_admin, or the assessor of the batch. */
+export const ATTEMPT_MARK_ROLES = Object.freeze(["aa_admin", "assessor"]);
+
+/** GET /attempts/:id/summary. E-03: aa_admin copies it into a result draft. */
+export const ATTEMPT_SUMMARY_ROLES = Object.freeze(["aa_admin"]);

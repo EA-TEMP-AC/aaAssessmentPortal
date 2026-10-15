@@ -81,4 +81,13 @@ export const compliance = Object.freeze({
    * percent of its NQR qualifications have an approved question set. Open question 360.
    */
   SECTOR_MIN_COVERAGE_PERCENT: 5,
+  /**
+   * project. E-03. Attempt length in minutes when the test paper gives none. Open question 421.
+   */
+  ATTEMPT_DEFAULT_DURATION_MINUTES: 60,
+  /**
+   * project. E-03. Seconds after the deadline in which the server still takes a save or a
+   * submit (network delay). Override with env ATTEMPT_GRACE_SECONDS. Open question 422.
+   */
+  ATTEMPT_GRACE_SECONDS: 30,
 });

@@ -175,6 +175,7 @@ export async function generatePaper(user, input) {
     poolHash: hashPool(pool),
     items,
     totalMarks,
+    durationMinutes: input.durationMinutes ?? null,
     shortages,
     marksTargetMet,
     complete,

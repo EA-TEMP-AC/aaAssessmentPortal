@@ -1503,3 +1503,38 @@ Anonymous read-only access. Response header: `Cache-Control: public, max-age=300
 
 Tests generator, proctoring, grievances, analytics, public site, accessibility, security — unchanged intent; see SCHEMA. Recognition and Annexure II sectors are Phase 1 (`/admin/recognition`, `qualifications.sector`). ERF weights are in docs/ERF.md (task C-01). Phase 2 notes that are not endpoints yet: live NCVET monitoring link, geo-tagged photos and videos for offline and blended batches (Guidelines 4.11b; backend built as V-01, see Evidence vault above), the 24-hour travel rule, theory-only online batches with no assessor, and gender-parity staff reporting (open questions 80–84).
 
+## Attempt engine (task E-03)
+
+All under `/api/v1/attempts`. An attempt is one candidate's go at one approved test paper (SCHEMA §3.21). Question text and answers never go into audit rows. Unknown request keys are `400 VALIDATION_ERROR`. Scores stay on the attempt and are not written into results (Q424).
+
+### POST /api/v1/attempts/start
+Role: `candidate` (on the active roster of the batch). Body `{ "batchId", "testPaperId" }`.
+`201` new attempt, `200` when the candidate already has one for that paper (same id, same timer, same order). Returns `{ id, testPaperId, batchId, status, durationMinutes, startedAt, deadlineAt, closedAt, closeReason, serverTime, remainingSeconds, totalMarks, questions[] }`; each question is `{ questionId, order, type, marks, stem, options[{key,text}], answer }`. No answer key, no NOS, no marks awarded.
+Errors: `403 FORBIDDEN` (not on the active roster), `404 NOT_FOUND` (unknown batch; paper unknown, draft, incomplete or for another qualification), `409 ATTEMPT_BATCH_NOT_IN_PROGRESS` (new attempts only; an existing attempt is still returned), `409 ATTEMPT_PAPER_UNAVAILABLE`.
+Audit: `attempt.start`, or `attempt.start_replay`.
+
+### GET /api/v1/attempts/:id
+Roles: `candidate` (own attempt only), `aa_admin`, `assessor` (the batch's assessor), `ab_reviewer` (own awarding body). Anything else `403 FORBIDDEN`. An attempt past its accept window is closed as `timed_out` by this read. The candidate view is the start shape. The staff view adds `abId`, `candidateId`, `learnerId`, `candidateName`, `scores` and, per question, `nosId`, `pcId`, `awardedMarks`, `scoreStatus`, `scoredBy`, `markedBy`, `markedAt`, and `correctAnswer` only once the attempt is closed.
+
+### PUT /api/v1/attempts/:id/answers
+Role: `candidate`, own attempt. Body `{ "answers": [{ "questionId", "answer" }] }` (1 to 200 rows, no repeated question, `answer` up to 10000 characters, `null` or blank clears). For MCQ the answer must be an option key (case-insensitive; the stored key is kept). Last write wins per question. Accepted until `acceptUntil` (deadline plus grace). One bad row saves nothing. Returns `{ saved, savedAt, deadlineAt, remainingSeconds }`.
+Errors: `400 VALIDATION_ERROR`, `409 ATTEMPT_CLOSED`, `409 ATTEMPT_TIME_UP` (the attempt is closed as `timed_out` and scored on what was saved).
+Audit: `attempt.answers_save`, `meta.savedCount` only.
+
+### POST /api/v1/attempts/:id/submit
+Role: `candidate`, own attempt. No body. Closes and scores the attempt: MCQ by the stored key (full marks or 0, no negative marking), every other type `pending`. Idempotent: a closed attempt returns its state again. A submit after the accept window is a timeout. Returns `{ id, status, closeReason, closedAt, deadlineAt }`, never marks.
+Audit: `attempt.submit`, `attempt.submit_replay`, or `attempt.submit_late` (which also writes `attempt.timeout`).
+
+### PUT /api/v1/attempts/:id/manual-marks
+Roles: `aa_admin`, `assessor` of the batch. Body `{ "marks": [{ "questionId", "marks" }] }` (1 to 200 rows, no repeats, 0 or more, at most two decimals). Only on a closed attempt, and only for questions the server did not score. A later mark replaces an earlier one. Returns the staff view.
+Errors: `400 ATTEMPT_MARKS_EXCEED_CEILING` (`details.exceeded[{questionId,maxMarks,marks}]`), `400 ATTEMPT_QUESTION_AUTO_SCORED`, `400 VALIDATION_ERROR` (unknown question), `409 ATTEMPT_NOT_CLOSED`. A refused request changes nothing.
+Audit: `attempt.manual_marks` with before and after (question ids, marks, totals).
+
+### GET /api/v1/attempts
+Roles: `aa_admin` (all), `assessor` (own batches), `ab_reviewer` (own awarding body). Query: `batchId`, `testPaperId`, `status`, `page`, `pageSize` (max 100). Returns `{ items, total, page, pageSize }`, newest first. Rows have ids, `status`, times, `scoringComplete`, `maxMarks`, `obtainedMarks`, `pendingCount`; no questions or answers.
+
+### GET /api/v1/attempts/:id/summary
+Role: `aa_admin`. Read-only totals to copy into a result draft: `{ attemptId, batchId, candidateId, learnerId, testPaperId, status, closedAt, scoringComplete, maxMarks, obtainedMarks, pendingMarks, pendingCount, byNos[{nosId,...}], byType[{type,...}] }`. `409 ATTEMPT_NOT_CLOSED` while in progress. Writes nothing.
+
+### Timer and timeout
+The server clock decides. `deadlineAt` = `startedAt` + duration (the paper's `durationMinutes`, else 60). Saves and submit are taken until `deadlineAt` + grace (30 s, env `ATTEMPT_GRACE_SECONDS`). A timeout is applied when the attempt is next read or written, or by `closeExpiredAttempts()` (no scheduler yet, Q423); it writes audit `attempt.timeout` (actor role `system`). `POST /tests/generate` takes an optional `durationMinutes` (1 to 600).

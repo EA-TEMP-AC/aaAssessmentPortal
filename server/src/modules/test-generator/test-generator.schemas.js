@@ -24,6 +24,7 @@ export const generateSchema = guard(
       language: z.string().trim().min(1).max(32),
       quotas: z.array(quotaSchema).min(1).max(200),
       totalMarks: z.number().positive().max(100000).optional(),
+      durationMinutes: z.number().int().min(1).max(600).optional(),
       seed: z.number().int().min(0).max(4294967295).optional(),
       allowPartial: z.boolean().optional(),
     })

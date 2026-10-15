@@ -69,8 +69,9 @@ function auditEntryFromRequest(req) {
     hinted.entity === "question" ||
     (typeof req.originalUrl === "string" && req.originalUrl.includes("question-bank"));
 
+  // Answers are the candidate's own text, so a route can keep the raw body out of the row.
   let requestBody =
-    req.body && typeof req.body === "object"
+    !hinted.omitRequestBody && req.body && typeof req.body === "object"
       ? maskPersonalData(stripNationalIds(redactSecrets(req.body)))
       : undefined;
 
