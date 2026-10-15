@@ -208,3 +208,11 @@ export const ANALYTICS_READ_ROLES = Object.freeze([
 /** /admin/public-site/*. W-01. aa_admin writes the public website content, mis reads it. */
 export const PUBLIC_SITE_WRITE_ROLES = Object.freeze(["aa_admin"]);
 export const PUBLIC_SITE_READ_ROLES = Object.freeze(["aa_admin", "mis"]);
+/** Question bank writes and imports. Q-01: aa_admin and sme only. */
+export const QUESTION_WRITE_ROLES = Object.freeze(["aa_admin", "sme"]);
+
+/** Question bank approvals. Q-01: ab_reviewer may approve, aa_admin has admin rights. */
+export const QUESTION_APPROVE_ROLES = Object.freeze(["aa_admin", "ab_reviewer"]);
+
+/** Question bank reads and coverage. Q-01: aa_admin, sme, and ab_reviewer only. */
+export const QUESTION_READ_ROLES = Object.freeze(["aa_admin", "sme", "ab_reviewer"]);

@@ -22,12 +22,64 @@ export async function recordAudit(entry) {
   });
 }
 
+function isPlainObject(value) {
+  if (value === null || typeof value !== "object") return false;
+  if (value instanceof Date) return false;
+  if (Buffer.isBuffer(value)) return false;
+  if (typeof value._bsontype === "string") return false;
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
+
+export function redactQuestionContent(value) {
+  if (value === null || value === undefined) return value;
+  if (typeof value.toObject === "function") {
+    value = value.toObject();
+  } else if (typeof value.toJSON === "function") {
+    value = value.toJSON();
+  }
+  if (Array.isArray(value)) return value.map(redactQuestionContent);
+  if (!isPlainObject(value)) return value;
+
+  const out = {};
+  for (const [k, v] of Object.entries(value)) {
+    if (k === "stem") {
+      out[k] = "[redacted]";
+    } else if (k === "correctAnswer") {
+      out[k] = "[redacted]";
+    } else if (k === "options" && Array.isArray(v)) {
+      out[k] = v.map((opt) => ({
+        key: opt?.key,
+        text: "[redacted]",
+      }));
+    } else if (["fileBase64", "fileData", "file"].includes(k)) {
+      out[k] = "[redacted_binary]";
+    } else if (isPlainObject(v) || Array.isArray(v)) {
+      out[k] = redactQuestionContent(v);
+    } else {
+      out[k] = v;
+    }
+  }
+  return out;
+}
+
 function auditEntryFromRequest(req) {
   const hinted = req.audit ?? {};
-  const requestBody =
+  const isQuestion =
+    hinted.entity === "question" ||
+    (typeof req.originalUrl === "string" && req.originalUrl.includes("question-bank"));
+
+  let requestBody =
     req.body && typeof req.body === "object"
       ? stripNationalIds(redactSecrets(req.body))
       : undefined;
+
+  if (isQuestion && requestBody) {
+    requestBody = redactQuestionContent(requestBody);
+  }
+
+  const before = isQuestion ? redactQuestionContent(hinted.before) : hinted.before;
+  const after = isQuestion ? redactQuestionContent(hinted.after) : hinted.after;
 
   return {
     actorId: hinted.actorId ?? req.user?._id,
@@ -37,10 +89,10 @@ function auditEntryFromRequest(req) {
     entityId: hinted.entityId,
     abId: hinted.abId,
     batchId: hinted.batchId,
-    before: hinted.before,
-    after: hinted.after,
+    before,
+    after,
     meta: {
-      ...(hinted.meta ?? {}),
+      ...(hinted.meta ? (isQuestion ? redactQuestionContent(hinted.meta) : hinted.meta) : {}),
       ...(requestBody ? { requestBody } : {}),
     },
     ip: clientIp(req),

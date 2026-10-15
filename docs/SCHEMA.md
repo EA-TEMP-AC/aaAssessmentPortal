@@ -557,7 +557,45 @@ One row per batch and assessor. Owned by **B-11**.
 
 Unique `{ batchId: 1, assessorId: 1 }`. A reassigned assessor gets a separate row. The previous row stays.
 
+### 3.19 `questions` (phase 2) — NCVET:TR s4-s5, s13-s17; Task Q-01
+
+Question bank repository. Owned by **Q-01**.
+Supports versioning: updates create a new version document (`version: n + 1`) and set `isLatest: false` on previous versions. Never hard deletes (soft delete via `status: "retired"`). Question content (stem, options, answers) is confidential and never readable by `candidate` or `tp`. All writes are audited with question text redacted in snapshots.
+
+| Field | Type | Req | Notes |
+|---|---|---|---|
+| qualificationId | ObjectId | Y | Ref: `qualifications` |
+| nosId | string | Y | Trimmed, up to 64 chars. Must exist on qualification |
+| pcId | string | Y | Trimmed, up to 64 chars. Must exist on NOS |
+| type | QuestionType | Y | `mcq`, `short_answer`, `scenario`, `viva`, `practical` |
+| language | string | Y | Trimmed lowercase language code (e.g. `en`, `hi`) |
+| difficulty | QuestionDifficulty | N | `easy`, `medium`, `tough` (optional until Q-02) |
+| bloomLevel | string | N | Trimmed, up to 64 chars (e.g. `remember`, `apply`) |
+| stem | string | Y | Trimmed question text, up to 10,000 characters |
+| options | Option[] | N | Array of `{ key, text }`. Required for MCQ (≥ 2 options) |
+| correctAnswer | string | N | Required for MCQ (matches option key or text). Rubric for others |
+| marks | number | Y | Positive number (≥ 0.5) |
+| status | QuestionStatus | Y | `draft`, `in_review`, `approved`, `retired`. Default `draft` |
+| version | number | Y | Integer ≥ 1. Incremented on update |
+| rootQuestionId | ObjectId | Y | Group identifier across versions (`_id` of version 1) |
+| previousVersionId | ObjectId | N | Ref to immediate predecessor question version |
+| isLatest | bool | Y | `true` for current active version, `false` for older versions |
+| createdBy | ObjectId | Y | Ref: `users` |
+| updatedBy | ObjectId | N | Ref: `users` |
+| approvedBy | ObjectId | N | Ref: `users` (when approved) |
+| approvedAt | Date | N | Timestamp of approval |
+| retiredBy | ObjectId | N | Ref: `users` (when retired) |
+| retiredAt | Date | N | Timestamp of retirement |
+
+Indexes:
+- `{ qualificationId: 1, nosId: 1, pcId: 1, status: 1 }`
+- `{ qualificationId: 1, status: 1 }`
+- `{ rootQuestionId: 1, version: -1 }`
+- `{ isLatest: 1, status: 1 }`
+- `{ type: 1, language: 1 }`
+
 ---
+
 
 ## 4. Business rules
 
@@ -622,6 +660,10 @@ Schema and contract only. **B-10** writes `learnerFeedback` once the batch is `a
 | Settings access GET / PUT | A / A | R / D | D | D | D | D | D | R / D | R / D | §3.22; PUT is aa_admin only and audited |
 | Public site content (admin) | A | R | D | D | D | D | D | D | D | W-01; `/admin/public-site/*`, audited; `/public/*` is anonymous, published items only |
 | Resend credentials | A | D | D | D | D | D | D | D | D | aa_admin only; refused for disabled users |
+| Question bank write / import | A | D | A | D | D | D | D | D | D | Q-01; aa_admin and sme only; audited (content redacted) |
+| Question bank approve | A | D | D | D | D | D | D | A | D | Q-01; ab_reviewer and aa_admin; audited |
+| Question bank read / coverage | A | D | A | D | D | D | D | A | D | Q-01; question content confidential from candidate and tp |
+
 
 **Batch row scope:** aa_admin/mis/ncvet_viewer=all; ab=`abId`; tp=`tpId`; assessor=`assessorId`; proctor=`proctorId`; candidate=batches containing their learner’s candidate row.
 
