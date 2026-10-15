@@ -400,5 +400,7 @@ B-15 open questions (2026-10-15):
 179. **`ncvetViewerCanSeeAbQueue` is advisory.** The server only exposes the flag. `ncvet_viewer` can already read the batch list the queue is built from, so a user who knows the address can read the same data with the flag off. Is that acceptable, or should the server refuse `ncvet_viewer` the result-stage statuses while the flag is off?
 180. **Who can read the access settings.** `GET /settings/access` is open to `aa_admin`, `mis`, `ncvet_viewer` and `ab_reviewer` so each client can hide screens. It also tells `ncvet_viewer` and `ab_reviewer` what the other flag is. Confirm, or return each role only its own flag.
 
+Human decision on 2026-10-15: Q176, Q177, Q178, Q179 and Q180 accepted as built.
+
 ## Not mandated by NCVET (TR s29), do not market as compliance features
 Specific language, DB, cloud, server architecture, API style, biometric or face-recognition tech, GPS hardware, payment gateway, CRM, help-desk software.
