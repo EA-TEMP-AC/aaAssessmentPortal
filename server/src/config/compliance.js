@@ -90,6 +90,7 @@ export const compliance = Object.freeze({
    * submit (network delay). Override with env ATTEMPT_GRACE_SECONDS. Open question 422.
    */
   ATTEMPT_GRACE_SECONDS: 30,
+  /**
    * project. Q-04. Months between question bank reviews of a qualification unless the
    * qualification has its own interval. Open question 440.
    */
