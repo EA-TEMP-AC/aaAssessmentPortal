@@ -22,6 +22,8 @@ export function batchRecord(overrides: Partial<BatchRecord> = {}): BatchRecord {
     assessmentEndDate: "2026-11-21",
     tpId: IDS.tp,
     centreId: IDS.centre,
+    schemeId: null,
+    projectId: null,
     candidateCount: 24,
     sector: "Electronics",
     ratioClass: "manufacturing",

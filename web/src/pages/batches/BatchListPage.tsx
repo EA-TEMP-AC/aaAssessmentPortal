@@ -13,7 +13,10 @@ import {
   type BatchStatus,
 } from "../../api/batches";
 import { errorMessage } from "../../api/client";
+import { listProjects, listSchemes } from "../../api/schemes";
 import { useSession } from "../../api/session";
+import { SCHEME_READ_ROLES } from "../../routing/access";
+import { SCHEME_DATA_KEY } from "../schemes/schemeData";
 import { canCreateBatch } from "./access";
 import { BATCH_STATUS_LABELS } from "./labels";
 import { SlaColumn } from "./SlaCountdown";
@@ -25,6 +28,8 @@ type Filters = {
   from: string;
   to: string;
   tpId: string;
+  schemeId: string;
+  projectId: string;
   pageSize: BatchPageSize;
 };
 
@@ -33,6 +38,8 @@ const EMPTY_FILTERS: Filters = {
   from: "",
   to: "",
   tpId: "",
+  schemeId: "",
+  projectId: "",
   pageSize: BATCH_PAGE_SIZE_DEFAULT,
 };
 
@@ -48,7 +55,7 @@ function summary(data: BatchPage): string {
 }
 
 function filtersAreActive(filters: Filters): boolean {
-  return Boolean(filters.status || filters.from || filters.to || filters.tpId);
+  return Boolean(filters.status || filters.from || filters.to || filters.tpId || filters.schemeId || filters.projectId);
 }
 
 export function BatchListPage() {
@@ -70,11 +77,26 @@ export function BatchListPage() {
           from: applied.from || undefined,
           to: applied.to || undefined,
           tpId: applied.tpId || undefined,
+          schemeId: applied.schemeId || undefined,
+          projectId: applied.projectId || undefined,
           page,
           pageSize: applied.pageSize,
         },
         signal,
       ),
+  });
+
+  // Only roles that may read schemes get the filters; others would get a 403 from the lists.
+  const canFilterByScheme = session ? SCHEME_READ_ROLES.includes(session.user.role) : false;
+  const schemes = useQuery({
+    queryKey: [SCHEME_DATA_KEY, "scheme-names"],
+    enabled: canFilterByScheme,
+    queryFn: ({ signal }) => listSchemes({ page: 1, pageSize: 100 }, signal),
+  });
+  const projects = useQuery({
+    queryKey: [SCHEME_DATA_KEY, "project-filter", draft.schemeId],
+    enabled: canFilterByScheme,
+    queryFn: ({ signal }) => listProjects({ page: 1, pageSize: 100, schemeId: draft.schemeId || undefined }, signal),
   });
 
   useEffect(() => {
@@ -105,8 +127,8 @@ export function BatchListPage() {
     <div className="batches-page">
       <h1>Batches</h1>
       <p>
-        The list is whatever the server returned for this account. Filters are status, assessment start date range, and
-        training partner id.
+        The list is whatever the server returned for this account. Filters are status, assessment start date range,
+        training partner id, and, where your role can read them, scheme and project.
       </p>
       {canCreateBatch(session.user.role) ? (
         <p>
@@ -166,6 +188,42 @@ export function BatchListPage() {
               onChange={(event) => setDraft((current) => ({ ...current, tpId: event.target.value.trim() }))}
             />
           </div>
+          {canFilterByScheme ? (
+            <>
+              <div className="field">
+                <label htmlFor="batch-filter-scheme">Scheme</label>
+                <select
+                  id="batch-filter-scheme"
+                  name="schemeId"
+                  value={draft.schemeId}
+                  onChange={(event) => setDraft((current) => ({ ...current, schemeId: event.target.value, projectId: "" }))}
+                >
+                  <option value="">Any scheme</option>
+                  {(schemes.data?.items ?? []).map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name} ({item.code})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label htmlFor="batch-filter-project">Project</label>
+                <select
+                  id="batch-filter-project"
+                  name="projectId"
+                  value={draft.projectId}
+                  onChange={(event) => setDraft((current) => ({ ...current, projectId: event.target.value }))}
+                >
+                  <option value="">Any project</option>
+                  {(projects.data?.items ?? []).map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name} ({item.code})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </>
+          ) : null}
           <div className="field">
             <label htmlFor="batch-filter-pagesize">Per page</label>
             <select

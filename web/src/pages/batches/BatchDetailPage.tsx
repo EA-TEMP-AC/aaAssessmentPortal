@@ -3,7 +3,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { getBatch, type BatchRecord } from "../../api/batches";
 import { errorMessage } from "../../api/client";
+import { getProject, getScheme } from "../../api/schemes";
 import { useSession } from "../../api/session";
+import { SCHEME_READ_ROLES } from "../../routing/access";
+import { SCHEME_DATA_KEY } from "../schemes/schemeData";
 import { visibleBatchActions, type BatchAction } from "./access";
 import { ActionDialog } from "./ActionDialog";
 import { BATCH_ACTION_LABELS, BATCH_STATUS_LABELS } from "./labels";
@@ -51,6 +54,21 @@ export function BatchDetailPage() {
     queryKey: ["batch", id],
     enabled: Boolean(session && id),
     queryFn: ({ signal }) => getBatch(id ?? "", signal),
+  });
+
+  // Names only for roles that may read schemes. Everyone else sees the stored id.
+  const canReadSchemes = session ? SCHEME_READ_ROLES.includes(session.user.role) : false;
+  const schemeId = batchQuery.data?.schemeId ?? null;
+  const projectId = batchQuery.data?.projectId ?? null;
+  const schemeQuery = useQuery({
+    queryKey: [SCHEME_DATA_KEY, "scheme", schemeId],
+    enabled: canReadSchemes && Boolean(schemeId),
+    queryFn: ({ signal }) => getScheme(schemeId ?? "", signal),
+  });
+  const projectQuery = useQuery({
+    queryKey: [SCHEME_DATA_KEY, "project", projectId],
+    enabled: canReadSchemes && Boolean(projectId),
+    queryFn: ({ signal }) => getProject(projectId ?? "", signal),
   });
 
   useEffect(() => {
@@ -150,6 +168,14 @@ export function BatchDetailPage() {
               <Fact label="Assessment end" value={batch.assessmentEndDate} />
               <Fact label="Training partner" value={batch.tpId} />
               <Fact label="Centre" value={batch.centreId} />
+              <Fact
+                label="Scheme"
+                value={schemeId ? (schemeQuery.data ? `${schemeQuery.data.name} (${schemeQuery.data.code})` : schemeId) : "None"}
+              />
+              <Fact
+                label="Project"
+                value={projectId ? (projectQuery.data ? `${projectQuery.data.name} (${projectQuery.data.code})` : projectId) : "None"}
+              />
               <Fact label="Candidate count" value={String(batch.candidateCount)} />
               <Fact label="Sector" value={batch.sector} />
               <Fact label="Ratio class" value={batch.ratioClass} />

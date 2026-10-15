@@ -68,6 +68,13 @@ export const MASTER_DATA_ROLES: readonly Role[] = [
   "candidate",
 ];
 
+/** H-01 schemes, projects and signatories: aa_admin and mis write; ab_reviewer and ncvet_viewer read (Q380). */
+export const SCHEME_READ_ROLES: readonly Role[] = ["aa_admin", "mis", "ab_reviewer", "ncvet_viewer"];
+
+export function canWriteSchemes(role: Role): boolean {
+  return role === "aa_admin" || role === "mis";
+}
+
 /** SCHEMA §5 results read. Proctor and SME are denied. */
 export const RESULTS_ROLES: readonly Role[] = [
   "aa_admin",

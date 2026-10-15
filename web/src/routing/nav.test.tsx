@@ -17,6 +17,9 @@ const VISIBLE: Record<Role, readonly string[]> = {
     "Users",
     "Registry",
     "Master data",
+    "Schemes",
+    "Projects",
+    "Signatories",
     "Recognition",
     "Results",
     "Audit log",
@@ -24,14 +27,14 @@ const VISIBLE: Record<Role, readonly string[]> = {
     "Working days",
     "Settings",
   ],
-  mis: ["Home", "Batches", "Users", "Registry", "Master data", "Recognition", "Results", "Audit log", "Analytics", "Working days"],
+  mis: ["Home", "Batches", "Users", "Registry", "Master data", "Schemes", "Projects", "Signatories", "Recognition", "Results", "Audit log", "Analytics", "Working days"],
   sme: ["Home"],
   assessor: ["Home", "Batches", "Registry", "Results"],
   proctor: ["Home", "Batches", "Registry"],
   candidate: ["Home", "Batches", "Master data", "Results"],
   tp: ["Home", "Batches", "Master data", "Results"],
-  ab_reviewer: ["Home", "Batches", "AB queue", "Registry", "Master data", "Results", "Audit log", "Analytics"],
-  ncvet_viewer: ["Home", "Batches", "Registry", "Master data", "Recognition", "Results", "Audit log", "Analytics"],
+  ab_reviewer: ["Home", "Batches", "AB queue", "Registry", "Master data", "Schemes", "Projects", "Signatories", "Results", "Audit log", "Analytics"],
+  ncvet_viewer: ["Home", "Batches", "Registry", "Master data", "Schemes", "Projects", "Signatories", "Recognition", "Results", "Audit log", "Analytics"],
 };
 
 it.each(Object.entries(VISIBLE) as [Role, readonly string[]][])(
