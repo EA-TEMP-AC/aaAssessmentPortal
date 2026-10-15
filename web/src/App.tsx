@@ -19,6 +19,19 @@ import { WorkingDaysPage } from "./pages/WorkingDaysPage";
 import { BatchesPage } from "./pages/BatchesPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
 import { RoleHomePage } from "./pages/RoleHomePage";
+import { SiteLayout } from "./site/SiteLayout";
+import { EventsPage } from "./site/EventsPage";
+import {
+  GrievancePage,
+  IndustryLinkagesPage,
+  OfficeDocumentsPage,
+  OrganogramPage,
+  PeoplePage,
+  PoshPage,
+  SamplePapersPage,
+  SiteHomePage,
+  TeamPage,
+} from "./site/pages";
 import { AuthBridge, GuestOnly, RequireAuth, RequireRole, RootRedirect } from "./routing/guards";
 import { NAV_ITEMS } from "./routing/nav";
 import { createQueryClient } from "./queryClient";
@@ -81,6 +94,18 @@ export function AppRoutes() {
               </Route>
             ))}
           </Route>
+        </Route>
+        <Route path="/site" element={<SiteLayout />}>
+          <Route index element={<SiteHomePage />} />
+          <Route path="team" element={<TeamPage />} />
+          <Route path="organogram" element={<OrganogramPage />} />
+          <Route path="people" element={<PeoplePage />} />
+          <Route path="sample-papers" element={<SamplePapersPage />} />
+          <Route path="industry-linkages" element={<IndustryLinkagesPage />} />
+          <Route path="grievance" element={<GrievancePage />} />
+          <Route path="posh" element={<PoshPage />} />
+          <Route path="office-documents" element={<OfficeDocumentsPage />} />
+          <Route path="events" element={<EventsPage />} />
         </Route>
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
