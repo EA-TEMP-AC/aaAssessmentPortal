@@ -610,3 +610,85 @@ it("announces a password-reset error and does not show a returned password", asy
   expect(storedText()).not.toContain(PASSWORD);
   expect(storedText()).not.toContain(LEAKED);
 });
+
+it("renders resend credentials button for aa_admin and completes confirm step with success notice", async () => {
+  const user = userEvent.setup();
+  let resendCalled = false;
+
+  installFetch(async (url, init) => {
+    if (url.pathname.endsWith("/resend-credentials") && methodOf(init) === "POST") {
+      resendCalled = true;
+      return jsonResponse(202, { emailQueued: true, temporaryPassword: LEAKED });
+    }
+    return jsonResponse(200, listBody([userRecord({ active: true })]));
+  });
+
+  setSession(sessionFor("aa_admin"));
+  renderApp("/users");
+
+  const resendBtn = await screen.findByRole("button", { name: "Resend credentials for Asha Devi" });
+  expect(resendBtn).toBeEnabled();
+
+  await user.click(resendBtn);
+
+  const dialog = screen.getByRole("dialog", { name: "Resend credentials for Asha Devi?" });
+  expect(within(dialog).getByRole("button", { name: "Cancel" })).toHaveFocus();
+  expect(within(dialog).getByText(/A new temporary password will be generated/i)).toBeInTheDocument();
+
+  // Test cancel first
+  await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(resendCalled).toBe(false);
+
+  // Click again and confirm
+  await user.click(screen.getByRole("button", { name: "Resend credentials for Asha Devi" }));
+  const confirmDialog = screen.getByRole("dialog", { name: "Resend credentials for Asha Devi?" });
+  await user.click(within(confirmDialog).getByRole("button", { name: "Resend credentials" }));
+
+  expect(await screen.findByText("Credentials email queued")).toBeInTheDocument();
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(screen.queryByText(LEAKED)).not.toBeInTheDocument();
+  expect(storedText()).not.toContain(LEAKED);
+  expect(resendCalled).toBe(true);
+});
+
+it("disables resend credentials button for disabled users", async () => {
+  installFetch(async () => jsonResponse(200, listBody([userRecord({ active: false })])));
+  setSession(sessionFor("aa_admin"));
+  renderApp("/users");
+
+  const resendBtn = await screen.findByRole("button", { name: "Resend credentials for Asha Devi" });
+  expect(resendBtn).toBeDisabled();
+});
+
+it("shows server error in plain words when resend credentials fails", async () => {
+  const user = userEvent.setup();
+  installFetch(async (url, init) => {
+    if (url.pathname.endsWith("/resend-credentials") && methodOf(init) === "POST") {
+      return jsonResponse(409, {
+        error: { code: "INVALID_TRANSITION", message: "The user is disabled" },
+      });
+    }
+    return jsonResponse(200, listBody([userRecord({ active: true })]));
+  });
+
+  setSession(sessionFor("aa_admin"));
+  renderApp("/users");
+
+  await user.click(await screen.findByRole("button", { name: "Resend credentials for Asha Devi" }));
+  const dialog = screen.getByRole("dialog", { name: "Resend credentials for Asha Devi?" });
+  await user.click(within(dialog).getByRole("button", { name: "Resend credentials" }));
+
+  const alert = await within(dialog).findByRole("alert");
+  expect(alert).toHaveTextContent("The user is disabled");
+  expect(screen.getByRole("dialog")).toBeInTheDocument();
+});
+
+it("does not show resend credentials button to mis", async () => {
+  installFetch(async () => jsonResponse(200, listBody([userRecord({ active: true })])));
+  setSession(sessionFor("mis"));
+  renderApp("/users");
+
+  await screen.findByRole("cell", { name: "Asha Devi" });
+  expect(screen.queryByRole("button", { name: /Resend credentials/i })).not.toBeInTheDocument();
+});

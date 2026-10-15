@@ -1,4 +1,4 @@
-import type { Role } from "./access";
+﻿import type { Role } from "./access";
 import {
   ALL_ROLES,
   AUDIT_ROLES,
@@ -43,7 +43,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     to: "/ab-queue",
     description: "Batches with a result waiting for validation or publication.",
     roles: ["ab_reviewer"],
-    accessRoles: ["ab_reviewer", "aa_admin", "mis"],
+    accessRoles: ["ab_reviewer", "aa_admin", "mis", "ncvet_viewer"],
   },
   {
     id: "users",
@@ -94,8 +94,23 @@ export const NAV_ITEMS: readonly NavItem[] = [
     description: "Choose weekend days and record holidays. Changes do not rewrite due dates already stored on batches.",
     roles: WORKING_DAY_ROLES,
   },
+  {
+    id: "settings",
+    label: "Settings",
+    to: "/settings/access",
+    description: "Access and feature settings.",
+    roles: ["aa_admin"],
+  },
 ];
 
-export function navItemsForRole(role: Role): NavItem[] {
-  return NAV_ITEMS.filter((item) => item.roles.includes(role));
+export function navItemsForRole(
+  role: Role,
+  options?: { ncvetViewerCanSeeAbQueue?: boolean },
+): NavItem[] {
+  return NAV_ITEMS.filter((item) => {
+    if (item.id === "ab-queue" && role === "ncvet_viewer") {
+      return Boolean(options?.ncvetViewerCanSeeAbQueue);
+    }
+    return item.roles.includes(role);
+  });
 }

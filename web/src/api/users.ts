@@ -1,11 +1,11 @@
-import type { Role } from "../routing/access";
+﻿import type { Role } from "../routing/access";
 import { isRole } from "../routing/access";
 import { ApiError, apiRequest, apiRequestResult } from "./client";
 
 /**
  * Users administration. Paths and the two password-reset bodies are in
  * API_CONTRACT.md. The list query and the public user fields follow
- * server/src/modules/users (B-08). See DECISIONS.md open questions 47–50.
+ * server/src/modules/users (B-08). See DECISIONS.md open questions 47â€“50.
  */
 
 /** Matches server USER_PAGE_SIZE_DEFAULT. The screen also offers 50 and 100. */
@@ -183,6 +183,26 @@ export async function resetUserPassword(
     typeof result.body.emailQueued === "boolean"
   ) {
     return { kind: "email", emailQueued: result.body.emailQueued };
+  }
+  throw resetResponseError();
+}
+
+/**
+ * aa_admin "resend credentials" (decision 172, Q166).
+ * Sets a new temporary password, mustChangePassword, revokes sessions, and queues credentials email.
+ * Success is 202 `{ emailQueued }`.
+ */
+export async function resendCredentials(id: string): Promise<{ emailQueued: boolean }> {
+  const result = await apiRequestResult<unknown>(`/users/${encodeURIComponent(id)}/resend-credentials`, {
+    method: "POST",
+    body: {},
+  });
+  if (
+    result.status === 202 &&
+    isRecord(result.body) &&
+    typeof result.body.emailQueued === "boolean"
+  ) {
+    return { emailQueued: result.body.emailQueued };
   }
   throw resetResponseError();
 }

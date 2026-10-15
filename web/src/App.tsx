@@ -1,6 +1,6 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { AppLayout } from "./components/AppLayout";
 import { LoginPage } from "./pages/LoginPage";
@@ -12,6 +12,7 @@ import { ChangePasswordPage } from "./pages/ChangePasswordPage";
 import { MasterDataPage } from "./pages/MasterDataPage";
 import { RecognitionPage } from "./pages/RecognitionPage";
 import { RegistryPage } from "./pages/RegistryPage";
+import { SettingsAccessPage } from "./pages/SettingsAccessPage";
 import { UsersPage } from "./pages/UsersPage";
 import { WorkingDaysPage } from "./pages/WorkingDaysPage";
 import { BatchesPage } from "./pages/BatchesPage";
@@ -37,6 +38,7 @@ export function AppRoutes() {
           <Route element={<AppLayout />}>
             <Route path="/home" element={<RoleHomePage />} />
             <Route path="/account/password" element={<ChangePasswordPage />} />
+            <Route path="/settings" element={<Navigate to="/settings/access" replace />} />
             {sections.map((item) => (
               <Route key={item.id} element={<RequireRole roles={item.accessRoles ?? item.roles} />}>
                 <Route
@@ -66,6 +68,8 @@ export function AppRoutes() {
                       <WorkingDaysPage />
                     ) : item.id === "batches" ? (
                       <BatchesPage />
+                    ) : item.id === "settings" ? (
+                      <SettingsAccessPage />
                     ) : (
                       <PlaceholderPage title={item.label} description={item.description} />
                     )

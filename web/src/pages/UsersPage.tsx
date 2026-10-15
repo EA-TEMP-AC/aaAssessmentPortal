@@ -4,6 +4,7 @@ import {
   createUser,
   isUserPageSize,
   listUsers,
+  resendCredentials,
   resetUserPassword,
   updateUser,
   USER_PAGE_SIZE_DEFAULT,
@@ -35,7 +36,8 @@ type DialogState =
   | { type: "create" }
   | { type: "edit"; user: UserRecord }
   | { type: "active"; user: UserRecord; nextActive: boolean }
-  | { type: "reset"; user: UserRecord };
+  | { type: "reset"; user: UserRecord }
+  | { type: "resendCredentials"; user: UserRecord };
 
 type FormError = { id: number; message: string; fields: string[] };
 
@@ -569,6 +571,70 @@ function ActiveConfirm({
   );
 }
 
+function ResendCredentialsConfirm({
+  user,
+  onCancel,
+  onSaved,
+}: {
+  user: UserRecord;
+  onCancel: () => void;
+  onSaved: (message: string) => void;
+}) {
+  const queryClient = useQueryClient();
+  const [pending, setPending] = useState(false);
+  const [formError, setFormError] = useState<FormError | null>(null);
+  const errorSeq = useRef(0);
+  const mounted = useRef(true);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  return (
+    <Dialog title={`Resend credentials for ${user.name}?`} busy={pending} initialFocus="cancel" onCancel={onCancel}>
+      <form
+        noValidate
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (pending) return;
+          setPending(true);
+          setFormError(null);
+          void (async () => {
+            try {
+              await resendCredentials(user.id);
+              await queryClient.invalidateQueries({ queryKey: ["users"] });
+              if (!mounted.current) return;
+              onSaved("Credentials email queued");
+            } catch (error) {
+              if (!mounted.current) return;
+              setPending(false);
+              setFormError({ id: ++errorSeq.current, message: errorMessage(error), fields: [] });
+            }
+          })();
+        }}
+      >
+        <fieldset disabled={pending} className="bare-fieldset">
+          <p>
+            A new temporary password will be generated and queued in an email to {user.email}. The temporary password is
+            never shown. Any active sessions for this user will be revoked and they must change their password on next
+            sign-in.
+          </p>
+          <FormAlert error={formError} />
+          <div className="dialog-actions">
+            <button type="button" data-dialog-cancel onClick={onCancel}>
+              Cancel
+            </button>
+            <button type="submit">Resend credentials</button>
+          </div>
+        </fieldset>
+      </form>
+    </Dialog>
+  );
+}
+
 function PasswordResetDialog({
   user,
   onCancel,
@@ -1020,6 +1086,16 @@ export function UsersPage() {
                                 >
                                   Reset password for {user.name}
                                 </button>
+                                {actor === "aa_admin" ? (
+                                  <button
+                                    type="button"
+                                    className="button-quiet"
+                                    disabled={!user.active}
+                                    onClick={(event) => openDialog(event, { type: "resendCredentials", user })}
+                                  >
+                                    Resend credentials for {user.name}
+                                  </button>
+                                ) : null}
                               </div>
                             ) : (
                               "Cannot edit or reset"
@@ -1057,6 +1133,9 @@ export function UsersPage() {
       ) : null}
       {dialog?.type === "reset" ? (
         <PasswordResetDialog user={dialog.user} onCancel={cancelDialog} onSaved={showNotice} onProblem={showProblem} />
+      ) : null}
+      {dialog?.type === "resendCredentials" ? (
+        <ResendCredentialsConfirm user={dialog.user} onCancel={cancelDialog} onSaved={showNotice} />
       ) : null}
     </div>
   );

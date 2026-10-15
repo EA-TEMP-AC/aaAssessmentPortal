@@ -1,6 +1,8 @@
-import { useState } from "react";
-import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
+﻿import { useState } from "react";
+import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { logout } from "../api/auth";
+import { getAccessSettings } from "../api/settings";
 import { useSession } from "../api/session";
 import { ROLE_LABELS } from "../routing/access";
 import { navItemsForRole } from "../routing/nav";
@@ -28,9 +30,21 @@ export function SignOutButton() {
 
 export function AppLayout() {
   const session = useSession();
+  const location = useLocation();
+  const isNcvetViewer = session?.user.role === "ncvet_viewer";
+
+  // AB queue: on load, ncvet_viewer reads GET /settings/access.
+  const accessSettings = useQuery({
+    queryKey: ["settings", "access"],
+    queryFn: ({ signal }) => getAccessSettings(signal),
+    enabled: isNcvetViewer && location.pathname.startsWith("/ab-queue"),
+  });
+
   if (!session) return null;
 
-  const items = navItemsForRole(session.user.role);
+  const items = navItemsForRole(session.user.role, {
+    ncvetViewerCanSeeAbQueue: accessSettings.data?.ncvetViewerCanSeeAbQueue,
+  });
 
   return (
     <div className="app-shell">

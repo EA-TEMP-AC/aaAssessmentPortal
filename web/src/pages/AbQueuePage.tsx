@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+﻿import { useEffect, useRef, useState, type FormEvent } from "react";
 import { keepPreviousData, useQueries, useQuery } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import {
   BATCH_PAGE_SIZE_DEFAULT,
   BATCH_PAGE_SIZE_OPTIONS,
@@ -13,6 +13,7 @@ import {
 } from "../api/batches";
 import { errorMessage } from "../api/client";
 import { listQualifications, listTrainingPartners } from "../api/masterData";
+import { getAccessSettings } from "../api/settings";
 import { useSession } from "../api/session";
 import { BATCH_STATUS_LABELS } from "./batches/labels";
 import { formatInstant } from "./batches/sla";
@@ -49,6 +50,17 @@ function byResultDue(a: BatchRecord, b: BatchRecord): number {
 export function AbQueuePage() {
   const session = useSession();
   const role = session?.user.role;
+  const isNcvet = role === "ncvet_viewer";
+
+  const accessQuery = useQuery({
+    queryKey: ["settings", "access"],
+    queryFn: ({ signal }) => getAccessSettings(signal),
+    enabled: Boolean(session) && isNcvet,
+    retry: false,
+  });
+
+  const canAccess = !isNcvet || accessQuery.data?.ncvetViewerCanSeeAbQueue === true;
+
   const [draft, setDraft] = useState<Filters>(EMPTY_FILTERS);
   const [applied, setApplied] = useState<Filters>(EMPTY_FILTERS);
   const [page, setPage] = useState(1);
@@ -60,7 +72,7 @@ export function AbQueuePage() {
   const queues = useQueries({
     queries: statuses.map((status) => ({
       queryKey: ["ab-queue", status, applied.from, applied.to, page, applied.pageSize],
-      enabled: Boolean(session),
+      enabled: Boolean(session) && canAccess,
       placeholderData: keepPreviousData,
       queryFn: ({ signal }: { signal: AbortSignal }) =>
         listBatches(
@@ -79,14 +91,14 @@ export function AbQueuePage() {
   // Names are a convenience. A lookup the role may not make falls back to the id.
   const qualifications = useQuery({
     queryKey: ["ab-queue-qualifications"],
-    enabled: Boolean(session),
+    enabled: Boolean(session) && canAccess,
     retry: false,
     queryFn: ({ signal }) => listQualifications({ page: 1, pageSize: 100 }, signal),
   });
-  const canNameTps = role === "aa_admin" || role === "mis";
+  const canNameTps = role === "aa_admin" || role === "mis" || role === "ncvet_viewer";
   const partners = useQuery({
     queryKey: ["ab-queue-training-partners"],
-    enabled: Boolean(session) && canNameTps,
+    enabled: Boolean(session) && canAccess && canNameTps,
     retry: false,
     queryFn: ({ signal }) => listTrainingPartners({ page: 1, pageSize: 100 }, signal),
   });
@@ -97,6 +109,15 @@ export function AbQueuePage() {
   }, [failed]);
 
   if (!session) return null;
+
+  if (isNcvet) {
+    if (accessQuery.isPending) {
+      return <p role="status">Loading the queue.</p>;
+    }
+    if (accessQuery.isError || !accessQuery.data?.ncvetViewerCanSeeAbQueue) {
+      return <Navigate to="/home" replace />;
+    }
+  }
 
   const qualificationNames = new Map((qualifications.data?.items ?? []).map((row) => [row.id, row.name]));
   const partnerNames = new Map((partners.data?.items ?? []).map((row) => [row.id, row.name]));
