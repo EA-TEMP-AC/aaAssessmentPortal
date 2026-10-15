@@ -90,4 +90,11 @@ export const compliance = Object.freeze({
    * submit (network delay). Override with env ATTEMPT_GRACE_SECONDS. Open question 422.
    */
   ATTEMPT_GRACE_SECONDS: 30,
+   * project. Q-04. Months between question bank reviews of a qualification unless the
+   * qualification has its own interval. Open question 440.
+   */
+  QUESTION_REVIEW_INTERVAL_MONTHS: 12,
+  /** project. Q-04. Lowest and highest interval a qualification may be given, in months. */
+  QUESTION_REVIEW_INTERVAL_MIN_MONTHS: 1,
+  QUESTION_REVIEW_INTERVAL_MAX_MONTHS: 60,
 });

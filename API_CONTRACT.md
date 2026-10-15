@@ -1290,6 +1290,55 @@ Audit `nqr_qualification.import` (also on a failed import) with counts only, nev
 
 ---
 
+## Question review cycles (Phase 2, Q-04)
+
+Backend only. Paths are under `/api/v1/question-bank`. Audit rows hold ids, dates, decisions and counts; never question text or reviewer comments (`comment` shows as `[redacted]` in the logged request body). Unknown request keys are `400 VALIDATION_ERROR`.
+
+Roles: `aa_admin` and `sme` create, list, read and close cycles and set intervals. `ab_reviewer` reads cycles of their own awarding body and records decisions on them; a cycle of another awarding body (or any cycle, for a reviewer with no `abId`) is `404`. Every other role is `403`.
+
+### POST /review-cycles
+Roles: `aa_admin`, `sme`. Body:
+```json
+{ "qualificationId": "66f0...", "abId": "66f0...", "reviewerId": "66f0...", "dueDate": "2026-12-31", "questionIds": ["66f0..."] }
+```
+`questionIds` is optional (default: every approved, latest question of the qualification, up to 1000). `reviewerId` must be an active `ab_reviewer` whose `abId` equals the body's `abId` (`400`). `dueDate` is a real IST date, today or later (`400`). Questions must be approved, latest and of the qualification (`400 INVALID_QUESTIONS`, with `invalidQuestionIds`). Also `404 QUALIFICATION_NOT_FOUND`, `404 AWARDING_BODY_NOT_FOUND`, `409 NO_QUESTIONS_TO_REVIEW`, `409 REVIEW_CYCLE_ALREADY_OPEN` (one open cycle per qualification and awarding body). `201` returns the summary:
+```json
+{ "id": "66f0...", "qualificationId": "66f0...", "abId": "66f0...", "reviewerId": "66f0...", "dueDate": "2026-12-31", "status": "open", "overdue": false,
+  "counts": { "total": 12, "decided": 0, "undecided": 12, "keep": 0, "revise": 0, "retire": 0 },
+  "incomplete": false, "createdBy": "66f0...", "createdAt": "2026-10-15T...", "closedBy": null, "closedAt": null }
+```
+Audit `review_cycle.create`.
+
+### GET /review-cycles?status=&qualificationId=&abId=&page=&pageSize=
+Roles: `aa_admin`, `sme`, `ab_reviewer` (own awarding body; an `abId` filter cannot widen it). `200` `{ items: [summary], total, page, pageSize, totalPages }`, oldest `dueDate` first.
+
+### GET /review-cycles/:id
+Same roles and scope. `200` the summary plus `items: [{ questionId, rootQuestionId, decision, comment, decidedBy, decidedAt, resultQuestionId }]`. Read question text with `GET /questions/:id`.
+
+### POST /review-cycles/:id/decisions
+Roles: `ab_reviewer` of the cycle's awarding body only (`aa_admin` and `sme` get `403`). Body `{ "questionId", "decision": "keep"|"revise"|"retire", "comment": "1 to 2000 chars", "changes": { ...optional, revise only } }`. `changes` takes the same fields as `PUT /questions/:id` except `status`.
+- `keep`: nothing changes on the question; its review clock restarts when the cycle is closed.
+- `revise`: creates the next version through the existing versioning (draft, needs approval); `resultQuestionId` is that version.
+- `retire`: the existing retire.
+
+Errors: `404` question not in the cycle; `409 DECISION_ALREADY_RECORDED`; `409 REVIEW_CYCLE_CLOSED`; `409 QUESTION_NOT_REVIEWABLE` (the question is no longer the latest version, or is retired). If the revise or retire is refused (for example `400 INVALID_OPTIONS`) no decision is stored. `201`:
+```json
+{ "cycleId": "66f0...", "questionId": "66f0...", "decision": "revise", "comment": "...", "decidedBy": "66f0...", "decidedAt": "...", "resultQuestionId": "66f0...", "counts": { "total": 12, "decided": 1, "undecided": 11, "keep": 0, "revise": 1, "retire": 0 } }
+```
+Audit `review_cycle.decision` with the decision, ids and `commentLength` only.
+
+### POST /review-cycles/:id/close
+Roles: `aa_admin`, `sme`. Body `{ "allowIncomplete": false }` (optional). `409 UNDECIDED_ITEMS` (`details.undecided`) while any question has no decision, unless `allowIncomplete: true`, which closes with `incomplete: true`. `409 REVIEW_CYCLE_CLOSED` if already closed. `200` the summary. Audit `review_cycle.close`.
+
+### GET /review-settings/:qualificationId and PUT /review-settings/:qualificationId
+Read: `aa_admin`, `sme`, `ab_reviewer`. Write: `aa_admin`, `sme`. Body `{ "intervalMonths": 6 }`, integer 1 to 60. `200` `{ qualificationId, intervalMonths, isDefault }`; the default is 12 from `compliance.QUESTION_REVIEW_INTERVAL_MONTHS`. Audit `review_setting.update` with before and after.
+
+### GET /review-due?page=&pageSize=
+Roles: `aa_admin`, `sme`, `ab_reviewer` (only qualifications their awarding body has a batch or cycle for). `200` `{ items: [{ qualificationId, code, name, intervalMonths, lastCompletedReviewAt, dueQuestionCount, qualificationOverdue, awardingBodyIds }], total, page, pageSize, totalPages }`. Rule: docs/SCHEMA.md §3.31.
+
+### Nightly reminder job
+Runs once a day in the server process (same pattern as the SLA job; not an endpoint). For each due qualification and each active awarding body linked to it, it queues one `emailQueue` row (`kind: "question_review_due"`) to that body's `notificationEmails`: qualification code and name, number of questions past the interval, last completed review date. No question text. One reminder per qualification, awarding body and period (`reviewReminders` unique index); running the job again queues nothing new. A qualification with no active awarding body linked is skipped. No audit row.
+
 ## Evidence vault (Phase 2, V-01)
 
 Backend only. The browser screen is V-02. Files live in object storage (local disk in development, an S3-compatible bucket in production; see README) under random keys. The API never returns a storage key, never uses a client file name as a path, and offers no way to replace or delete a file.

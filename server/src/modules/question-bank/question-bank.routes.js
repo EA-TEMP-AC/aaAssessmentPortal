@@ -25,12 +25,14 @@ import {
   retireQuestion,
   updateQuestion,
 } from "./question-bank.service.js";
+import { reviewCycleRouter } from "./review-cycle.routes.js";
 import { sectorCoverageRouter } from "./sector-coverage.routes.js";
 
 export const questionBankRouter = Router();
 
 questionBankRouter.use(requireAuth);
 questionBankRouter.use(sectorCoverageRouter);
+questionBankRouter.use(reviewCycleRouter);
 
 // Raw buffer middleware for direct Excel binary upload
 const rawBufferParser = express.raw({

@@ -43,7 +43,8 @@ export function redactQuestionContent(value) {
 
   const out = {};
   for (const [k, v] of Object.entries(value)) {
-    if (k === "stem") {
+    if (k === "stem" || k === "comment") {
+      // Q-04: a review comment can quote the question it is about.
       out[k] = "[redacted]";
     } else if (k === "correctAnswer") {
       out[k] = "[redacted]";
