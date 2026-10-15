@@ -26,8 +26,17 @@ export const generateSchema = guard(
       totalMarks: z.number().positive().max(100000).optional(),
       seed: z.number().int().min(0).max(4294967295).optional(),
       allowPartial: z.boolean().optional(),
+      weightProfileId: z
+        .string()
+        .regex(/^[a-fA-F0-9]{24}$/, "Invalid weight profile ID")
+        .optional(),
+      version: z.number().int().min(1).max(100000).optional(),
     })
-    .strict(),
+    .strict()
+    .refine((v) => v.version === undefined || v.weightProfileId !== undefined, {
+      message: "version needs weightProfileId",
+      path: ["version"],
+    }),
 );
 
 export const idParamSchema = z

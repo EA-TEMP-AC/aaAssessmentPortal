@@ -1397,11 +1397,44 @@ Roles: `aa_admin`, `sme`, `ab_reviewer`. Query: `qualificationId` (id or code), 
 ### GET /api/v1/tests/:id
 Same roles. `?withQuestions=true` adds `stem`, `options` and `correctAnswer` to each item. `404 NOT_FOUND`.
 
+### POST /api/v1/tests/generate with a weight profile (task E-02)
+Two optional keys: `weightProfileId` (the profile's `rootProfileId`) and `version` (needs `weightProfileId`). With no `version` the latest approved version is used; a named version must be approved. Without `weightProfileId` nothing changes from E-01.
+The quotas stay hard rules. Inside them the generator picks the questions that bring the paper closest to the profile's difficulty and Bloom percentages (whole-question targets by largest remainder). A question with no `difficulty`, or a `bloomLevel` that is not one of the six levels (case and spaces ignored), is unclassified: it is taken only when no classified question is left in that quota and is always counted in the report.
+The paper then also has `weightProfile: {profileId, version}`, `weightMix` and `difficulty` / `bloomLevel` on each item (null when unclassified):
+```json
+"weightMix": {
+  "totalItems": 10,
+  "difficulty": { "easy": {"targetPercent":50,"targetCount":5,"achievedCount":5,"achievedPercent":50,"differenceCount":0}, "medium": {}, "tough": {}, "unclassified": {"achievedCount":0,"achievedPercent":0} },
+  "bloom": { "remember": {}, "...": {}, "unclassified": {"achievedCount":0,"achievedPercent":0} },
+  "maxDifficultyDeviationPoints": 0, "maxBloomDeviationPoints": 0,
+  "unclassifiedDifficulty": 0, "unclassifiedBloom": 0,
+  "matched": true
+}
+```
+`differenceCount` is achieved minus target. `matched` is true only when every class hits its target and nothing is unclassified. A mismatch does not refuse the paper (Q402). Errors: `404 WEIGHT_PROFILE_NOT_FOUND` (unknown id, version, or no approved version), `409 WEIGHT_PROFILE_NOT_APPROVED`, `400 WEIGHT_PROFILE_QUALIFICATION_MISMATCH`. `regenerate-check` replays with the stored profile version. The `test.generate` audit row includes `weightProfile`.
+
 ### POST /api/v1/tests/:id/approve
 Roles: `aa_admin`, `ab_reviewer`. Draft to approved. `409 TEST_ALREADY_APPROVED`, `409 TEST_PAPER_INCOMPLETE` (shortage or missed marks target), `409 TEST_PAPER_STALE` (a question was retired, unapproved or superseded since generation; `details.stale`). Audit: `test.approve` with before and after.
 
 ### POST /api/v1/tests/:id/regenerate-check
 Roles: `aa_admin`, `sme`, `ab_reviewer`. Re-runs the selection with the stored seed and rules on the current bank. Returns `reproducible` (same questions, versions and order), `poolUnchanged` (bank pool is identical to generation time), `missing` and `extra` (`id:version`), and `stale` (stored questions no longer approved and current). If `poolUnchanged` is true and `reproducible` is false, the generator is broken. Audit: `test.regenerate_check`.
+## Weight profiles (task E-02)
+
+All under `/api/v1/weight-profiles`. A profile is a chain of versions; `:id` is the `rootProfileId` (the `_id` of version 1). Old versions are never changed or deleted. Unknown keys are rejected; national ID keys are rejected.
+
+Body fields: `name` (1-120), `qualificationId` (optional, id or code; null or missing means any qualification), `difficultyWeights` `{easy, medium, tough}` (all required) and `bloomWeights` (any of `remember`, `understand`, `apply`, `analyze`, `evaluate`, `create`; missing counts as 0). Each weight is a percentage from 0 to 100 with at most 2 decimals, and each set must add up to exactly 100 (`400 VALIDATION_ERROR` otherwise).
+
+| Call | Roles | What it does |
+|---|---|---|
+| `POST /` | `aa_admin`, `sme` | Creates version 1, status `draft`. `201`. Audit `weight_profile.create`. |
+| `PATCH /:id` | `aa_admin`, `sme` | Any of the body fields plus optional `expectedVersion`. Inserts a new draft version (latest + 1) with the unchanged fields copied; the old version is kept. At least one field must change. `409 WEIGHT_PROFILE_STALE_VERSION` when `expectedVersion` is not the latest or two edits collide (`details.latestVersion`). Audit `weight_profile.edit` with before and after. |
+| `POST /:id/approve` | `ab_reviewer` | Body `{version?}`, default the latest. Draft to approved, sets `approvedBy` and `approvedAt`. `409 WEIGHT_PROFILE_ALREADY_APPROVED`; `409 WEIGHT_PROFILE_VERSION_SUPERSEDED` when a newer version exists (`details.latestVersion`). Audit `weight_profile.approve` with before and after. |
+| `GET /` | `aa_admin`, `sme`, `ab_reviewer` | Latest version of each profile. Query `qualificationId` (id or code), `status`, `page`, `pageSize`. Returns `{items, total, page, pageSize}`. |
+| `GET /:id?version=n` | same | One version, the latest by default. `404 NOT_FOUND`. |
+| `GET /:id/versions` | same | All versions, oldest first. `{items, total}`. |
+
+Everyone else gets `403 FORBIDDEN`. Audit rows hold ids, name, version, status and the percentages only. See "POST /api/v1/tests/generate with a weight profile" for how a profile is used.
+
 ## Schemes, projects, authorised signatories (H-01)
 
 Master data for funding schemes, projects under a scheme, and the people who may sign for a scheme, a project, or the whole agency. Nothing is deleted: `DELETE` deactivates (`active: false`). Every write is audited with `before` and `after` (`scheme.create|update|deactivate`, `project.*`, `signatory.*`). Unknown request keys are `400 VALIDATION_ERROR`. No signature images and no personal ID numbers are accepted.

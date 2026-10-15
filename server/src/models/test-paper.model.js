@@ -16,6 +16,9 @@ const itemSchema = new mongoose.Schema(
     pcId: { type: String, required: true },
     type: { type: String, required: true, enum: QUESTION_TYPES },
     marks: { type: Number, required: true },
+    // Only set when the paper was built with a weight profile (E-02). Null: unclassified.
+    difficulty: { type: String },
+    bloomLevel: { type: String },
   },
   { _id: false },
 );
@@ -54,6 +57,12 @@ const testPaperSchema = new mongoose.Schema(
       totalMarks: { type: Number, default: null },
       quotas: { type: [quotaSchema], default: [] },
     },
+    // E-02: set only when the paper was generated with a weight profile.
+    weightProfile: {
+      profileId: { type: mongoose.Schema.Types.ObjectId, ref: "WeightProfile" },
+      version: { type: Number },
+    },
+    weightMix: { type: mongoose.Schema.Types.Mixed },
     poolHash: { type: String, required: true },
     items: { type: [itemSchema], default: [] },
     totalMarks: { type: Number, required: true },

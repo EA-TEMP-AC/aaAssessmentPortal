@@ -4,9 +4,19 @@ import { AppError, notFound } from "../../lib/errors.js";
 import { Qualification } from "../../models/qualification.model.js";
 import { Question } from "../../models/question.model.js";
 import { TestPaper } from "../../models/test-paper.model.js";
+import { WeightProfile } from "../../models/weight-profile.model.js";
 import { createRng, shuffle } from "./seeded-random.js";
+import {
+  UNCLASSIFIED,
+  bloomOf,
+  buildMixReport,
+  deficitScore,
+  difficultyOf,
+  newMixState,
+  recordPick,
+} from "./weight-math.js";
 
-async function findQualification(ref) {
+export async function findQualification(ref) {
   let qual = null;
   if (mongoose.Types.ObjectId.isValid(ref)) qual = await Qualification.findById(ref);
   if (!qual) qual = await Qualification.findOne({ code: String(ref).trim() });
@@ -68,7 +78,7 @@ async function loadPool(qualificationId, language) {
     status: "approved",
     isLatest: true,
   })
-    .select("rootQuestionId version nosId pcId type marks")
+    .select("rootQuestionId version nosId pcId type marks difficulty bloomLevel")
     .lean();
   const byRoot = new Map();
   for (const d of docs) {
@@ -90,11 +100,17 @@ function hashPool(pool) {
  * Inside a quota the PCs are visited round-robin in a seeded order, so every PC with a
  * question is covered before any PC is used twice. A question is never taken twice.
  */
-export function selectQuestions(pool, quotas, seed) {
+export function selectQuestions(pool, quotas, seed, profile = null) {
   const rng = createRng(seed);
   const used = new Set();
   const items = [];
   const shortages = [];
+  const mix = profile
+    ? newMixState(
+        profile,
+        quotas.reduce((s, q) => s + q.count, 0),
+      )
+    : null;
   for (const quota of quotas) {
     const candidates = pool.filter(
       (q) => q.nosId === quota.nosId && (!quota.type || q.type === quota.type),
@@ -108,7 +124,10 @@ export function selectQuestions(pool, quotas, seed) {
     const pcOrder = shuffle([...byPc.keys()].sort(), rng);
     const queues = new Map(pcOrder.map((pc) => [pc, shuffle(byPc.get(pc), rng)]));
     let taken = 0;
-    while (taken < quota.count) {
+    if (mix) {
+      taken = pickWeighted(pcOrder, queues, quota, mix, used, items);
+    }
+    while (!mix && taken < quota.count) {
       let progressed = false;
       for (const pc of pcOrder) {
         if (taken >= quota.count) break;
@@ -141,7 +160,99 @@ export function selectQuestions(pool, quotas, seed) {
   return { items, shortages };
 }
 
+/**
+ * Weighted pick inside one quota. Candidates are laid out PC round-robin as in the plain path,
+ * then each pick takes the one that fills the biggest remaining gap in the difficulty and Bloom
+ * targets. Ties prefer a PC used less in this quota, then the seeded order. Items with no
+ * difficulty or Bloom value score last, so they are only taken when nothing classified is left.
+ */
+function pickWeighted(pcOrder, queues, quota, mix, used, items) {
+  const ordered = [];
+  for (let more = true; more;) {
+    more = false;
+    for (const pc of pcOrder) {
+      const next = queues.get(pc).shift();
+      if (next) {
+        ordered.push(next);
+        more = true;
+      }
+    }
+  }
+  const pcUsed = new Map();
+  let taken = 0;
+  while (taken < quota.count && ordered.length > 0) {
+    let best = 0;
+    let bestKey = null;
+    ordered.forEach((q, pos) => {
+      const key = [deficitScore(q, mix), -(pcUsed.get(q.pcId) ?? 0), -pos];
+      if (!bestKey || compareKeys(key, bestKey) > 0) {
+        best = pos;
+        bestKey = key;
+      }
+    });
+    const [next] = ordered.splice(best, 1);
+    used.add(String(next._id));
+    recordPick(next, mix);
+    pcUsed.set(next.pcId, (pcUsed.get(next.pcId) ?? 0) + 1);
+    const d = difficultyOf(next);
+    const b = bloomOf(next);
+    items.push({
+      questionId: next._id,
+      rootQuestionId: next.rootQuestionId || next._id,
+      version: next.version,
+      nosId: next.nosId,
+      pcId: next.pcId,
+      type: next.type,
+      marks: next.marks,
+      difficulty: d === UNCLASSIFIED ? null : d,
+      bloomLevel: b === UNCLASSIFIED ? null : b,
+    });
+    taken += 1;
+  }
+  return taken;
+}
+
+function compareKeys(a, b) {
+  for (let i = 0; i < a.length; i += 1) if (a[i] !== b[i]) return a[i] - b[i];
+  return 0;
+}
+
 const sumMarks = (items) => Math.round(items.reduce((s, i) => s + i.marks, 0) * 100) / 100;
+
+/** The profile version a paper is built with: the one asked for, else the latest approved. */
+async function resolveProfile(qual, { weightProfileId, version }) {
+  if (!mongoose.Types.ObjectId.isValid(weightProfileId)) {
+    throw new AppError(404, "WEIGHT_PROFILE_NOT_FOUND", "Weight profile not found");
+  }
+  const filter = { rootProfileId: weightProfileId };
+  if (version !== undefined) filter.version = version;
+  else filter.status = "approved";
+  const profile = await WeightProfile.findOne(filter).sort({ version: -1 }).lean();
+  if (!profile) {
+    throw new AppError(
+      404,
+      "WEIGHT_PROFILE_NOT_FOUND",
+      version === undefined
+        ? "Weight profile has no approved version"
+        : `Weight profile version ${version} not found`,
+    );
+  }
+  if (profile.status !== "approved") {
+    throw new AppError(
+      409,
+      "WEIGHT_PROFILE_NOT_APPROVED",
+      "Only an approved weight profile version can be used to generate a paper",
+    );
+  }
+  if (profile.qualificationId && String(profile.qualificationId) !== String(qual._id)) {
+    throw new AppError(
+      400,
+      "WEIGHT_PROFILE_QUALIFICATION_MISMATCH",
+      "The weight profile belongs to a different qualification",
+    );
+  }
+  return profile;
+}
 
 export async function generatePaper(user, input) {
   const qual = await findQualification(input.qualificationId);
@@ -149,8 +260,10 @@ export async function generatePaper(user, input) {
   const quotas = canonicalQuotas(qual, input.quotas);
   const seed = input.seed ?? randomInt(0, 4294967296);
 
+  const profile = input.weightProfileId ? await resolveProfile(qual, input) : null;
+
   const pool = await loadPool(qual._id, language);
-  const { items, shortages } = selectQuestions(pool, quotas, seed);
+  const { items, shortages } = selectQuestions(pool, quotas, seed, profile);
   const totalMarks = sumMarks(items);
   const target = input.totalMarks ?? null;
   const marksTargetMet = target === null || totalMarks === target;
@@ -167,7 +280,15 @@ export async function generatePaper(user, input) {
     );
   }
 
+  const weighted = profile
+    ? {
+        weightProfile: { profileId: profile.rootProfileId, version: profile.version },
+        weightMix: buildMixReport(profile, items),
+      }
+    : {};
+
   return TestPaper.create({
+    ...weighted,
     qualificationId: qual._id,
     status: "draft",
     seed,
@@ -285,7 +406,13 @@ export async function regenerateCheck(id) {
   const paper = await loadPaper(id);
   const pool = await loadPool(paper.qualificationId, paper.rules.language);
   const quotas = paper.rules.quotas.map((q) => ({ nosId: q.nosId, type: q.type, count: q.count }));
-  const { items } = selectQuestions(pool, quotas, paper.seed);
+  const profile = paper.weightProfile?.profileId
+    ? await WeightProfile.findOne({
+        rootProfileId: paper.weightProfile.profileId,
+        version: paper.weightProfile.version,
+      }).lean()
+    : null;
+  const { items } = selectQuestions(pool, quotas, paper.seed, profile);
 
   const key = (i) => `${i.questionId}:${i.version}`;
   const stored = paper.items.map(key);

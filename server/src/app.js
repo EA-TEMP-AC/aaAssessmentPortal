@@ -44,6 +44,7 @@ import {
 } from "./modules/schemes/schemes.routes.js";
 import { questionBankRouter } from "./modules/question-bank/question-bank.routes.js";
 import { testGeneratorRouter } from "./modules/test-generator/test-generator.routes.js";
+import { weightProfileRouter } from "./modules/weight-profiles/weight-profiles.routes.js";
 
 export function createApp() {
   const app = express();
@@ -82,6 +83,7 @@ export function createApp() {
   app.use("/api/v1/question-bank", questionBankRouter);
   app.use("/api/v1/evidence", evidenceRouter);
   app.use("/api/v1/tests", testGeneratorRouter);
+  app.use("/api/v1/weight-profiles", weightProfileRouter);
   app.use("/api/v1/schemes", schemesRouter);
   app.use("/api/v1/projects", projectsRouter);
   app.use("/api/v1/signatories", signatoriesRouter);

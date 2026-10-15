@@ -92,7 +92,7 @@ A-03 Phase 2 notes (not Phase 1 scope): live NCVET monitoring link for online as
 | Q-04 | Review cycles with AB + periodic upgrade reminders | backend | Q-01 | todo | |
 | E-01 | Auto test generator: qualification>NOS>PC, random selection | backend | Q-01 | review | Seeded randomness for audit. Branch task/E-01-test-generator; POST /tests/generate, GET /tests, GET /tests/:id, approve, regenerate-check; open questions 340-347 |
 | Q-05 | Per-sector coverage check (>=5% of NQR qualifications), sector config + NQR CSV import | backend | Q-01 | review | One row per Annexure II sector on the recognition record. ratioClass is not this sector. Branch task/Q-05-sector-coverage |
-| E-02 | Difficulty + Bloom weight config per assessment (set with AB) | backend | E-01 | todo | Weights stored, versioned |
+| E-02 | Difficulty + Bloom weight config per assessment (set with AB) | backend | E-01 | review | Weights stored, versioned. Branch task/E-02-weight-profiles; /weight-profiles, optional weightProfileId on POST /tests/generate; open questions 400-408 |
 | E-03 | Attempt engine: deliver, answer, submit, score | backend | E-01 | todo | |
 | E-04 | Content refresh mechanism (retire/replace questions, version tests) | backend | E-03 | todo | |
 | E-05 | Offline assessment package: download, answer offline, sync | mobile | E-03 | todo | TR s12 |

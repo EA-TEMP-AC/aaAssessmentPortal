@@ -33,6 +33,7 @@ function auditView(paper) {
     totalMarks: p.totalMarks,
     shortages: p.shortages,
     complete: p.complete,
+    weightProfile: p.weightProfile,
   };
 }
 
