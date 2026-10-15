@@ -761,6 +761,33 @@ One generated test paper. Holds the seed, the rules and the chosen question ids 
 Indexes: `{ qualificationId: 1, status: 1, createdAt: -1 }`.
 
 Selection: pool is approved, latest, non-retired questions of the qualification in the language, one per `rootQuestionId`. Quotas run in canonical order on one seeded stream (mulberry32). Inside a quota the PCs are visited round-robin in a seeded order, so every PC with a question is used before any PC is used twice. A question is never taken twice in a paper.
+E-02 additions to `testPapers` (set only when the paper was generated with a weight profile; absent otherwise):
+
+| Field | Type | Notes |
+|---|---|---|
+| weightProfile | {profileId, version} | `profileId` is the profile's `rootProfileId`. Ref: `weightProfiles` |
+| weightMix | Object | Target versus achieved difficulty and Bloom mix, with an `unclassified` row and counts. See API_CONTRACT.md |
+| items[].difficulty, items[].bloomLevel | String | The class the item was counted under; null when unclassified |
+
+### 3.29 `weightProfiles` (phase 2) — Task E-02
+
+One row per version of a weight profile. An edit inserts a new row; no row is ever deleted, and only `isLatest` of an older row changes.
+
+| Field | Type | Req | Notes |
+|---|---|---|---|
+| rootProfileId | ObjectId | Y | `_id` of version 1; shared by all versions |
+| version | Number | Y | 1, 2, 3, ... |
+| isLatest | Boolean | Y | True on the newest version only |
+| name | String | Y | 1-120 characters |
+| qualificationId | ObjectId | N | Ref: `qualifications`; null means any qualification |
+| difficultyWeights | {easy, medium, tough} | Y | Percentages, add up to 100 |
+| bloomWeights | {remember, understand, apply, analyze, evaluate, create} | Y | Percentages, add up to 100 |
+| status | enum | Y | `draft`, `approved`. New versions are `draft` |
+| createdBy, approvedBy | ObjectId | Y / N | Ref: `users` |
+| approvedAt | Date | N | |
+
+Indexes: unique `{ rootProfileId: 1, version: 1 }`, `{ qualificationId: 1, isLatest: 1 }`.
+
 ### 3.25 `sectorConfigs` (phase 2) — Task Q-05
 
 One row per Annexure II sector on the recognition record. `sector` is a `SectorName`, never a `RatioClass`. Only a sector listed in `aaRecognition.sectors` can be added (`409 SECTOR_NOT_RECOGNISED`). Writes: `aa_admin`. Audited with before and after.

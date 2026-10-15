@@ -260,3 +260,12 @@ export const SECTOR_COVERAGE_READ_ROLES = QUESTION_READ_ROLES;
 
 /** Sector config and NQR qualification import. Q-05: aa_admin only. */
 export const SECTOR_COVERAGE_WRITE_ROLES = Object.freeze(["aa_admin"]);
+
+/** POST/PATCH /weight-profiles. E-02: aa_admin and sme write drafts; every edit is a new version. */
+export const WEIGHT_PROFILE_WRITE_ROLES = Object.freeze(["aa_admin", "sme"]);
+
+/** POST /weight-profiles/:id/approve. E-02: set together with the awarding body, so ab_reviewer only. */
+export const WEIGHT_PROFILE_APPROVE_ROLES = Object.freeze(["ab_reviewer"]);
+
+/** GET /weight-profiles. E-02: the writers and the approver. */
+export const WEIGHT_PROFILE_READ_ROLES = Object.freeze(["aa_admin", "sme", "ab_reviewer"]);
