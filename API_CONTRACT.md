@@ -1237,6 +1237,51 @@ Response `400 Bad Request` (when partial is false and errors exist):
 }
 ```
 
+### GET /api/v1/question-bank/sector-coverage
+Roles: `aa_admin`, `sme`, `ab_reviewer`.
+Coverage per active configured sector. Response `200 OK`:
+```json
+{
+  "minimumPercent": 5,
+  "items": [
+    {
+      "sectorId": "66f0000000000000000000s1",
+      "sector": "Electronics",
+      "active": true,
+      "nqrQualificationCount": 100,
+      "coveredCount": 5,
+      "percentCovered": 5,
+      "meetsMinimum": true,
+      "minimumPercent": 5
+    }
+  ]
+}
+```
+`percentCovered` is `null` and `meetsMinimum` is `false` when the sector has no NQR qualifications.
+
+### GET /api/v1/question-bank/sector-coverage/:sectorId?page=1&limit=100
+Roles: `aa_admin`, `sme`, `ab_reviewer`. `sectorId` is the `sectorConfigs` id. Same fields as one list item plus the uncovered qualifications (sorted by code; `limit` 1 to 500):
+```json
+{ "sectorId": "…", "sector": "Electronics", "nqrQualificationCount": 100, "coveredCount": 4,
+  "percentCovered": 4, "meetsMinimum": false, "minimumPercent": 5,
+  "uncovered": { "total": 96, "page": 1, "limit": 100, "items": [{ "code": "ELE/Q0101", "name": "Solderer" }] } }
+```
+Errors: `404 NOT_FOUND`, `400 VALIDATION_ERROR` (bad id or query).
+
+### POST /api/v1/question-bank/sector-config
+Roles: `aa_admin`. Body `{ "sector": "Electronics", "active": true }` (`active` optional; unknown keys refused; a ratio class is not a sector). `201` returns `{ id, sector, active, createdAt, updatedAt }`. Errors: `409 SECTOR_NOT_RECOGNISED`, `409 DUPLICATE_RESOURCE`, `400 VALIDATION_ERROR`. Audit `sector_config.create`.
+
+### PATCH /api/v1/question-bank/sector-config/:id
+Roles: `aa_admin`. Body `{ "active": false }`. `200` returns the row. Audit `sector_config.update` with before and after.
+
+### POST /api/v1/question-bank/nqr-qualifications/import(?partial=true)
+Roles: `aa_admin`. Body is the CSV itself, `Content-Type: text/csv`, up to 2 MB and 20,000 rows. Header must be exactly `code,name,sector` (any order); unknown columns, missing columns and national-id columns give `400 VALIDATION_ERROR`. `sector` must be an Annexure II name (matched ignoring case). Cells starting `=`, `+`, `-` or `@` are stored with a leading `'`. A code already present is updated, not duplicated; a code repeated in the file is a row error.
+Every row is validated. If any row fails and `partial=true` is not set, nothing is imported and the answer is `400` with `code: "IMPORT_VALIDATION_FAILED"` and `errors: [{ "row": 3, "errors": ["Unknown sector 'X'…"] }]` (row numbers are file lines, header is line 1). With `partial=true` valid rows are saved. Success: `201` when any row was created, else `200`:
+```json
+{ "success": true, "totalRows": 10, "importedCount": 9, "createdCount": 7, "updatedCount": 2, "errorCount": 1, "errors": [{ "row": 5, "errors": ["Missing name"] }] }
+```
+Audit `nqr_qualification.import` (also on a failed import) with counts only, never the file text.
+
 ---
 
 ## Evidence vault (Phase 2, V-01)

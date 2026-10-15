@@ -255,3 +255,8 @@ export const TEST_APPROVE_ROLES = Object.freeze(["aa_admin", "ab_reviewer"]);
 
 /** GET /tests, GET /tests/:id, regenerate-check. E-01: candidate, tp and the rest get nothing. */
 export const TEST_READ_ROLES = Object.freeze(["aa_admin", "sme", "ab_reviewer"]);
+/** Sector coverage reads. Q-05: same readers as the question bank. */
+export const SECTOR_COVERAGE_READ_ROLES = QUESTION_READ_ROLES;
+
+/** Sector config and NQR qualification import. Q-05: aa_admin only. */
+export const SECTOR_COVERAGE_WRITE_ROLES = Object.freeze(["aa_admin"]);

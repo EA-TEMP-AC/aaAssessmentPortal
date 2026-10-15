@@ -211,6 +211,7 @@ Implement in B-02. No magic numbers in feature code.
 | `PUBLIC_RATE_LIMIT_WINDOW_MS` | `60000` | W-01. Window for `/public/*` per client IP |
 | `PUBLIC_RATE_LIMIT_MAX` | `120` | W-01. Max `/public/*` requests / window / IP |
 | `DEFAULT_PASS_MARK_UNIT` | `percent` | Qualification may override |
+| `SECTOR_MIN_COVERAGE_PERCENT` | `5` | Project (Q-05). A sector passes the coverage check when at least this percent of its NQR qualifications have an approved question set. Open Q360 |
 
 ### 2.1 Working-day counting convention
 
@@ -755,6 +756,28 @@ One generated test paper. Holds the seed, the rules and the chosen question ids 
 Indexes: `{ qualificationId: 1, status: 1, createdAt: -1 }`.
 
 Selection: pool is approved, latest, non-retired questions of the qualification in the language, one per `rootQuestionId`. Quotas run in canonical order on one seeded stream (mulberry32). Inside a quota the PCs are visited round-robin in a seeded order, so every PC with a question is used before any PC is used twice. A question is never taken twice in a paper.
+### 3.20 `sectorConfigs` (phase 2) — Task Q-05
+
+One row per Annexure II sector on the recognition record. `sector` is a `SectorName`, never a `RatioClass`. Only a sector listed in `aaRecognition.sectors` can be added (`409 SECTOR_NOT_RECOGNISED`). Writes: `aa_admin`. Audited with before and after.
+
+| Field | Type | Req | Notes |
+|---|---|---|---|
+| sector | SectorName | Y | Unique |
+| active | bool | Y | Default `true`. Inactive sectors are left out of the coverage list |
+| createdBy, updatedBy | ObjectId | N | Ref: `users` |
+
+### 3.21 `nqrQualifications` (phase 2) — Task Q-05
+
+National Qualifications Register list per sector, loaded by CSV (`POST /question-bank/nqr-qualifications/import`). No personal data and no national ID fields.
+
+| Field | Type | Req | Notes |
+|---|---|---|---|
+| code | string | Y | Unique, up to 64 chars. A held `qualifications.code` equal to this code links the two |
+| name | string | Y | Up to 200 chars |
+| sector | SectorName | Y | Annexure II name |
+| importedBy | ObjectId | N | Ref: `users` |
+
+Coverage rule: an NQR qualification is **covered** when a `qualifications` row with the same `code` has at least one `questions` row with `status: "approved"` and `isLatest: true`. Percent covered is `covered / total * 100` (2 decimals); the minimum test compares `covered * 100 >= total * SECTOR_MIN_COVERAGE_PERCENT` so rounding never decides it. A sector with no NQR qualifications has `percentCovered: null` and `meetsMinimum: false`.
 
 ---
 
