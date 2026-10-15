@@ -452,6 +452,14 @@ Task F-16 (web only). Q182 is fixed: the shell loads `GET /settings/access` once
 303. **Settings request for `ncvet_viewer` on every page.** The shell now requests the access settings for `ncvet_viewer` after sign-in and on every window focus (not only on `/ab-queue`, which answers Q182). The `/ab-queue` page still reads the same endpoint for its own guard. Is one extra small request per focus acceptable, or should it be refreshed on a timer or after sign-in only?
 Human decisions on 2026-10-15 (F-16): Q300, Q301, Q303 accepted. Q302 accepted with a change: every paged table in the analytics page gets a rows-per-page drop-down (10, 20, 50), default 10 (task F-17).
 
+Task Q-05 (backend only). Sector coverage check. Questions numbered from 360.
+360. **What counts as "covered", and the 5% test.** I treated an NQR qualification as covered when a qualification the AA holds with the same code has at least one approved, latest question (not draft, in review or retired). I did not require a full question set per PC or a minimum count. The sector passes when covered / total is at least 5% (constant `SECTOR_MIN_COVERAGE_PERCENT`, compared without rounding, so 4.996% fails). Confirm this reading of "approved question set", or give the stricter rule (for example every PC has 5 approved questions, as the Q-01 coverage report uses).
+361. **Empty sector.** A sector with no NQR qualifications loaded shows no percentage and does not meet the minimum. Confirm this, or say it should be reported as "not applicable".
+362. **Which sectors can be configured.** Only sectors on the recognition record can get a config row; if there is no recognition record yet, none can. A sector can be switched off (`active: false`) but not deleted, and inactive sectors are left out of the list. Confirm.
+363. **Linking NQR rows to held qualifications by code.** The NQR list has only code, name and sector, and is linked to the AA's own qualifications by exact code match (case-sensitive). If NQR codes and the codes in our qualification master are written differently, coverage will read zero. Confirm both lists use the same code format, or tell me the NQR column to match on.
+364. **Import format and limits.** The NQR import takes the CSV as the request body (`text/csv`), not a multipart upload, with at most 2 MB and 20,000 rows. Re-importing a code updates its name and sector. Confirm the limits (NQR is large) and whether an NQR level or NSQF column is wanted.
+365. **Uncovered list paging.** The sector detail returns uncovered qualifications 100 at a time (up to 500). Confirm, or say if the whole list should always come back.
+
 ## Not mandated by NCVET (TR s29), do not market as compliance features
 Specific language, DB, cloud, server architecture, API style, biometric or face-recognition tech, GPS hardware, payment gateway, CRM, help-desk software.
 

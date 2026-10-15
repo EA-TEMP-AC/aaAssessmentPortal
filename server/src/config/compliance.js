@@ -76,4 +76,9 @@ export const compliance = Object.freeze({
    * project. Highest percent pass mark. Percent thresholds are not compared to raw maxMarks.
    */
   PASS_MARK_PERCENT_MAX: 100,
+  /**
+   * project. Q-05. A sector meets the question-bank coverage check when at least this
+   * percent of its NQR qualifications have an approved question set. Open question 360.
+   */
+  SECTOR_MIN_COVERAGE_PERCENT: 5,
 });
