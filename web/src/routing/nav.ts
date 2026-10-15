@@ -4,6 +4,7 @@ import {
   ANALYTICS_ROLES,
   AUDIT_ROLES,
   BATCH_ROLES,
+  EVIDENCE_ROLES,
   MASTER_DATA_ROLES,
   RECOGNITION_ROLES,
   REGISTRY_ROLES,
@@ -80,6 +81,13 @@ export const NAV_ITEMS: readonly NavItem[] = [
     to: "/results",
     description: "Result entry and review will be added in a later task.",
     roles: RESULTS_ROLES,
+  },
+  {
+    id: "evidence",
+    label: "Evidence",
+    to: "/evidence",
+    description: "Photos, videos and documents uploaded for batches, with checksum and location details.",
+    roles: EVIDENCE_ROLES,
   },
   {
     id: "audit",

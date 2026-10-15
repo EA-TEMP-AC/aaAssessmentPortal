@@ -98,7 +98,7 @@ A-03 Phase 2 notes (not Phase 1 scope): live NCVET monitoring link for online as
 | E-05 | Offline assessment package: download, answer offline, sync | mobile | E-03 | todo | TR s12 |
 | E-06 | Simulator integration hook for blended mode (interface only) | backend | E-03 | todo | Only if required by qualification |
 | V-01 | Evidence vault: upload with sha256, GPS, timestamp, index by candidate/batch/date/location | backend | B-03 | review | A-03: offline and blended batches need geo-tagged, time-stamped photos and videos (Guidelines 4.11b, open Q81). |
-| V-02 | Evidence browser UI | frontend | V-01 | todo | |
+| V-02 | Evidence browser UI | frontend | V-01 | review | Open questions 480 to 485. Web only; no API change. |
 | F-04 | Question bank screens, coverage, usage report | frontend | Q-01..Q-03 | todo | |
 | F-05 | Test builder + attempt UI (candidate) | frontend | E-03 | todo | |
 | T-02 | Tests for Phase 2 rules | qa | Q-01..E-05 | todo | |

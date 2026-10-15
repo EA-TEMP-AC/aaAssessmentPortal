@@ -819,3 +819,39 @@ textarea {
 .bar-chart-grid { stroke: #d5dbe3; }
 .bar-chart-label, .bar-chart-value, .bar-chart-tick, .bar-chart-axis-title { fill: #1b1f24; }
 .bar-chart-axis-title { font-weight: 600; }
+
+.evidence-detail {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  border: 1px solid #d5dbe3;
+  border-radius: 0.5rem;
+  background: #f8fafc;
+}
+
+.evidence-preview img,
+.evidence-preview object {
+  display: block;
+  max-width: 100%;
+  max-height: 32rem;
+  margin-bottom: 0.5rem;
+}
+
+.evidence-preview object {
+  width: 100%;
+  height: 32rem;
+}
+
+.evidence-verify {
+  padding: 0.5rem 0.75rem;
+  border-left: 0.35rem solid;
+}
+
+.evidence-verify-ok {
+  border-color: #1b6e3c;
+  background: #e8f5ec;
+}
+
+.evidence-verify-bad {
+  border-color: #a4161a;
+  background: #fdecec;
+}

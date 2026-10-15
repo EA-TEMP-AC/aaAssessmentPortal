@@ -33,6 +33,8 @@ type RequestOptions = {
   retryOn401?: boolean;
   signal?: AbortSignal;
   headers?: Record<string, string> | Headers;
+  /** Return the unread Response as `body` (file downloads). Errors still throw ApiError. */
+  raw?: boolean;
 };
 
 let unauthorizedHandler: () => void = () => {};
@@ -157,6 +159,10 @@ async function performRequest<T>(path: string, options: RequestOptions): Promise
       notifyUnauthorized();
     }
     throw error;
+  }
+
+  if (options.raw) {
+    return { status: response.status, body: response as T };
   }
 
   if (response.status === 204) {
