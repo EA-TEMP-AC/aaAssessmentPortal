@@ -69,8 +69,17 @@ function installFetch(overrides: { batches?: Handler; other?: Handler } = {}) {
       if (status === "ab_validated") return jsonResponse(200, listBody([VALIDATED]));
       return jsonResponse(400, { error: { code: "VALIDATION_ERROR", message: "Unexpected" } });
     }
+    if (overrides.other) {
+      const res = overrides.other(url);
+      if (res) return res;
+    }
     if (url.pathname.endsWith("/qualifications")) return masterList([QUALIFICATION]);
-    if (overrides.other) return overrides.other(url);
+    if (url.pathname.endsWith("/settings/access")) {
+      return jsonResponse(200, {
+        abReviewerCanReadAssessorPayments: false,
+        ncvetViewerCanSeeAbQueue: false,
+      });
+    }
     return jsonResponse(403, { error: { code: "FORBIDDEN", message: "Role or row scope denied" } });
   });
   vi.stubGlobal("fetch", fetchMock);
@@ -245,7 +254,7 @@ it("puts the AB queue in the reviewer's navigation only", async () => {
   expect(within(nav).getByRole("link", { name: "AB queue" })).toHaveAttribute("href", "/ab-queue");
 });
 
-it.each(["assessor", "proctor", "candidate", "tp", "sme", "ncvet_viewer"] as const)(
+it.each(["assessor", "proctor", "candidate", "tp", "sme"] as const)(
   "sends %s away from the queue without asking the server",
   async (role) => {
     const fetchMock = installFetch();
@@ -256,3 +265,47 @@ it.each(["assessor", "proctor", "candidate", "tp", "sme", "ncvet_viewer"] as con
     expect(batchCalls(fetchMock)).toHaveLength(0);
   },
 );
+
+it("sends ncvet_viewer to Home when ncvetViewerCanSeeAbQueue is false", async () => {
+  const fetchMock = installFetch({
+    other: (url) => {
+      if (url.pathname.endsWith("/settings/access")) {
+        return jsonResponse(200, {
+          abReviewerCanReadAssessorPayments: false,
+          ncvetViewerCanSeeAbQueue: false,
+        });
+      }
+      return jsonResponse(404);
+    },
+  });
+  setSession(sessionFor("ncvet_viewer"));
+  renderApp("/ab-queue");
+
+  expect(await screen.findByRole("navigation", { name: "Primary" })).toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "AB queue" })).not.toBeInTheDocument();
+  expect(batchCalls(fetchMock)).toHaveLength(0);
+});
+
+it("allows ncvet_viewer to open /ab-queue when ncvetViewerCanSeeAbQueue is true", async () => {
+  const fetchMock = installFetch({
+    other: (url) => {
+      if (url.pathname.endsWith("/settings/access")) {
+        return jsonResponse(200, {
+          abReviewerCanReadAssessorPayments: false,
+          ncvetViewerCanSeeAbQueue: true,
+        });
+      }
+      if (url.pathname.endsWith("/training-partners")) {
+        return masterList([{ id: IDS.tp, name: "Pune Skills Trust", active: true }]);
+      }
+      return jsonResponse(404);
+    },
+  });
+  setSession(sessionFor("ncvet_viewer"));
+  renderApp("/ab-queue");
+
+  expect(await screen.findByRole("heading", { name: "AB queue" })).toBeInTheDocument();
+  expect(await screen.findByRole("link", { name: SUBMITTED.id })).toBeInTheDocument();
+  expect(screen.getByText(/Read only. This view shows every awarding body./)).toBeInTheDocument();
+  expect(batchCalls(fetchMock).length).toBeGreaterThan(0);
+});

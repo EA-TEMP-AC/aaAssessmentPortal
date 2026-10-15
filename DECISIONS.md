@@ -402,5 +402,9 @@ B-15 open questions (2026-10-15):
 
 Human decision on 2026-10-15: Q176, Q177, Q178, Q179 and Q180 accepted as built.
 
+F-15 open questions (2026-10-15):
+181. **Assessor payments screen not yet implemented in web.** Item 3 of F-15 specifies that any assessor-payment screen or link should be shown to `ab_reviewer` only when `abReviewerCanReadAssessorPayments` is true. There is currently no assessor-payment screen or navigation link in the web client. The flag is loaded and saved on the settings page, and ready for use when the assessor payments UI is built. Confirm.
+182. **Navigation link visibility for `ncvet_viewer`.** `ncvet_viewer` queries `GET /settings/access` when visiting `/ab-queue` to guard the route and toggle the AB queue nav link. To avoid unwanted background network requests on unrelated pages for other roles, `AppLayout` only queries settings for `ncvet_viewer` when on `/ab-queue`. Should `GET /settings/access` also be fetched on login/session initialization for `ncvet_viewer` so the primary navigation item appears immediately across all pages?
+
 ## Not mandated by NCVET (TR s29), do not market as compliance features
 Specific language, DB, cloud, server architecture, API style, biometric or face-recognition tech, GPS hardware, payment gateway, CRM, help-desk software.

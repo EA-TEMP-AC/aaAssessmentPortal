@@ -1,12 +1,28 @@
-import { screen, within } from "@testing-library/react";
-import { expect, it } from "vitest";
+﻿import { screen, within } from "@testing-library/react";
+import { expect, it, vi } from "vitest";
 import { setSession } from "../api/session";
 import type { Role } from "./access";
 import { renderApp } from "../test/render";
-import { sessionFor } from "../test/fixtures";
+import { jsonResponse, sessionFor } from "../test/fixtures";
+import { navItemsForRole } from "./nav";
+
+function requestUrl(input: RequestInfo | URL): URL {
+  return new URL(String(input), "http://localhost");
+}
 
 const VISIBLE: Record<Role, readonly string[]> = {
-  aa_admin: ["Home", "Batches", "Users", "Registry", "Master data", "Recognition", "Results", "Audit log", "Working days"],
+  aa_admin: [
+    "Home",
+    "Batches",
+    "Users",
+    "Registry",
+    "Master data",
+    "Recognition",
+    "Results",
+    "Audit log",
+    "Working days",
+    "Settings",
+  ],
   mis: ["Home", "Batches", "Users", "Registry", "Master data", "Recognition", "Results", "Audit log", "Working days"],
   sme: ["Home"],
   assessor: ["Home", "Batches", "Registry", "Results"],
@@ -26,3 +42,37 @@ it.each(Object.entries(VISIBLE) as [Role, readonly string[]][])(
     expect(within(nav).getAllByRole("link").map((link) => link.textContent)).toEqual(labels);
   },
 );
+
+it("includes AB queue in ncvet_viewer navigation when on /ab-queue and ncvetViewerCanSeeAbQueue is true", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = requestUrl(input);
+      if (url.pathname.endsWith("/settings/access")) {
+        return jsonResponse(200, {
+          abReviewerCanReadAssessorPayments: false,
+          ncvetViewerCanSeeAbQueue: true,
+        });
+      }
+      if (url.pathname.endsWith("/batches")) {
+        return jsonResponse(200, { page: 1, pageSize: 20, total: 0, items: [] });
+      }
+      if (url.pathname.endsWith("/qualifications") || url.pathname.endsWith("/training-partners")) {
+        return jsonResponse(200, { page: 1, pageSize: 100, total: 0, items: [] });
+      }
+      return jsonResponse(404);
+    }),
+  );
+  setSession(sessionFor("ncvet_viewer"));
+  renderApp("/ab-queue");
+  const nav = await screen.findByRole("navigation", { name: "Primary" });
+  expect(await within(nav).findByRole("link", { name: "AB queue" })).toHaveAttribute("href", "/ab-queue");
+});
+
+it("filters nav items correctly via navItemsForRole", () => {
+  const without = navItemsForRole("ncvet_viewer", { ncvetViewerCanSeeAbQueue: false });
+  expect(without.some((item) => item.id === "ab-queue")).toBe(false);
+
+  const withQueue = navItemsForRole("ncvet_viewer", { ncvetViewerCanSeeAbQueue: true });
+  expect(withQueue.some((item) => item.id === "ab-queue")).toBe(true);
+});
