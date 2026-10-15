@@ -41,6 +41,7 @@ Phase 1 endpoints have examples. Phase 2+ stubs without full examples.
 | `REASSESS_ALREADY_OPEN` | 409 | A learner being reassessed already has a live, unpublished reassessment batch from the same parent. `details.conflicts` names each learner and the existing batch |
 | `REASSESS_NOT_ELIGIBLE` | 409 | Reassessment rules failed. `details.reason`: `not_published`, `window`, `outcome`, or `type`. Window is one year from the original result’s publication date (Guidelines 4.7) |
 | `CONFLICT_IDEMPOTENT` | 409 | Same `clientEventId`, different payload, path, or user |
+| `CONSENT_REQUIRED` | 409 | Publishing public person or POSH committee member refused without `consentRecorded: true` |
 
 **Soft SLA:** `aa_admin` may proceed after due with required `lateReason`; server records `sla.breached` + audit. Codes above only when late and reason missing.
 
@@ -1208,6 +1209,11 @@ Response `200 OK`:
 ### POST /api/v1/question-bank/import(?partial=true)
 Roles: `aa_admin`, `sme`.
 Accepts raw `.xlsx` binary buffer, base64 data (`{ fileBase64: "..." }`), or parsed row array.
+Powered by `exceljs`. Enforces security and validation limits:
+- Maximum file size: 5 MB (larger payloads rejected with `400 VALIDATION_ERROR`).
+- Maximum row count: 5,000 rows (excluding header; larger workbooks rejected with `400 VALIDATION_ERROR`).
+- Accepted format: `.xlsx` only (binary payload verified for zip magic bytes `PK\x03\x04`).
+- Macros and external links forbidden: workbooks containing `vbaProject.bin`, macro-enabled sheets, or external target links are rejected with `400 VALIDATION_ERROR`.
 Validates every row. If any row fails validation and `partial=true` is not set, imports 0 rows and returns `400 BAD_REQUEST` with a per-row error report.
 If `partial=true`, imports valid rows and returns `201 Created` with `imported` items and `errors` for failed rows.
 
@@ -1225,6 +1231,40 @@ Response `400 Bad Request` (when partial is false and errors exist):
   ]
 }
 ```
+
+---
+
+## Public site endpoints (Phase 1, W-01, B-16)
+
+Public website content covers 9 resources: `team-members`, `organogram`, `people`, `sample-papers`, `industry-linkages`, `grievance`, `posh`, `office-documents`, `events`.
+
+### Admin endpoints (`/api/v1/admin/public-site/:slug`)
+Roles: `aa_admin`, `mis`. All writes are audited.
+
+- `GET /api/v1/admin/public-site/:slug`:
+  Query parameters: `page` (default 1), `pageSize` (default 20, max 100), `published` (boolean), `archived` (boolean, default false).
+  Default list excludes archived items (`{ archived: { $ne: true } }`). Pass `?archived=true` to view archived items.
+- `GET /api/v1/admin/public-site/:slug/:id`:
+  Returns item detail. Returns `404 NOT_FOUND` if the item is archived.
+- `POST /api/v1/admin/public-site/:slug`:
+  Creates an item.
+  - Role rules: `mis` may create drafts only (`published: false`). Attempting `published: true` returns `403 FORBIDDEN`. Only `aa_admin` may publish.
+  - Consent rule: `people` entries require `consentRecorded: boolean` and optional `consentNote: string`. If `published: true` is requested without `consentRecorded: true`, returns `409 CONSENT_REQUIRED`.
+  - POSH rule: `posh` items with `kind: "committee_member"` require `consentRecorded: true` before publishing; returns `409 CONSENT_REQUIRED` otherwise.
+- `PATCH /api/v1/admin/public-site/:slug/:id`:
+  Updates an item.
+  - Role rules: `mis` cannot edit published items (`403 FORBIDDEN`) and cannot set `published: true` (`403 FORBIDDEN`).
+  - Consent rule: setting `published: true` on `people` or POSH `committee_member` requires `consentRecorded: true` (`409 CONSENT_REQUIRED`).
+- `DELETE /api/v1/admin/public-site/:slug/:id`:
+  Roles: `aa_admin` only. Soft-delete / archive: sets `archived: true` and `published: false`. Hard deletion is never performed. Archived items are hidden from default admin lists and never appear on public endpoints. Response: `204 No Content`.
+
+### Public endpoints (`/api/public/:slug`)
+Anonymous read-only access. Response header: `Cache-Control: public, max-age=300`. Rate-limited per IP (`PUBLIC_RATE_LIMIT_MAX` per minute).
+
+- Only items with `published: true` and `archived: false` are returned.
+- Whitelisted fields only (audit metadata, `createdBy`, `updatedBy`, `registryId`, etc. are omitted).
+- **Dynamic registry status hiding (B-16):** For `people` (assessors and proctors), if the linked assessor/proctor in the registry is `active: false` or the assessor's `toa.expiresOn` is past, the person is automatically hidden from `/api/public/people` without altering the database `published` flag.
+- **Utility bill proof-on-file marker (B-16):** For `office-documents`, categories `telephone_bill`, `internet_bill`, and `electricity_bill` return `proofOnFile: true` and `fileRef: null`. Other categories (e.g. `lease`) return `proofOnFile: false` with their `fileRef`.
 
 ---
 

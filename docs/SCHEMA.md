@@ -8,7 +8,7 @@ Single-AA deployment. BSON types. Instant timestamps are UTC `Date` unless noted
 
 **Personal data at rest (S-01):** sensitive personal fields are encrypted field by field (AES-256-GCM) and, where they must be searchable or unique, shadowed by a keyed hash column. See §7. Access to personal data is logged in `accessLogs` (§3.23).
 
-**auditLogs:** append-only (no update/delete). Snapshots in `before`/`after` **must redact** `passwordHash` and other secrets (replace with `"***"`).
+**auditLogs:** append-only (no update/delete). Snapshots in `before`/`after`, `meta`, and `requestBody` **must redact** secrets (replace with `"***"`) and **mask plain-text personal data** (emails masked as `u***@example.com`, phones as `***-***-1234`). Access logs sanitize `subjectId` if it holds an email or phone. `emailQueue` masks `to` and unsets `text` once a job is sent or failed (decision 272, B-16). Historical records can be scrubbed using `npm run scrub:logs` (with `--dry-run`).
 
 Phases tag each collection: `1` = Phase 1, `2` = Phase 2, `3` = Phase 3.
 
@@ -23,7 +23,7 @@ Phases tag each collection: `1` = Phase 1, `2` = Phase 2, `3` = Phase 3.
 | `proctors` | `email` | `emailHash` | equality only |
 | `learners` | `phone` | none | no |
 
-Not encrypted, on purpose or not yet: names, `externalRef`, `accommodations`, training-partner and centre contact fields, `awardingBodies.notificationEmails`, `loginEvents` (location), `emailQueue` (`to`, `text`), and the snapshots in `auditLogs`. See decisions 260 and 261. The schema has no candidate or learner date of birth, address or email; the plugin can take such a field when one is added (decision 260).
+Not encrypted, on purpose or not yet: names, `externalRef`, `accommodations`, training-partner and centre contact fields, `awardingBodies.notificationEmails`, and `loginEvents` (location). See decisions 260 and 261. Raw emails and phones in `auditLogs` snapshots are masked, `emailQueue` masks `to` and clears `text` once sent or failed, and historical rows can be masked via `npm run scrub:logs` (B-16). The schema has no candidate or learner date of birth, address or email; the plugin can take such a field when one is added (decision 260).
 
 **Keys.** `FIELD_ENCRYPTION_KEYS` holds one or more 32-byte keys by id; `FIELD_ENCRYPTION_KEY_ID` names the one used for new writes; older ids stay readable, which is how keys rotate. `FIELD_HASH_KEY` keys the lookup hash. Keys live in the environment, never in the database. README "Key management" has the procedure.
 
@@ -556,23 +556,27 @@ Reserved: `questions`, `tests`, `attempts`, `evidence`; `proctoringSessions`, `p
 
 The old `sectors` placeholder is replaced by `aaRecognition` plus `SectorName` on the qualification (§3.17, §1.5).
 
-### 3.23 Public website content (phase 1) — NCVET:TR s22
+### 3.23 Public website content (phase 1) — NCVET:TR s22; Task W-01, B-16
 
-Nine collections, all with `published` (bool, default false), `sortOrder` (number 0 to 100000, default 0), `createdBy`, `updatedBy`, `createdAt`, `updatedAt`; index `{ published: 1, sortOrder: 1 }`. File, photo and logo fields are text references (max 500 characters); nothing is uploaded or stored by the API.
+Nine collections, all with `published` (bool, default false), `archived` (bool, default false), `sortOrder` (number 0 to 100000, default 0), `createdBy`, `updatedBy`, `createdAt`, `updatedAt`; index `{ published: 1, sortOrder: 1 }`. File, photo and logo fields are text references (max 500 characters); nothing is uploaded or stored by the API.
+
+**Archiving and deletion (B-16):** Hard delete is removed. Calling DELETE unpublishes (`published: false`) and sets `archived: true`. Archived items never appear on public endpoints and are omitted from default admin lists (`{ archived: { $ne: true } }`), queryable with `?archived=true`.
+
+**Role permissions (B-16):** `mis` may create and edit drafts only; only `aa_admin` may set `published: true`. Any edit to an already published item by `mis` is refused (`403 FORBIDDEN`).
 
 | Collection | Fields |
 |---|---|
 | `publicTeamMembers` | name, designation, department, bio, photoRef |
 | `publicOrganogram` | name, title, parentId (another node, null for the top), photoRef |
-| `publicPeople` | kind (`assessor` \| `proctor`), registryId (the `assessors` or `proctors` record), name, roleLabel, sector (SectorName or null), photoRef. Unique `{ kind, registryId }` |
+| `publicPeople` | kind (`assessor` \| `proctor`), registryId (the `assessors` or `proctors` record), name, roleLabel, sector (SectorName or null), photoRef, `consentRecorded` (bool, required), `consentNote` (string, max 1000). Unique `{ kind, registryId }`. Publishing refused with `409 CONSENT_REQUIRED` unless `consentRecorded: true`. Automatically hidden from public endpoints when the registry assessor/proctor is inactive or assessor ToA expired, without altering stored `published` flag |
 | `publicSamplePapers` | title, qualificationId, fileRef |
 | `publicIndustryLinkages` | name, description, websiteUrl, logoRef |
 | `publicGrievance` | title, body, contactName, contactEmail, contactPhone, fileRef |
-| `publicPosh` | kind (`policy` \| `committee_member`), title, body, memberName, memberRole, fileRef |
-| `publicOfficeDocuments` | category (ownership, lease, telephone_bill, internet_bill, electricity_bill, other), title, note, fileRef |
+| `publicPosh` | kind (`policy` \| `committee_member`), title, body, memberName, memberRole, fileRef, `consentRecorded` (bool, default false), `consentNote` (string). Committee members require `consentRecorded: true` to publish (`409 CONSENT_REQUIRED`) |
+| `publicOfficeDocuments` | category (ownership, lease, telephone_bill, internet_bill, electricity_bill, other), title, note, fileRef. Utility bill categories (`telephone_bill`, `internet_bill`, `electricity_bill`) show `proofOnFile: true` and `fileRef: null` publicly, never raw fileRef |
 | `publicEvents` | title, description, date and endDate (`YYYY-MM-DD`), location. Extra index `{ published: 1, date: 1 }` |
 
-**PII rule:** `publicPeople` copies the registry `name` once and links by id. It never holds the registry email, phone, code, qualifications, experience, ToA or any ID. The public API does not return `registryId`. Grievance and POSH contact fields are organisation contacts typed by `aa_admin` for publication, not registry data.
+**PII rule:** `publicPeople` copies the registry `name` once and links by id. It never holds the registry email, phone, code, qualifications, experience, ToA or any ID. The public API does not return `registryId`. Grievance and POSH contact fields are organisation contacts typed by `aa_admin` for publication, not registry data. Consent must be recorded prior to publishing people and committee members (B-16).
 
 ---
 
@@ -712,7 +716,7 @@ Schema and contract only. **B-10** writes `learnerFeedback` once the batch is `a
 | Assessor payment read/write | A | A | D | own | D | D | D | R° | R | B-11; write is aa_admin and mis; ncvet_viewer reads; an assessor reads only their own rows; ° ab_reviewer reads own-AB rows only when `abReviewerCanReadAssessorPayments` is on, else denied (Q161, decision 174) |
 | Analytics GET (summary, by assessor / training partner / job role / state) | A | R | D | D | D | D | D | R° | R | N-01; ° own `abId` only; counts and rates, no learner data |
 | Settings access GET / PUT | A / A | R / D | D | D | D | D | D | R / D | R / D | §3.22; PUT is aa_admin only and audited |
-| Public site content (admin) | A | R | D | D | D | D | D | D | D | W-01; `/admin/public-site/*`, audited; `/public/*` is anonymous, published items only |
+| Public site content (admin) | A | D* | D | D | D | D | D | D | D | W-01, B-16; `/admin/public-site/*`, audited; * mis may draft and edit drafts only, never publish or edit published items; `/public/*` is anonymous, published and unarchived items only |
 | Resend credentials | A | D | D | D | D | D | D | D | D | aa_admin only; refused for disabled users |
 | Question bank write / import | A | D | A | D | D | D | D | D | D | Q-01; aa_admin and sme only; audited (content redacted) |
 | Question bank approve | A | D | D | D | D | D | D | A | D | Q-01; ab_reviewer and aa_admin; audited |

@@ -1,5 +1,5 @@
 import request from "supertest";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import { createApp } from "../src/app.js";
 import { AuditLog } from "../src/models/audit-log.model.js";
 import { Qualification } from "../src/models/qualification.model.js";
@@ -60,11 +60,18 @@ async function createSampleQualification(code = "QUAL-AUTO-01") {
   });
 }
 
-function buildSampleWorkbook(rows) {
-  const ws = XLSX.utils.json_to_sheet(rows);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Questions");
-  return XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+async function buildSampleWorkbook(rows) {
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet("Questions");
+  if (rows.length > 0) {
+    const headers = Object.keys(rows[0]);
+    ws.addRow(headers);
+    for (const r of rows) {
+      ws.addRow(headers.map((h) => r[h]));
+    }
+  }
+  const buffer = await wb.xlsx.writeBuffer();
+  return Buffer.from(buffer);
 }
 
 describe("Question Bank API (server/src/modules/question-bank)", () => {
@@ -590,7 +597,7 @@ describe("Question Bank API (server/src/modules/question-bank)", () => {
         },
       ];
 
-      const excelBuffer = buildSampleWorkbook(rows);
+      const excelBuffer = await buildSampleWorkbook(rows);
 
       // Call import without partial=true
       const failRes = await request(app)
@@ -632,6 +639,108 @@ describe("Question Bank API (server/src/modules/question-bank)", () => {
       const imported = await Question.findOne({ stem: "Row 1 Valid Question" });
       expect(imported).toBeDefined();
       expect(imported.status).toBe("draft");
+    });
+
+    it("rejects files larger than 5 MB with 400 FILE_TOO_LARGE", async () => {
+      const largeBuffer = Buffer.alloc(5 * 1024 * 1024 + 1);
+      // PK magic bytes
+      largeBuffer[0] = 0x50;
+      largeBuffer[1] = 0x4b;
+      largeBuffer[2] = 0x03;
+      largeBuffer[3] = 0x04;
+
+      const res = await request(app)
+        .post("/api/v1/question-bank/import")
+        .set(bearer(smeSession.token))
+        .set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        .send(largeBuffer);
+
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe("FILE_TOO_LARGE");
+    });
+
+    it("rejects non-.xlsx files with 400 INVALID_FILE_TYPE", async () => {
+      const csvBuffer = Buffer.from("qualification,nos,pc\nQUAL-1,NOS-1,PC-1");
+
+      const res = await request(app)
+        .post("/api/v1/question-bank/import")
+        .set(bearer(smeSession.token))
+        .set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        .send(csvBuffer);
+
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe("INVALID_FILE_TYPE");
+    });
+
+    it("rejects workbooks containing macros with 400 MACROS_NOT_ALLOWED", async () => {
+      const baseBuffer = await buildSampleWorkbook([
+        {
+          qualification: qual.code,
+          nos: "NOS-01",
+          pc: "PC-01",
+          stem: "Q1",
+          marks: 1,
+          type: "short_answer",
+          language: "en",
+        },
+      ]);
+      const macroBuffer = Buffer.concat([baseBuffer, Buffer.from("xl/vbaProject.bin")]);
+
+      const res = await request(app)
+        .post("/api/v1/question-bank/import")
+        .set(bearer(smeSession.token))
+        .set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        .send(macroBuffer);
+
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe("MACROS_NOT_ALLOWED");
+    });
+
+    it("rejects workbooks containing external links with 400 EXTERNAL_LINKS_NOT_ALLOWED", async () => {
+      const baseBuffer = await buildSampleWorkbook([
+        {
+          qualification: qual.code,
+          nos: "NOS-01",
+          pc: "PC-01",
+          stem: "Q1",
+          marks: 1,
+          type: "short_answer",
+          language: "en",
+        },
+      ]);
+      const linkBuffer = Buffer.concat([
+        baseBuffer,
+        Buffer.from("xl/externalLinks/externalLink1.xml"),
+      ]);
+
+      const res = await request(app)
+        .post("/api/v1/question-bank/import")
+        .set(bearer(smeSession.token))
+        .set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        .send(linkBuffer);
+
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe("EXTERNAL_LINKS_NOT_ALLOWED");
+    });
+
+    it("rejects import exceeding 5,000 rows with 400 ROW_LIMIT_EXCEEDED", async () => {
+      const tooManyRows = new Array(5001).fill(null).map((_, i) => ({
+        qualification: qual.code,
+        nos: "NOS-01",
+        pc: "PC-01",
+        stem: `Question ${i}`,
+        marks: 1,
+        type: "short_answer",
+        language: "en",
+      }));
+
+      const res = await request(app)
+        .post("/api/v1/question-bank/import")
+        .set(bearer(smeSession.token))
+        .send({ rows: tooManyRows });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe("ROW_LIMIT_EXCEEDED");
     });
   });
 });

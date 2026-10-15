@@ -14,16 +14,17 @@
     "test": "vitest run",
     "seed": "node src/scripts/seed.js",
     "migrate:encrypt": "node src/scripts/encrypt-existing-data.js",
-    "retention:dry-run": "node src/scripts/retention-dry-run.js"
+    "retention:dry-run": "node src/scripts/retention-dry-run.js",
+    "scrub:logs": "node src/scripts/scrub-logs.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
     "dotenv": "^16.4.7",
+    "exceljs": "^4.4.0",
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^8.9.5",
     "nodemailer": "^10.1.0",
-    "xlsx": "^0.18.5",
     "zod": "^3.24.1"
   },
   "devDependencies": {

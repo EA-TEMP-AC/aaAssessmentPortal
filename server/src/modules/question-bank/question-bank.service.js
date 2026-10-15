@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import { AppError } from "../../lib/errors.js";
 import { Qualification } from "../../models/qualification.model.js";
 import { Question, QUESTION_DIFFICULTIES, QUESTION_TYPES } from "../../models/question.model.js";
@@ -520,6 +520,58 @@ async function validateImportRow(row, rowIndex) {
   };
 }
 
+export const MAX_IMPORT_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
+export const MAX_IMPORT_ROWS = 5000;
+
+function extractRowsFromExcelWorksheet(worksheet) {
+  if (!worksheet || worksheet.rowCount < 2) return [];
+  const headerRow = worksheet.getRow(1);
+  const headers = [];
+  headerRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+    let val = cell.value;
+    if (typeof val === "object" && val !== null) {
+      if (val.text !== undefined) val = val.text;
+      else if (val.result !== undefined) val = val.result;
+    }
+    headers[colNumber] = val != null ? String(val).trim() : "";
+  });
+
+  const rows = [];
+  for (let r = 2; r <= worksheet.rowCount; r++) {
+    const row = worksheet.getRow(r);
+    let hasValue = false;
+    const rowObj = {};
+    for (let c = 1; c < headers.length; c++) {
+      const header = headers[c];
+      if (!header) continue;
+      const cell = row.getCell(c);
+      let val = cell.value;
+      if (val === null || val === undefined) {
+        val = "";
+      } else if (typeof val === "object") {
+        if (Array.isArray(val.richText)) {
+          val = val.richText.map((t) => t.text).join("");
+        } else if (val.text !== undefined) {
+          val = val.text;
+        } else if (val.result !== undefined) {
+          val = val.result;
+        } else if (val instanceof Date) {
+          val = val.toISOString();
+        } else {
+          val = String(val);
+        }
+      }
+      val = typeof val === "string" ? val.trim() : val;
+      if (val !== "") hasValue = true;
+      rowObj[header] = val;
+    }
+    if (hasValue) {
+      rows.push(rowObj);
+    }
+  }
+  return rows;
+}
+
 /**
  * Imports questions from an Excel (.xlsx) buffer or parsed rows array.
  * Validates every row; returns a per-row error report.
@@ -529,17 +581,70 @@ export async function importQuestions(user, { buffer, rows: inputRows, partial =
   let rows = inputRows;
 
   if (buffer) {
-    const workbook = XLSX.read(buffer, { type: "buffer" });
-    const firstSheetName = workbook.SheetNames[0];
-    if (!firstSheetName) {
+    if (buffer.length > MAX_IMPORT_FILE_SIZE) {
+      throw new AppError(400, "FILE_TOO_LARGE", "File size exceeds the 5 MB limit");
+    }
+
+    // Only .xlsx accepted (ZIP package with PK\x03\x04 header)
+    if (
+      buffer.length < 4 ||
+      buffer[0] !== 0x50 ||
+      buffer[1] !== 0x4b ||
+      buffer[2] !== 0x03 ||
+      buffer[3] !== 0x04
+    ) {
+      throw new AppError(400, "INVALID_FILE_TYPE", "Only .xlsx files are accepted");
+    }
+
+    // Check for macros (e.g. xl/vbaProject.bin, macroEnabled)
+    if (
+      buffer.includes(Buffer.from("vbaProject.bin")) ||
+      buffer.includes(Buffer.from("macroEnabled"))
+    ) {
+      throw new AppError(400, "MACROS_NOT_ALLOWED", "Excel files with macros are not accepted");
+    }
+
+    // Check for external links (e.g. xl/externalLinks/)
+    if (
+      buffer.includes(Buffer.from("externalLinks")) ||
+      buffer.includes(Buffer.from("xl/externalLinks"))
+    ) {
+      throw new AppError(
+        400,
+        "EXTERNAL_LINKS_NOT_ALLOWED",
+        "Excel files with external links are not accepted",
+      );
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    try {
+      await workbook.xlsx.load(buffer);
+    } catch (err) {
+      throw new AppError(
+        400,
+        "INVALID_FILE_TYPE",
+        `Failed to parse Excel workbook: ${err.message}`,
+      );
+    }
+
+    const worksheet = workbook.worksheets[0];
+    if (!worksheet) {
       throw new AppError(400, "EMPTY_EXCEL_FILE", "Excel workbook contains no sheets");
     }
-    const worksheet = workbook.Sheets[firstSheetName];
-    rows = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+
+    rows = extractRowsFromExcelWorksheet(worksheet);
   }
 
   if (!Array.isArray(rows) || rows.length === 0) {
     throw new AppError(400, "NO_DATA", "No rows found to import");
+  }
+
+  if (rows.length > MAX_IMPORT_ROWS) {
+    throw new AppError(
+      400,
+      "ROW_LIMIT_EXCEEDED",
+      `Maximum ${MAX_IMPORT_ROWS} rows allowed for import`,
+    );
   }
 
   const results = [];

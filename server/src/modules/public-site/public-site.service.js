@@ -1,4 +1,6 @@
-import { notFound, validationError } from "../../lib/errors.js";
+import { AppError, forbidden, notFound, validationError } from "../../lib/errors.js";
+import { Assessor } from "../../models/assessor.model.js";
+import { Proctor } from "../../models/proctor.model.js";
 import { RESOURCES, monthBounds } from "./public-site.resources.js";
 
 const DEFAULT_SORT = { sortOrder: 1, _id: 1 };
@@ -51,6 +53,11 @@ export async function listAdmin(slug, query) {
   const def = RESOURCES[slug];
   const filter = {};
   if (query.published !== undefined) filter.published = query.published;
+  if (query.archived !== undefined) {
+    filter.archived = query.archived;
+  } else {
+    filter.archived = { $ne: true };
+  }
   const { total, docs } = await pageOf(def, filter, query, def.sort ?? DEFAULT_SORT);
   return {
     page: query.page,
@@ -62,7 +69,7 @@ export async function listAdmin(slug, query) {
 
 export async function getAdmin(slug, id) {
   const doc = await RESOURCES[slug].model.findById(id).lean();
-  if (!doc) throw notFound();
+  if (!doc || doc.archived) throw notFound();
   return presentAdmin(slug, doc);
 }
 
@@ -75,6 +82,20 @@ function writeError(err) {
 
 export async function createItem(slug, actor, body) {
   const def = RESOURCES[slug];
+
+  if (actor.role === "mis" && body.published) {
+    throw forbidden("Only aa_admin may set published to true");
+  }
+
+  if (body.published === true) {
+    if (slug === "people" && !body.consentRecorded) {
+      throw new AppError(409, "CONSENT_REQUIRED", "Consent must be recorded before publishing");
+    }
+    if (slug === "posh" && body.kind === "committee_member" && !body.consentRecorded) {
+      throw new AppError(409, "CONSENT_REQUIRED", "Consent must be recorded before publishing");
+    }
+  }
+
   const extra = (await def.check?.(body, null)) ?? {};
   try {
     const created = await def.model.create({
@@ -92,7 +113,31 @@ export async function createItem(slug, actor, body) {
 export async function updateItem(slug, actor, id, body) {
   const def = RESOURCES[slug];
   const existing = await def.model.findById(id).lean();
-  if (!existing) throw notFound();
+  if (!existing || existing.archived) throw notFound();
+
+  if (actor.role === "mis") {
+    if (existing.published) {
+      throw forbidden("mis cannot edit published items");
+    }
+    if (body.published === true) {
+      throw forbidden("Only aa_admin may set published to true");
+    }
+  }
+
+  const willBePublished = body.published !== undefined ? body.published : existing.published;
+  const consentRecorded =
+    body.consentRecorded !== undefined ? body.consentRecorded : existing.consentRecorded;
+  const kind = body.kind !== undefined ? body.kind : existing.kind;
+
+  if (willBePublished === true) {
+    if (slug === "people" && !consentRecorded) {
+      throw new AppError(409, "CONSENT_REQUIRED", "Consent must be recorded before publishing");
+    }
+    if (slug === "posh" && kind === "committee_member" && !consentRecorded) {
+      throw new AppError(409, "CONSENT_REQUIRED", "Consent must be recorded before publishing");
+    }
+  }
+
   const extra = (await def.check?.(body, existing)) ?? {};
   const merged = { ...existing, ...body };
   if (slug === "events" && merged.endDate && merged.endDate < merged.date) {
@@ -112,21 +157,49 @@ export async function updateItem(slug, actor, id, body) {
   }
 }
 
-export async function deleteItem(slug, id) {
+export async function deleteItem(slug, actor, id) {
   const def = RESOURCES[slug];
-  const existing = await def.model.findOneAndDelete({ _id: id }).lean();
-  if (!existing) throw notFound();
+  const existing = await def.model.findById(id).lean();
+  if (!existing || existing.archived) throw notFound();
+
+  if (actor.role === "mis" && existing.published) {
+    throw forbidden("mis cannot unpublish or archive published items");
+  }
+
+  const saved = await def.model
+    .findOneAndUpdate(
+      { _id: id },
+      { $set: { archived: true, published: false, updatedBy: actor._id } },
+      { new: true },
+    )
+    .lean();
+
   if (slug === "organogram") {
-    // Children of a removed node move to the top rather than pointing at nothing.
     await def.model.updateMany({ parentId: existing._id }, { $set: { parentId: null } });
   }
-  return presentAdmin(slug, existing);
+  return presentAdmin(slug, saved);
 }
 
 /** Anonymous list: published items only, whitelisted fields, never an admin field. */
 export async function listPublic(slug, query) {
   const def = RESOURCES[slug];
-  const filter = { published: true };
+  const filter = { published: true, archived: { $ne: true } };
+
+  if (slug === "people") {
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
+    const [activeAssessors, activeProctors] = await Promise.all([
+      Assessor.find({ active: true, "toa.expiresOn": { $gte: today } })
+        .select("_id")
+        .lean(),
+      Proctor.find({ active: true }).select("_id").lean(),
+    ]);
+    const validRegistryIds = [
+      ...activeAssessors.map((a) => a._id),
+      ...activeProctors.map((p) => p._id),
+    ];
+    filter.registryId = { $in: validRegistryIds };
+  }
+
   for (const key of Object.keys(def.publicQuery ?? {})) {
     if (query[key] === undefined) continue;
     if (key === "month") {

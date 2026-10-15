@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import { redactSecrets, stripNationalIds } from "../lib/redact.js";
+import { maskPersonalData, redactSecrets, stripNationalIds } from "../lib/redact.js";
 import { toObjectIdOrNull } from "../lib/object-id.js";
 import { AuditLog } from "../models/audit-log.model.js";
 import { clientIp } from "../lib/client-ip.js";
@@ -15,9 +15,9 @@ export async function recordAudit(entry) {
     entityId: entry.entityId == null || entry.entityId === "" ? undefined : String(entry.entityId),
     abId: toObjectIdOrNull(entry.abId),
     batchId: toObjectIdOrNull(entry.batchId),
-    before: redactSecrets(entry.before ?? undefined),
-    after: redactSecrets(entry.after ?? undefined),
-    meta: redactSecrets(entry.meta ?? undefined),
+    before: maskPersonalData(redactSecrets(entry.before ?? undefined)),
+    after: maskPersonalData(redactSecrets(entry.after ?? undefined)),
+    meta: maskPersonalData(redactSecrets(entry.meta ?? undefined)),
     ip: entry.ip ?? undefined,
   });
 }
@@ -71,15 +71,22 @@ function auditEntryFromRequest(req) {
 
   let requestBody =
     req.body && typeof req.body === "object"
-      ? stripNationalIds(redactSecrets(req.body))
+      ? maskPersonalData(stripNationalIds(redactSecrets(req.body)))
       : undefined;
 
   if (isQuestion && requestBody) {
     requestBody = redactQuestionContent(requestBody);
   }
 
-  const before = isQuestion ? redactQuestionContent(hinted.before) : hinted.before;
-  const after = isQuestion ? redactQuestionContent(hinted.after) : hinted.after;
+  const before = isQuestion
+    ? redactQuestionContent(hinted.before)
+    : maskPersonalData(hinted.before);
+  const after = isQuestion ? redactQuestionContent(hinted.after) : maskPersonalData(hinted.after);
+
+  const rawMeta = {
+    ...(hinted.meta ? (isQuestion ? redactQuestionContent(hinted.meta) : hinted.meta) : {}),
+    ...(requestBody ? { requestBody } : {}),
+  };
 
   return {
     actorId: hinted.actorId ?? req.user?._id,
@@ -91,10 +98,7 @@ function auditEntryFromRequest(req) {
     batchId: hinted.batchId,
     before,
     after,
-    meta: {
-      ...(hinted.meta ? (isQuestion ? redactQuestionContent(hinted.meta) : hinted.meta) : {}),
-      ...(requestBody ? { requestBody } : {}),
-    },
+    meta: maskPersonalData(rawMeta),
     ip: clientIp(req),
   };
 }

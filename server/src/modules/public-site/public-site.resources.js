@@ -137,6 +137,21 @@ async function addPublicParent(items) {
 
 const queryEnum = (values) => z.enum(values).optional();
 
+export const UTILITY_BILL_CATEGORIES = Object.freeze(
+  new Set(["telephone_bill", "internet_bill", "electricity_bill"]),
+);
+
+function enrichOfficeDocuments(items) {
+  return items.map((item) => {
+    const isUtility = UTILITY_BILL_CATEGORIES.has(item.category);
+    return {
+      ...item,
+      fileRef: isUtility ? null : item.fileRef,
+      proofOnFile: isUtility ? true : false,
+    };
+  });
+}
+
 export const RESOURCES = {
   "team-members": {
     model: TeamMember,
@@ -179,10 +194,12 @@ export const RESOURCES = {
         roleLabel: str(100),
         sector: z.enum(SECTOR_NAMES).nullish(),
         photoRef: ref.nullish(),
+        consentRecorded: z.boolean(),
+        consentNote: optionalText(1000),
         ...common,
       })
       .strict(),
-    required: ["kind", "registryId", "roleLabel"],
+    required: ["kind", "registryId", "roleLabel", "consentRecorded"],
     immutable: ["kind", "registryId"],
     publicFields: ["kind", "name", "roleLabel", "sector", "photoRef"],
     check: registryCheck,
@@ -239,6 +256,8 @@ export const RESOURCES = {
         memberName: optionalText(200),
         memberRole: optionalText(200),
         fileRef: ref.nullish(),
+        consentRecorded: z.boolean().optional(),
+        consentNote: optionalText(1000),
         ...common,
       })
       .strict(),
@@ -268,6 +287,8 @@ export const RESOURCES = {
       .strict(),
     required: ["category", "title", "fileRef"],
     publicFields: ["category", "title", "note", "fileRef"],
+    enrichedFields: ["proofOnFile"],
+    enrich: enrichOfficeDocuments,
     publicQuery: { category: queryEnum(OFFICE_DOCUMENT_CATEGORIES) },
   },
   events: {

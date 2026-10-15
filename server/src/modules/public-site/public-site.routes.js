@@ -47,6 +47,10 @@ const adminListQuery = z
       .enum(["true", "false"])
       .transform((value) => value === "true")
       .optional(),
+    archived: z
+      .enum(["true", "false"])
+      .transform((value) => value === "true")
+      .optional(),
   })
   .strict();
 
@@ -127,7 +131,7 @@ publicSiteAdminRouter.delete(
   asyncHandler(async (req, res) => {
     const slug = slugOf(req);
     const { id } = idParam.parse(req.params);
-    const removed = await deleteItem(slug, id);
+    const removed = await deleteItem(slug, req.user, id);
     req.audit = audit(slug, "delete", id, removed, undefined);
     res.status(204).send();
   }),

@@ -52,12 +52,14 @@ async function seedRegistry() {
     phone: PII,
     qualifications: [`B.Tech ${PII}`],
     yearsOfExperience: 12,
-    toa: { certNo: `TOA-${PII}` },
+    active: true,
+    toa: { certNo: `TOA-${PII}`, issuedOn: "2026-01-01", expiresOn: "2029-01-01" },
   });
   await db.collection("proctors").insertOne({
     _id: proctorId,
     name: "Pavan Proctor",
     email: `pavan${PII}@example.com`,
+    active: true,
   });
   await db.collection("qualifications").insertOne({
     _id: qualificationId,
@@ -86,6 +88,7 @@ function samples() {
         registryId: String(assessorId),
         roleLabel: "Lead assessor",
         sector: "Electronics",
+        consentRecorded: true,
       },
       shown: ["id", "kind", "name", "roleLabel", "sector", "photoRef"],
     },
@@ -120,12 +123,13 @@ function samples() {
         title: "Committee",
         memberName: "Meera",
         memberRole: "Chair",
+        consentRecorded: true,
       },
       shown: ["id", "kind", "title", "body", "memberName", "memberRole", "fileRef"],
     },
     "office-documents": {
       body: { category: "lease", title: "Lease agreement", fileRef: "docs/lease.pdf" },
-      shown: ["id", "category", "title", "note", "fileRef"],
+      shown: ["id", "category", "title", "note", "fileRef", "proofOnFile"],
     },
     events: {
       body: { title: "Assessor workshop", date: "2026-11-12", location: "Pune" },
@@ -228,20 +232,56 @@ describe("public site content", () => {
       expect(await AuditLog.countDocuments({ entity: "publicSite" })).toBe(0);
     });
 
-    it("lets aa_admin write, mis read only, and everyone else nothing", async () => {
+    it("lets aa_admin publish, mis draft only, and everyone else nothing", async () => {
       const admin = await sessionFor("aa_admin");
+      const mis = await sessionFor("mis");
       const item = await post(admin.token, "team-members", samples()["team-members"].body);
+
+      // aa_admin and mis can list and read
+      expect((await adminGet(admin.token, "team-members")).status).toBe(200);
+      expect((await adminGet(mis.token, "team-members")).status).toBe(200);
+      expect((await adminGet(admin.token, `team-members/${item.body.id}`)).status).toBe(200);
+      expect((await adminGet(mis.token, `team-members/${item.body.id}`)).status).toBe(200);
+
+      // mis can create draft
+      const misDraft = await post(mis.token, "team-members", samples()["team-members"].body);
+      expect(misDraft.status).toBe(201);
+      expect(misDraft.body.published).toBe(false);
+
+      // mis can edit draft
+      const misEdit = await patch(mis.token, "team-members", misDraft.body.id, {
+        name: "Edited Draft",
+      });
+      expect(misEdit.status).toBe(200);
+
+      // mis CANNOT set published: true on create or update
+      const misPublishCreate = await post(mis.token, "team-members", {
+        ...samples()["team-members"].body,
+        published: true,
+      });
+      expect(misPublishCreate.status).toBe(403);
+
+      const misPublishPatch = await patch(mis.token, "team-members", misDraft.body.id, {
+        published: true,
+      });
+      expect(misPublishPatch.status).toBe(403);
+
+      // Once published by admin, mis cannot edit it
+      await patch(admin.token, "team-members", item.body.id, { published: true });
+      const misEditPublished = await patch(mis.token, "team-members", item.body.id, {
+        name: "Forbidden Edit",
+      });
+      expect(misEditPublished.status).toBe(403);
+
+      // Other roles get 403 on everything
       for (const role of USER_ROLES) {
-        const s = role === "aa_admin" ? admin : await sessionFor(role);
-        const readOk = role === "aa_admin" || role === "mis";
-        expect((await adminGet(s.token, "team-members")).status, `${role} list`).toBe(
-          readOk ? 200 : 403,
-        );
+        if (role === "aa_admin" || role === "mis") continue;
+        const s = await sessionFor(role);
+        expect((await adminGet(s.token, "team-members")).status, `${role} list`).toBe(403);
         expect(
           (await adminGet(s.token, `team-members/${item.body.id}`)).status,
           `${role} get`,
-        ).toBe(readOk ? 200 : 403);
-        if (role === "aa_admin") continue;
+        ).toBe(403);
         expect(
           (await post(s.token, "team-members", samples()["team-members"].body)).status,
           role,
@@ -276,6 +316,7 @@ describe("public site content", () => {
         registryId: String(proctorId),
         name: "Pavan P.",
         roleLabel: "Proctor",
+        consentRecorded: true,
       });
       expect(p.body.name).toBe("Pavan P.");
       for (const id of [a.body.id, p.body.id])
@@ -376,7 +417,12 @@ describe("public site content", () => {
         // A second, unpublished item. For a unique link, use the proctor.
         const draftBody =
           slug === "people"
-            ? { kind: "proctor", registryId: String(proctorId), roleLabel: "DRAFT-ONLY" }
+            ? {
+                kind: "proctor",
+                registryId: String(proctorId),
+                roleLabel: "DRAFT-ONLY",
+                consentRecorded: true,
+              }
             : { ...body, [body.title ? "title" : "name"]: "DRAFT-ONLY" };
         const draft = await post(admin.token, slug, draftBody);
         expect(draft.status, JSON.stringify(draft.body)).toBe(201);
@@ -505,6 +551,7 @@ describe("public site content", () => {
         kind: "committee_member",
         title: "C",
         memberName: "M",
+        consentRecorded: true,
         published: true,
       });
       expect((await pub("posh?kind=policy")).body.items.map((r) => r.title)).toEqual(["Policy"]);
@@ -537,6 +584,223 @@ describe("public site content", () => {
       expect(Number(blocked.headers["retry-after"])).toBeGreaterThan(0);
       resetPublicRateLimit();
       expect((await pub("events")).status).toBe(200);
+    });
+  });
+
+  describe("B-16 publish rules and hardening", () => {
+    it("refuses publishing people without consentRecorded with 409 CONSENT_REQUIRED", async () => {
+      const admin = await sessionFor("aa_admin");
+
+      // Creating people without consentRecorded fails validation (400)
+      const missingConsent = await post(admin.token, "people", {
+        kind: "assessor",
+        registryId: String(assessorId),
+        roleLabel: "Assessor",
+      });
+      expect(missingConsent.status).toBe(400);
+
+      // Creating people draft with consentRecorded: false is allowed
+      const draft = await post(admin.token, "people", {
+        kind: "assessor",
+        registryId: String(assessorId),
+        roleLabel: "Assessor",
+        consentRecorded: false,
+        consentNote: "Consent pending confirmation",
+      });
+      expect(draft.status).toBe(201);
+      expect(draft.body.consentRecorded).toBe(false);
+
+      // Attempting to publish without consent returns 409 CONSENT_REQUIRED
+      const tryPublish = await patch(admin.token, "people", draft.body.id, { published: true });
+      expect(tryPublish.status).toBe(409);
+      expect(tryPublish.body.error.code).toBe("CONSENT_REQUIRED");
+
+      // Also directly creating with published: true and consentRecorded: false returns 409
+      // (Using proctor to avoid duplicate registryId error)
+      const directPublish = await post(admin.token, "people", {
+        kind: "proctor",
+        registryId: String(proctorId),
+        roleLabel: "Proctor",
+        consentRecorded: false,
+        published: true,
+      });
+      expect(directPublish.status).toBe(409);
+      expect(directPublish.body.error.code).toBe("CONSENT_REQUIRED");
+
+      // Updating consentRecorded to true allows publishing
+      const okPublish = await patch(admin.token, "people", draft.body.id, {
+        consentRecorded: true,
+        published: true,
+      });
+      expect(okPublish.status).toBe(200);
+      expect(okPublish.body.published).toBe(true);
+    });
+
+    it("refuses publishing POSH committee members without consentRecorded with 409 CONSENT_REQUIRED", async () => {
+      const admin = await sessionFor("aa_admin");
+
+      // POSH committee member without consent cannot be published
+      const poshFail = await post(admin.token, "posh", {
+        kind: "committee_member",
+        title: "Internal Committee",
+        memberName: "Sunita S.",
+        consentRecorded: false,
+        published: true,
+      });
+      expect(poshFail.status).toBe(409);
+      expect(poshFail.body.error.code).toBe("CONSENT_REQUIRED");
+
+      // POSH policy can be published without consentRecorded
+      const policyOk = await post(admin.token, "posh", {
+        kind: "policy",
+        title: "POSH Policy 2026",
+        body: "Policy text",
+        published: true,
+      });
+      expect(policyOk.status).toBe(201);
+      expect(policyOk.body.published).toBe(true);
+
+      // Committee member with consent can be published
+      const memberOk = await post(admin.token, "posh", {
+        kind: "committee_member",
+        title: "External Member",
+        memberName: "Dr. Rita",
+        consentRecorded: true,
+        published: true,
+      });
+      expect(memberOk.status).toBe(201);
+      expect(memberOk.body.published).toBe(true);
+    });
+
+    it("automatically hides people from public endpoints when registry record is inactive or ToA expired", async () => {
+      const admin = await sessionFor("aa_admin");
+      const db = mongoose.connection.db;
+
+      // Ensure assessor is active and valid
+      await db
+        .collection("assessors")
+        .updateOne({ _id: assessorId }, { $set: { active: true, "toa.expiresOn": "2029-01-01" } });
+
+      const person = await post(admin.token, "people", {
+        kind: "assessor",
+        registryId: String(assessorId),
+        roleLabel: "Assessor",
+        consentRecorded: true,
+        published: true,
+      });
+      expect(person.status).toBe(201);
+
+      // Public endpoint displays the assessor
+      let pubRes = await pub("people");
+      expect(pubRes.body.items.map((r) => r.id)).toContain(person.body.id);
+
+      // 1. Mark assessor inactive in registry
+      await db.collection("assessors").updateOne({ _id: assessorId }, { $set: { active: false } });
+      pubRes = await pub("people");
+      expect(pubRes.body.items.map((r) => r.id)).not.toContain(person.body.id);
+
+      // Stored published flag in admin remains true
+      const adminGetRes = await adminGet(admin.token, `people/${person.body.id}`);
+      expect(adminGetRes.body.published).toBe(true);
+
+      // 2. Reactivate assessor, but expire ToA
+      await db
+        .collection("assessors")
+        .updateOne({ _id: assessorId }, { $set: { active: true, "toa.expiresOn": "2020-01-01" } });
+      pubRes = await pub("people");
+      expect(pubRes.body.items.map((r) => r.id)).not.toContain(person.body.id);
+
+      // 3. Renew ToA -> person is shown again
+      await db
+        .collection("assessors")
+        .updateOne({ _id: assessorId }, { $set: { "toa.expiresOn": "2029-01-01" } });
+      pubRes = await pub("people");
+      expect(pubRes.body.items.map((r) => r.id)).toContain(person.body.id);
+
+      // 4. Test proctor inactive hiding
+      const proctorPerson = await post(admin.token, "people", {
+        kind: "proctor",
+        registryId: String(proctorId),
+        roleLabel: "Proctor",
+        consentRecorded: true,
+        published: true,
+      });
+      pubRes = await pub("people");
+      expect(pubRes.body.items.map((r) => r.id)).toContain(proctorPerson.body.id);
+
+      await db.collection("proctors").updateOne({ _id: proctorId }, { $set: { active: false } });
+      pubRes = await pub("people");
+      expect(pubRes.body.items.map((r) => r.id)).not.toContain(proctorPerson.body.id);
+    });
+
+    it("replaces hard delete with unpublish and archived flag", async () => {
+      const admin = await sessionFor("aa_admin");
+      const created = await post(admin.token, "team-members", {
+        name: "Archive Test Member",
+        designation: "Consultant",
+        published: true,
+      });
+      const id = created.body.id;
+
+      // DELETE sets archived: true and published: false
+      const del = await request(app).delete(`${ADMIN}/team-members/${id}`).set(bearer(admin.token));
+      expect(del.status).toBe(204);
+
+      // Admin get returns 404
+      const getRes = await adminGet(admin.token, `team-members/${id}`);
+      expect(getRes.status).toBe(404);
+
+      // Hidden from default admin list
+      const defaultList = await adminGet(admin.token, "team-members");
+      expect(defaultList.body.items.map((r) => r.id)).not.toContain(id);
+
+      // Present in admin list when ?archived=true
+      const archivedList = await adminGet(admin.token, "team-members?archived=true");
+      expect(archivedList.body.items.map((r) => r.id)).toContain(id);
+      const archivedItem = archivedList.body.items.find((r) => r.id === id);
+      expect(archivedItem.archived).toBe(true);
+      expect(archivedItem.published).toBe(false);
+
+      // Never visible on public endpoint
+      const pubList = await pub("team-members");
+      expect(pubList.body.items.map((r) => r.id)).not.toContain(id);
+    });
+
+    it("shows proofOnFile marker and nulls fileRef publicly for utility bill office documents", async () => {
+      const admin = await sessionFor("aa_admin");
+
+      // Create utility bill doc
+      const elec = await post(admin.token, "office-documents", {
+        category: "electricity_bill",
+        title: "Office Electricity 2026",
+        fileRef: "uploads/bills/electricity-jan.pdf",
+        published: true,
+      });
+      expect(elec.status).toBe(201);
+      // Admin sees fileRef
+      expect(elec.body.fileRef).toBe("uploads/bills/electricity-jan.pdf");
+
+      // Create non-utility doc
+      const lease = await post(admin.token, "office-documents", {
+        category: "lease",
+        title: "Office Lease Agreement",
+        fileRef: "uploads/docs/lease-2026.pdf",
+        published: true,
+      });
+      expect(lease.status).toBe(201);
+      expect(lease.body.fileRef).toBe("uploads/docs/lease-2026.pdf");
+
+      // Check public endpoint
+      const pubDocs = await pub("office-documents");
+      const pubElec = pubDocs.body.items.find((d) => d.id === elec.body.id);
+      expect(pubElec).toBeDefined();
+      expect(pubElec.proofOnFile).toBe(true);
+      expect(pubElec.fileRef).toBeNull();
+
+      const pubLease = pubDocs.body.items.find((d) => d.id === lease.body.id);
+      expect(pubLease).toBeDefined();
+      expect(pubLease.proofOnFile).toBe(false);
+      expect(pubLease.fileRef).toBe("uploads/docs/lease-2026.pdf");
     });
   });
 });
