@@ -151,7 +151,7 @@ export const RESULT_PUBLISHED_ONLY_ROLES = Object.freeze(["candidate", "tp"]);
 /** GET /results/:id/change-log. API_CONTRACT.md. */
 export const RESULT_CHANGE_LOG_ROLES = Object.freeze(["aa_admin", "ab_reviewer", "mis"]);
 
-/** PUT /batches/:id/learner-feedback. docs/SCHEMA.md ง3.8. */
+/** PUT /batches/:id/learner-feedback. docs/SCHEMA.md ยง3.8. */
 export const LEARNER_FEEDBACK_WRITE_ROLES = Object.freeze(["aa_admin", "mis"]);
 
 /**
@@ -194,3 +194,12 @@ export const ACCESS_SETTINGS_READ_ROLES = Object.freeze([
 
 /** PUT /settings/access. aa_admin only. */
 export const ACCESS_SETTINGS_WRITE_ROLES = Object.freeze(["aa_admin"]);
+
+/** Question bank writes and imports. Q-01: aa_admin and sme only. */
+export const QUESTION_WRITE_ROLES = Object.freeze(["aa_admin", "sme"]);
+
+/** Question bank approvals. Q-01: ab_reviewer may approve, aa_admin has admin rights. */
+export const QUESTION_APPROVE_ROLES = Object.freeze(["aa_admin", "ab_reviewer"]);
+
+/** Question bank reads and coverage. Q-01: aa_admin, sme, and ab_reviewer only. */
+export const QUESTION_READ_ROLES = Object.freeze(["aa_admin", "sme", "ab_reviewer"]);

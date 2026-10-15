@@ -977,6 +977,134 @@ Secrets redacted. Append-only.
 
 ---
 
+---
+
+## Question bank (Phase 2, Q-01)
+
+Endpoints for question bank management, versioning, Excel imports, and coverage reporting.
+Roles: `aa_admin` and `sme` write and import; `ab_reviewer` reads and may approve; `candidate` and `tp` are strictly denied (403). Other roles (`mis`, `assessor`, `proctor`, `ncvet_viewer`) are denied (403). Question content (stem, options, answers) is confidential. Audit logs redact question content.
+
+### POST /api/v1/question-bank/questions
+Roles: `aa_admin`, `sme`.
+Creates a new question document (starts at `version: 1`, `status: "draft"`, `isLatest: true`).
+National ID fields (`aadhaar`, `panNumber`, etc.) are rejected with 400 `VALIDATION_ERROR`.
+
+Request body:
+```json
+{
+  "qualificationId": "66f0000000000000000000q1",
+  "nosId": "NOS-01",
+  "pcId": "PC-01",
+  "type": "mcq",
+  "language": "en",
+  "difficulty": "medium",
+  "bloomLevel": "apply",
+  "stem": "Which tool is used for torque specification verification?",
+  "options": [
+    { "key": "A", "text": "Torque wrench" },
+    { "key": "B", "text": "Impact driver" },
+    { "key": "C", "text": "Pliers" },
+    { "key": "D", "text": "Screw gauge" }
+  ],
+  "correctAnswer": "A",
+  "marks": 2
+}
+```
+Response `201 Created`: created question object.
+
+### GET /api/v1/question-bank/questions
+Roles: `aa_admin`, `sme`, `ab_reviewer`.
+Query parameters: `qualification`, `nos`, `pc`, `type`, `language`, `status`, `difficulty`, `latestOnly` (default true), `page` (default 1), `pageSize` (default 20, max 100).
+Response `200 OK`:
+```json
+{
+  "items": [...],
+  "total": 42,
+  "page": 1,
+  "pageSize": 20,
+  "totalPages": 3
+}
+```
+
+### GET /api/v1/question-bank/questions/:id
+Roles: `aa_admin`, `sme`, `ab_reviewer`.
+Response `200 OK`: question document.
+
+### PUT|PATCH /api/v1/question-bank/questions/:id
+Roles: `aa_admin`, `sme`.
+Updates question content. Creates a new version (`version: previous.version + 1`), keeps the existing version with `isLatest: false`, and links `previousVersionId` and `rootQuestionId`. New version resets to `draft`.
+Response `200 OK`: new version document.
+
+### POST /api/v1/question-bank/questions/:id/retire (or DELETE)
+Roles: `aa_admin`, `sme`.
+Soft-deletes the question: sets `status: "retired"`, `retiredBy: user._id`, `retiredAt: Date`. Hard deletion is never performed.
+Response `200 OK`: updated question document.
+
+### POST /api/v1/question-bank/questions/:id/approve
+Roles: `aa_admin`, `ab_reviewer`.
+Sets `status: "approved"`, `approvedBy: user._id`, `approvedAt: Date`.
+Response `200 OK`: approved question document.
+
+### GET /api/v1/question-bank/coverage/:qualificationId
+Roles: `aa_admin`, `sme`, `ab_reviewer`.
+Coverage report for a qualification: lists every PC across its NOS with approved question counts and flags PCs with fewer than 5 approved questions (`flagged: true`).
+Response `200 OK`:
+```json
+{
+  "qualificationId": "66f0000000000000000000q1",
+  "qualificationCode": "ASC/Q1402",
+  "qualificationName": "Automotive Service Technician",
+  "totalPCs": 12,
+  "totalApprovedQuestions": 54,
+  "averageApprovedQuestionsPerPc": 4.5,
+  "flaggedPcsCount": 2,
+  "pcs": [
+    {
+      "nosId": "NOS-01",
+      "nosCode": "ASC/N0101",
+      "pcId": "PC-01",
+      "pcCode": "PC1.1",
+      "pcName": "Inspect engine oil",
+      "approvedQuestionCount": 6,
+      "flagged": false
+    },
+    {
+      "nosId": "NOS-01",
+      "nosCode": "ASC/N0101",
+      "pcId": "PC-02",
+      "pcCode": "PC1.2",
+      "pcName": "Replace spark plugs",
+      "approvedQuestionCount": 3,
+      "flagged": true
+    }
+  ]
+}
+```
+
+### POST /api/v1/question-bank/import(?partial=true)
+Roles: `aa_admin`, `sme`.
+Accepts raw `.xlsx` binary buffer, base64 data (`{ fileBase64: "..." }`), or parsed row array.
+Validates every row. If any row fails validation and `partial=true` is not set, imports 0 rows and returns `400 BAD_REQUEST` with a per-row error report.
+If `partial=true`, imports valid rows and returns `201 Created` with `imported` items and `errors` for failed rows.
+
+Response `400 Bad Request` (when partial is false and errors exist):
+```json
+{
+  "success": false,
+  "code": "IMPORT_VALIDATION_FAILED",
+  "totalRows": 10,
+  "importedCount": 0,
+  "errorCount": 2,
+  "errors": [
+    { "row": 3, "errors": ["PC 'PC-99' not found under NOS 'NOS-01'"] },
+    { "row": 5, "errors": ["MCQ correct answer does not match any provided option key or text"] }
+  ]
+}
+```
+
+---
+
 ## Phase 2+ stubs
 
-Evidence, questions/tests, proctoring, grievances, analytics, public site, accessibility, security — unchanged intent; see SCHEMA. Recognition and Annexure II sectors are Phase 1 (`/admin/recognition`, `qualifications.sector`). ERF weights are in docs/ERF.md (task C-01). Phase 2 notes that are not endpoints yet: live NCVET monitoring link, geo-tagged photos and videos for offline and blended batches (Guidelines 4.11b), the 24-hour travel rule, theory-only online batches with no assessor, and gender-parity staff reporting (open questions 80–84).
+Evidence, tests generator, proctoring, grievances, analytics, public site, accessibility, security — unchanged intent; see SCHEMA. Recognition and Annexure II sectors are Phase 1 (`/admin/recognition`, `qualifications.sector`). ERF weights are in docs/ERF.md (task C-01). Phase 2 notes that are not endpoints yet: live NCVET monitoring link, geo-tagged photos and videos for offline and blended batches (Guidelines 4.11b), the 24-hour travel rule, theory-only online batches with no assessor, and gender-parity staff reporting (open questions 80–84).
+

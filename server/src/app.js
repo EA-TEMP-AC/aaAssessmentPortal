@@ -30,6 +30,7 @@ import {
   holidaysRouter,
   workingDayConfigRouter,
 } from "./modules/working-days/working-days.routes.js";
+import { questionBankRouter } from "./modules/question-bank/question-bank.routes.js";
 
 export function createApp() {
   const app = express();
@@ -61,6 +62,7 @@ export function createApp() {
   app.use("/api/v1/assessor", assessorFieldRouter);
   app.use("/api/v1/proctor", proctorLoginEventRouter);
   app.use("/api/v1/student", studentLoginEventRouter);
+  app.use("/api/v1/question-bank", questionBankRouter);
 
   app.use((_req, res) => {
     res.status(404).json({

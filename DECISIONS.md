@@ -402,5 +402,13 @@ B-15 open questions (2026-10-15):
 
 Human decision on 2026-10-15: Q176, Q177, Q178, Q179 and Q180 accepted as built.
 
+Q-01 open questions (2026-10-15, Question Bank backend):
+200. **Excel parsing dependency choice.** The repo had neither `exceljs` nor `xlsx` installed. `xlsx` (SheetJS) was added as a server dependency for workbook ingestion and error validation. Confirm, or switch to `exceljs`.
+201. **Versioning and status transition on update.** Updating a question produces an incremented version document (`version: n + 1`), sets `isLatest: false` on the old version, and resets the new version to `draft` status (so updated stems or answers must be reviewed/approved again). Confirm whether any update should be allowed to stay `approved` directly without re-approval.
+202. **Question content redaction in audit logs.** The requirement specifies that question content (stem, options, answers) must never be logged in full. In audit log snapshots (`before`, `after`, `meta.requestBody`), stems, options, and answer keys/rubrics are completely masked to `"[redacted]"`. Confirm if a short preview (e.g. first 20 characters) is preferred or if complete masking is the intended privacy bar.
+203. **Coverage threshold configurability.** The coverage endpoint flags any performance criterion (PC) with fewer than 5 approved questions (`flagged: true`). Should this threshold (5) remain a global default, or be made configurable per qualification or sector in master data or compliance settings?
+204. **MCQ option formats and multi-correct support.** Currently MCQ supports options with keys (A, B, C, D) and a single `correctAnswer` string. Should multiple correct options (e.g. MSQ / multi-select) or partial credit scoring be supported for Phase 2 question banks?
+
 ## Not mandated by NCVET (TR s29), do not market as compliance features
 Specific language, DB, cloud, server architecture, API style, biometric or face-recognition tech, GPS hardware, payment gateway, CRM, help-desk software.
+

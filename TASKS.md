@@ -83,7 +83,7 @@ A-03 Phase 2 notes (not Phase 1 scope): live NCVET monitoring link for online as
 ## Phase 2: Question bank, engine, evidence (NCVET:TR s4-s5, s13-s17)
 | ID | Task | Owner | Depends | Status | Acceptance |
 |---|---|---|---|---|---|
-| Q-01 | Question bank model + CRUD + import (xlsx), NOS/PC mapping, MCQ/short answer/scenario/viva/practical, language field | backend | B-03 | todo | Bank coverage endpoint flags PCs under 5 Q average |
+| Q-01 | Question bank model + CRUD + import (xlsx), NOS/PC mapping, MCQ/short answer/scenario/viva/practical, language field | backend | B-03 | review | Bank coverage endpoint flags PCs under 5 Q average; CRUD + versioning + .xlsx import; question content confidential; audit redact; branch task/Q-01-question-bank |
 | Q-02 | Auto difficulty classification (easy/medium/tough) from attempt data + per-question usage report | backend | Q-01,E-03 | todo | TR s13 |
 | Q-03 | Flag mostly-wrong questions + notify AB/TP | backend | Q-02 | todo | |
 | Q-04 | Review cycles with AB + periodic upgrade reminders | backend | Q-01 | todo | |
