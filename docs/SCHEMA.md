@@ -538,7 +538,7 @@ One row per person whose personal data a read endpoint returned. Append-only (up
 |---|---|---|
 | `actorId` | ObjectId | user who read |
 | `actorRole` | string | role at the time |
-| `subjectType` | string | `user`, `learner`, `assessor`, `proctor`, `evidence` (V-01: one row per evidence file download) |
+| `subjectType` | string | `user`, `learner`, `assessor`, `proctor`, `evidence` (V-01: one row per evidence file download), `question` (S-02: one row per question whose text a read returned), `testPaper` (S-02: one row per test paper read) |
 | `subjectId` | string | id of the person read (`users._id`, `learners._id`, ...). The roster endpoint logs `learnerId`, not the candidate row id |
 | `kind` | string | `list` or `detail` |
 | `fields` | string[] | names of the personal fields the response carried, for example `["name","phone","externalRef"]` |
@@ -549,7 +549,7 @@ One row per person whose personal data a read endpoint returned. Append-only (up
 
 Indexes: `{ subjectType: 1, subjectId: 1, createdAt: -1 }`; `{ actorId: 1, createdAt: -1 }`; `{ createdAt: -1 }`.
 
-Logged reads: `GET /users`, `/users/:id`, `/learners`, `/learners/:id`, `/assessors`, `/assessors/:id`, `/assessors/available`, `/proctors`, `/proctors/:id`, `GET /batches/:id/candidates`. Not logged: refused requests, empty lists, results, attendance, login events, batch reads (see DPDP_CHECKLIST.md and decision 266). A read whose log row cannot be written is not served (decision 267).
+Logged reads: `GET /users`, `/users/:id`, `/learners`, `/learners/:id`, `/assessors`, `/assessors/:id`, `/assessors/available`, `/proctors`, `/proctors/:id`, `GET /batches/:id/candidates`. Not logged: refused requests, empty lists, results, attendance, login events, batch reads (see DPDP_CHECKLIST.md and decision 266). A read whose log row cannot be written is not served (decision 267). S-02 adds `GET /question-bank/questions` and `/:id` (`question` rows, fields `stem`, `options`, `correctAnswer`) and `GET /tests/:id` (a `testPaper` row, plus `question` rows when `?withQuestions=true`). Test paper lists carry no content and are not logged.
 
 ---
 
@@ -786,6 +786,74 @@ Coverage rule: an NQR qualification is **covered** when a `qualifications` row w
 
 ---
 
+### 3.29 `contentReadCounters` (phase 3, S-02)
+
+How many questions each user has read today. Counts only, never content. One row per user per IST day, created by the first read of the day and raised atomically (`$inc` with the cap in the filter), so parallel requests cannot pass the cap together.
+
+| Field | Type | Req | Notes |
+|---|---|---|---|
+| userId | ObjectId | Y | Ref: `users` |
+| day | String | Y | IST civil date `YYYY-MM-DD` |
+| count | Number | Y | Questions returned to this user that day |
+| createdAt, updatedAt | Date | Y | |
+
+Indexes: unique `{ userId: 1, day: 1 }`. The cap is in `server/src/config/content-controls.js` (`CONTENT_READ_DAILY_CAP`, optional per-role `CONTENT_READ_ROLE_CAPS`). Q460.
+
+### 3.30 `contentAnomalies` (phase 3, S-02)
+
+One row per user per IST day on which a question read was refused with `429 CONTENT_READ_LIMIT`. Holds the user, role and numbers only: no question text and no question ids.
+
+| Field | Type | Req | Notes |
+|---|---|---|---|
+| userId | ObjectId | Y | Ref: `users` |
+| role | String | Y | Role at the latest refusal |
+| day | String | Y | IST civil date |
+| cap | Number | Y | Cap in force at the first refusal |
+| readCount | Number | Y | Questions already read that day, at the latest refusal |
+| attemptedCount | Number | Y | Questions the latest refused request would have returned |
+| refusedRequests | Number | Y | Refusals that day |
+| route | String | Y | Route template of the latest refusal, no query string |
+| firstAt, lastAt | Date | Y | |
+
+Indexes: unique `{ userId: 1, day: 1 }`; `{ lastAt: -1 }`. Updated in place by later refusals the same day (unlike `auditLogs`); the record of who read what stays in `accessLogs`.
+
+### 3.31 `securityAudits` (phase 3, S-02)
+
+A record of one security audit (VAPT, code review and so on). Archived, never deleted.
+
+| Field | Type | Req | Notes |
+|---|---|---|---|
+| type | enum | Y | `vapt`, `penetration_test`, `code_review`, `infrastructure`, `data_protection`, `other` |
+| auditor | String | Y | Firm or person, max 200. Redacted in `auditLogs` |
+| auditDate | String | Y | `YYYY-MM-DD` |
+| scope | String | Y | Max 2000 |
+| status | enum | Y | `open`, `closed`. Default `open` |
+| fixesDueDate | String | N | `YYYY-MM-DD`, not before `auditDate`. The date by which the fixes are due |
+| closedDate | String | N | Set when `status` becomes `closed` (today IST unless given, never in the future); cleared on reopening |
+| archivedAt | Date | N | Set by `DELETE`; archived rows are hidden everywhere |
+| createdAt, updatedAt | Date | Y | |
+
+Indexes: `{ status: 1, auditDate: -1 }`.
+
+### 3.32 `securityFindings` (phase 3, S-02)
+
+One finding raised by an audit.
+
+| Field | Type | Req | Notes |
+|---|---|---|---|
+| auditId | ObjectId | Y | Ref: `securityAudits`; indexed |
+| severity | enum | Y | `critical`, `high`, `medium`, `low`, `info` |
+| description | String | Y | Max 4000. Redacted in `auditLogs` |
+| owner | String | Y | Who fixes it, max 200. Redacted in `auditLogs` |
+| status | enum | Y | `open`, `closed`. Default `open` |
+| dueDate | String | Y | `YYYY-MM-DD`. An open finding is overdue when this is before today (IST) |
+| closedDate | String | N | As for audits |
+| evidenceRef | String | N | A reference to the evidence (ticket, report page, vault id), max 500. Not a file |
+| archivedAt | Date | N | |
+| createdAt, updatedAt | Date | Y | |
+
+Indexes: `{ auditId: 1 }`; `{ status: 1, severity: 1 }`; `{ status: 1, dueDate: 1 }`.
+
 ## 4. Business rules
 
 ### 4.1 Assignment / ratio / clash
@@ -860,6 +928,8 @@ Schema and contract only. **B-10** writes `learnerFeedback` once the batch is `a
 | Test paper approve | A | D | D | D | D | D | D | A | D | E-01; ab_reviewer and aa_admin; complete papers only |
 | Test paper read / list / regenerate-check | A | D | A | D | D | D | D | A | D | E-01; question text never reaches candidate or tp |
 | Question bank read / coverage | A | D | A | D | D | D | D | A | D | Q-01; question content confidential from candidate and tp |
+| Content read cap and anomalies (`GET /security/content-anomalies`) | A | D | D | D | D | D | D | D | D | S-02; the daily cap applies to every role that reads question content (aa_admin, sme, ab_reviewer); only aa_admin lists the anomalies |
+| Security audits and findings (`/security/audits`, `/security/findings`) | A | R | D | D | D | D | D | D | R | S-02; aa_admin writes (audited, archived not deleted); mis and ncvet_viewer read, including the summary |
 
 
 **Batch row scope:** aa_admin/mis/ncvet_viewer=all; ab=`abId`; tp=`tpId`; assessor=`assessorId`; proctor=`proctorId`; candidate=batches containing their learner’s candidate row.

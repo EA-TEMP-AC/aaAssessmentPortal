@@ -260,3 +260,12 @@ export const SECTOR_COVERAGE_READ_ROLES = QUESTION_READ_ROLES;
 
 /** Sector config and NQR qualification import. Q-05: aa_admin only. */
 export const SECTOR_COVERAGE_WRITE_ROLES = Object.freeze(["aa_admin"]);
+
+/** Security audit tracker writes. S-02: aa_admin only. */
+export const SECURITY_AUDIT_WRITE_ROLES = Object.freeze(["aa_admin"]);
+
+/** Security audit tracker reads and the summary. S-02. */
+export const SECURITY_AUDIT_READ_ROLES = Object.freeze(["aa_admin", "mis", "ncvet_viewer"]);
+
+/** GET /security/content-anomalies. S-02: aa_admin only. */
+export const CONTENT_ANOMALY_READ_ROLES = Object.freeze(["aa_admin"]);

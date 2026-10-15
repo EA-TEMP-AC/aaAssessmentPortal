@@ -985,7 +985,7 @@ Secrets redacted. Append-only.
 
 `aa_admin` only (others `403`). Who read personal data of which person (S-01, TR s20). Rows are written by the list and detail endpoints that return personal data: `GET /users`, `/users/:id`, `/learners`, `/learners/:id`, `/assessors`, `/assessors/:id`, `/assessors/available`, `/proctors`, `/proctors/:id`, and `GET /batches/:id/candidates` (logged against the learner). One row per person returned; a list of 20 writes 20 rows with the same `requestId`. Rows hold ids and field names only, never the data. A read that cannot be logged returns `500` and no data.
 
-Filters (all optional): `subjectType` = `user|learner|assessor|proctor|evidence`; `subjectId`; `actorId` (user id); `actorRole`; `kind` = `list|detail`; `from`, `to` (ISO date or time, on `createdAt`, `from` <= `to`); `page` (default 1); `pageSize` (default 20, max 100). An unknown filter or a bad value is `400 VALIDATION_ERROR`. Newest first.
+Filters (all optional): `subjectType` = `user|learner|assessor|proctor|evidence|question|testPaper`; `subjectId`; `actorId` (user id); `actorRole`; `kind` = `list|detail`; `from`, `to` (ISO date or time, on `createdAt`, `from` <= `to`); `page` (default 1); `pageSize` (default 20, max 100). An unknown filter or a bad value is `400 VALIDATION_ERROR`. Newest first.
 
 `200`:
 ```json
@@ -1395,7 +1395,7 @@ Audit: `test.generate`.
 Roles: `aa_admin`, `sme`, `ab_reviewer`. Query: `qualificationId` (id or code), `status` (`draft`|`approved`), `page`, `pageSize`. Returns `{items, total, page, pageSize}` without `items[]` of each paper.
 
 ### GET /api/v1/tests/:id
-Same roles. `?withQuestions=true` adds `stem`, `options` and `correctAnswer` to each item. `404 NOT_FOUND`.
+Same roles. `?withQuestions=true` adds `stem`, `options` and `correctAnswer` to each item, at most 50 items a page (S-02): `itemPage` (default 1) picks the page and the response adds `itemPage`, `itemPageSize` (50) and `itemTotal`. Without `withQuestions` the paper is returned in full, as ids only. Counts against the daily content-read cap (see Security audit tracker and content controls). `404 NOT_FOUND`.
 
 ### POST /api/v1/tests/:id/approve
 Roles: `aa_admin`, `ab_reviewer`. Draft to approved. `409 TEST_ALREADY_APPROVED`, `409 TEST_PAPER_INCOMPLETE` (shortage or missed marks target), `409 TEST_PAPER_STALE` (a question was retired, unapproved or superseded since generation; `details.stale`). Audit: `test.approve` with before and after.
@@ -1498,6 +1498,48 @@ Anonymous read-only access. Response header: `Cache-Control: public, max-age=300
 - **Utility bill proof-on-file marker (B-16):** For `office-documents`, categories `telephone_bill`, `internet_bill`, and `electricity_bill` return `proofOnFile: true` and `fileRef: null`. Other categories (e.g. `lease`) return `proofOnFile: false` with their `fileRef`.
 
 ---
+
+## Security audit tracker and content controls (task S-02)
+
+All under `/api/v1/security`. Dates are `YYYY-MM-DD` (IST). Unknown body or query keys are `400 VALIDATION_ERROR`. Lists take `page` (default 1) and `pageSize` (default 20, max 100).
+
+Roles: `aa_admin` writes; `aa_admin`, `mis` and `ncvet_viewer` read (except `/content-anomalies`, `aa_admin` only). Everyone else `403`. Every write is audited with before and after; the auditor, the finding owner and the finding description are shown as `"[redacted]"` in audit rows. `DELETE` archives (the row stays, hidden from every read); nothing is deleted.
+
+### POST /security/audits
+`{type, auditor, auditDate, scope, fixesDueDate?}`. `type` = `vapt|penetration_test|code_review|infrastructure|data_protection|other`. `fixesDueDate` must not be before `auditDate`. `201` returns `{id, type, auditor, auditDate, scope, status: "open", fixesDueDate, closedDate: null, createdAt, updatedAt}`. Audit: `securityAudit.create`.
+
+### GET /security/audits?status=&type=
+`{page, pageSize, total, items[]}`, newest audit date first.
+
+### GET /security/audits/summary
+`{asOf, openAudits, openFindingsBySeverity: {critical, high, medium, low, info}, openFindingsTotal, overdueCount, overdueAudits}`. `overdueCount` is open findings whose `dueDate` is before today; `overdueAudits` is open audits whose `fixesDueDate` is before today. Archived rows and closed findings are not counted.
+
+### GET /security/audits/:id
+`404 NOT_FOUND` for an unknown or archived id.
+
+### PATCH /security/audits/:id
+Any of the create fields plus `status` (`open|closed`) and `closedDate`. Closing sets `closedDate` to today unless one is sent (not in the future); reopening clears it; `closedDate` on an open audit is `400`. `fixesDueDate: null` clears the date. Audit: `securityAudit.update`.
+
+### DELETE /security/audits/:id
+Archives the audit. `409 INVALID_TRANSITION` while it still has findings that are not archived. `200 {id, archived: true}`. Audit: `securityAudit.archive`.
+
+### POST /security/audits/:id/findings
+`{severity, description, owner, dueDate, evidenceRef?}`. `severity` = `critical|high|medium|low|info`. `409 INVALID_TRANSITION` on a closed audit. `201` returns `{id, auditId, severity, description, owner, status: "open", dueDate, closedDate: null, evidenceRef, overdue, createdAt, updatedAt}`. Audit: `securityFinding.create`.
+
+### GET /security/audits/:id/findings and GET /security/findings
+Filters: `severity`, `status`, `overdue` (`true|false`), and `auditId` (on `/security/findings` only). Soonest `dueDate` first.
+
+### GET /security/findings/:id, PATCH /security/findings/:id, DELETE /security/findings/:id
+Same rules as audits (`status`, `closedDate`, `evidenceRef: null` to clear). Audit: `securityFinding.update`, `securityFinding.archive`.
+
+### GET /security/content-anomalies?userId=&day=&page=&pageSize=
+`aa_admin` only. Days on which a user was refused for reading too much question content, newest first: `{id, userId, role, day, cap, readCount, attemptedCount, refusedRequests, route, firstAt, lastAt}`. No question text, no ids.
+
+### Content controls (all question and test paper content reads)
+- **Daily cap.** `GET /question-bank/questions`, `GET /question-bank/questions/:id` and `GET /tests/:id?withQuestions=true` count every question returned against the caller's daily total (IST day, per user). Above the cap the request is refused before anything is sent: `429 CONTENT_READ_LIMIT` with `error.details.cap`, and an anomaly row is written. The cap and any per-role cap are in `server/src/config/content-controls.js`. Reads that carry no question text (paper lists, papers without `withQuestions`, counts, coverage) count 0.
+- **No bulk export.** No endpoint returns more than 50 questions with answers in one response: `GET /question-bank/questions` now has `pageSize` max 50 (was 100; `400` above it), and paper questions are paged 50 at a time. There is no export endpoint.
+- **Access log.** The reads above write `question` and `testPaper` rows (see `GET /audit/access-log`). A read that cannot be logged is not served.
+- **Watermark.** Any future export of question or paper content must use `server/src/lib/watermark.js` (`applyWatermark`: user id, role, time). No file or PDF is generated yet.
 
 ## Phase 2+ stubs
 

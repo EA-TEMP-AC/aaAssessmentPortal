@@ -35,7 +35,10 @@ export const idParamSchema = z
   .strict();
 
 export const getQuerySchema = z
-  .object({ withQuestions: z.enum(["true", "false"]).optional() })
+  .object({
+    withQuestions: z.enum(["true", "false"]).optional(),
+    itemPage: z.coerce.number().int().min(1).max(1_000_000).default(1),
+  })
   .strict();
 
 export const listQuerySchema = z
