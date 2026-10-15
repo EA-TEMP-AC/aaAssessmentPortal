@@ -1228,6 +1228,45 @@ Response `400 Bad Request` (when partial is false and errors exist):
 
 ---
 
+## Test generator (task E-01)
+
+All under `/api/v1/tests`. Papers hold ids, versions, seed and rules, never question text.
+
+### POST /api/v1/tests/generate
+Roles: `aa_admin`, `sme`. Unknown keys are rejected.
+```json
+{
+  "qualificationId": "<id or code>",
+  "language": "en",
+  "quotas": [
+    { "nosId": "NOS-01", "type": "mcq", "count": 4 },
+    { "nosId": "NOS-02", "count": 2 }
+  ],
+  "totalMarks": 11,
+  "seed": 1234,
+  "allowPartial": false
+}
+```
+`type` is optional (any type). A NOS may not have both an any-type quota and a typed quota, and no two quotas may share NOS and type. `totalMarks`, `seed` and `allowPartial` are optional. With no seed the server draws one and stores it.
+Only approved, latest-version, non-retired questions in the language are used; no question appears twice.
+`201` returns the draft paper (`_id`, `status`, `seed`, `rules`, `items[]`, `totalMarks`, `shortages`, `complete`, `poolHash`).
+`422 TEST_BANK_SHORTAGE` when a quota cannot be filled: `error.details.shortages` lists `{nosId, type, requested, available}`. `422 TEST_MARKS_TARGET_NOT_MET` when the marks differ from the target (`details.totalMarks`, `details.targetMarks`). Nothing is stored. With `allowPartial: true` the draft is stored with `complete: false` and the shortages listed. Also `400 NOS_NOT_FOUND`, `DUPLICATE_QUOTA`, `OVERLAPPING_QUOTAS`, `404 QUALIFICATION_NOT_FOUND`.
+Audit: `test.generate`.
+
+### GET /api/v1/tests
+Roles: `aa_admin`, `sme`, `ab_reviewer`. Query: `qualificationId` (id or code), `status` (`draft`|`approved`), `page`, `pageSize`. Returns `{items, total, page, pageSize}` without `items[]` of each paper.
+
+### GET /api/v1/tests/:id
+Same roles. `?withQuestions=true` adds `stem`, `options` and `correctAnswer` to each item. `404 NOT_FOUND`.
+
+### POST /api/v1/tests/:id/approve
+Roles: `aa_admin`, `ab_reviewer`. Draft to approved. `409 TEST_ALREADY_APPROVED`, `409 TEST_PAPER_INCOMPLETE` (shortage or missed marks target), `409 TEST_PAPER_STALE` (a question was retired, unapproved or superseded since generation; `details.stale`). Audit: `test.approve` with before and after.
+
+### POST /api/v1/tests/:id/regenerate-check
+Roles: `aa_admin`, `sme`, `ab_reviewer`. Re-runs the selection with the stored seed and rules on the current bank. Returns `reproducible` (same questions, versions and order), `poolUnchanged` (bank pool is identical to generation time), `missing` and `extra` (`id:version`), and `stale` (stored questions no longer approved and current). If `poolUnchanged` is true and `reproducible` is false, the generator is broken. Audit: `test.regenerate_check`.
+
+---
+
 ## Phase 2+ stubs
 
 Evidence, tests generator, proctoring, grievances, analytics, public site, accessibility, security — unchanged intent; see SCHEMA. Recognition and Annexure II sectors are Phase 1 (`/admin/recognition`, `qualifications.sector`). ERF weights are in docs/ERF.md (task C-01). Phase 2 notes that are not endpoints yet: live NCVET monitoring link, geo-tagged photos and videos for offline and blended batches (Guidelines 4.11b), the 24-hour travel rule, theory-only online batches with no assessor, and gender-parity staff reporting (open questions 80–84).

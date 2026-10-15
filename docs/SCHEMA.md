@@ -650,6 +650,33 @@ Indexes:
 ---
 
 
+### 3.20 `testPapers` (phase 2) — Task E-01
+
+One generated test paper. Holds the seed, the rules and the chosen question ids and versions. It never holds question text; read the text from `questions` by id and version.
+
+| Field | Type | Req | Notes |
+|---|---|---|---|
+| qualificationId | ObjectId | Y | Ref: `qualifications` |
+| status | enum | Y | `draft`, `approved`. Default `draft` |
+| seed | Number | Y | Unsigned 32-bit integer. Given by the caller or drawn by the server |
+| rules.language | String | Y | Lower case |
+| rules.totalMarks | Number | N | Marks target, null when none |
+| rules.quotas[] | {nosId, type, count} | Y | Canonical order (NOS order on the qualification, then type). `type` null means any type |
+| poolHash | String | Y | SHA-256 of the sorted `id:version` list of the pool at generation time |
+| items[] | {questionId, rootQuestionId, version, nosId, pcId, type, marks} | Y | In selection order |
+| totalMarks | Number | Y | Sum of item marks |
+| shortages[] | {nosId, type, requested, available} | Y | Empty when the bank was big enough |
+| marksTargetMet | Boolean | Y | |
+| complete | Boolean | Y | No shortage and marks target met. Only complete papers can be approved |
+| createdBy, approvedBy | ObjectId | Y / N | Ref: `users` |
+| approvedAt | Date | N | |
+
+Indexes: `{ qualificationId: 1, status: 1, createdAt: -1 }`.
+
+Selection: pool is approved, latest, non-retired questions of the qualification in the language, one per `rootQuestionId`. Quotas run in canonical order on one seeded stream (mulberry32). Inside a quota the PCs are visited round-robin in a seeded order, so every PC with a question is used before any PC is used twice. A question is never taken twice in a paper.
+
+---
+
 ## 4. Business rules
 
 ### 4.1 Assignment / ratio / clash
@@ -716,6 +743,9 @@ Schema and contract only. **B-10** writes `learnerFeedback` once the batch is `a
 | Resend credentials | A | D | D | D | D | D | D | D | D | aa_admin only; refused for disabled users |
 | Question bank write / import | A | D | A | D | D | D | D | D | D | Q-01; aa_admin and sme only; audited (content redacted) |
 | Question bank approve | A | D | D | D | D | D | D | A | D | Q-01; ab_reviewer and aa_admin; audited |
+| Test paper generate | A | D | A | D | D | D | D | D | D | E-01; aa_admin and sme; audited (ids, seed and rules only) |
+| Test paper approve | A | D | D | D | D | D | D | A | D | E-01; ab_reviewer and aa_admin; complete papers only |
+| Test paper read / list / regenerate-check | A | D | A | D | D | D | D | A | D | E-01; question text never reaches candidate or tp |
 | Question bank read / coverage | A | D | A | D | D | D | D | A | D | Q-01; question content confidential from candidate and tp |
 
 

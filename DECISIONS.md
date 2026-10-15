@@ -452,6 +452,16 @@ Task F-16 (web only). Q182 is fixed: the shell loads `GET /settings/access` once
 303. **Settings request for `ncvet_viewer` on every page.** The shell now requests the access settings for `ncvet_viewer` after sign-in and on every window focus (not only on `/ab-queue`, which answers Q182). The `/ab-queue` page still reads the same endpoint for its own guard. Is one extra small request per focus acceptable, or should it be refreshed on a timer or after sign-in only?
 Human decisions on 2026-10-15 (F-16): Q300, Q301, Q303 accepted. Q302 accepted with a change: every paged table in the analytics page gets a rows-per-page drop-down (10, 20, 50), default 10 (task F-17).
 
+Task E-01 (backend, test generator). Open questions from 340:
+340. **Quota shape.** Quotas are cells `{nosId, type?, count}`, so per-NOS and per-type are one rule. A paper-wide per-type quota (for example "10 MCQ across all NOS") is not offered. Confirm cells are enough, or add paper-wide type quotas.
+341. **Shortage refuses by default.** A bank too small returns 422 with the shortage list and stores nothing; `allowPartial` stores a flagged draft that cannot be approved. Confirm, or always store the draft.
+342. **Marks target is exact.** Selected marks must equal `totalMarks`; the generator does not swap questions to hit it. With mixed marks per question this can fail. Confirm exact, a tolerance, or a swap step.
+343. **PC coverage.** Inside a quota the PCs are used round-robin so each PC with a question is covered first. There is no rule that every PC must appear. Confirm, or add a minimum per PC.
+344. **Who reads papers.** `sme`, `ab_reviewer` and `aa_admin` read all papers; an `ab_reviewer` is not limited to their own awarding body because the question bank is not either. Confirm, or scope by awarding body.
+345. **Approval checks.** Approval is refused if a question was retired, un-approved or superseded after generation. Confirm, or approve a snapshot of the old versions.
+346. **Regenerate-check after bank changes.** The check compares with the bank as it is today, so a retired question makes it report differences (`poolUnchanged: false`, `stale`). Exact replay of an old bank needs the old versions, which are kept. Confirm this is enough.
+347. **Question text with the paper.** `GET /tests/:id` returns ids only; `?withQuestions=true` adds stem, options and correct answer for the three read roles. Confirm the answer key may be shown to `sme` and `ab_reviewer` there.
+
 ## Not mandated by NCVET (TR s29), do not market as compliance features
 Specific language, DB, cloud, server architecture, API style, biometric or face-recognition tech, GPS hardware, payment gateway, CRM, help-desk software.
 

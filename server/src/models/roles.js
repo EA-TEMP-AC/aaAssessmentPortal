@@ -219,3 +219,12 @@ export const QUESTION_APPROVE_ROLES = Object.freeze(["aa_admin", "ab_reviewer"])
 
 /** Question bank reads and coverage. Q-01: aa_admin, sme, and ab_reviewer only. */
 export const QUESTION_READ_ROLES = Object.freeze(["aa_admin", "sme", "ab_reviewer"]);
+
+/** POST /tests/generate. E-01: aa_admin and sme build draft test papers. */
+export const TEST_GENERATE_ROLES = Object.freeze(["aa_admin", "sme"]);
+
+/** POST /tests/:id/approve. E-01 (AB approval step, task A-04): ab_reviewer or aa_admin. */
+export const TEST_APPROVE_ROLES = Object.freeze(["aa_admin", "ab_reviewer"]);
+
+/** GET /tests, GET /tests/:id, regenerate-check. E-01: candidate, tp and the rest get nothing. */
+export const TEST_READ_ROLES = Object.freeze(["aa_admin", "sme", "ab_reviewer"]);
