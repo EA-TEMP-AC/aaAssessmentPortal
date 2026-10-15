@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 
 /**
- * securityAudits and securityFindings. docs/SCHEMA.md §3.31 and §3.32. S-02.
+ * securityAudits and securityFindings. docs/SCHEMA.md §3.38 and §3.39. S-02.
  * Records of security audits and the findings they raised. Archived, never deleted.
  */
 export const SECURITY_AUDIT_TYPES = Object.freeze([

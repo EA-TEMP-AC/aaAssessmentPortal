@@ -641,8 +641,7 @@ Reserved: `tests`, `attempts`; `proctoringSessions`, `proctoringFlags`, `grievan
 
 The old `sectors` placeholder is replaced by `aaRecognition` plus `SectorName` on the qualification (§3.17, §1.5).
 
-### 3.28 Public website content (phase 1) — NCVET:TR s22
-### 3.23 Public website content (phase 1) — NCVET:TR s22; Task W-01, B-16
+### 3.28 Public website content (phase 1) — NCVET:TR s22; Task W-01, B-16
 
 Nine collections, all with `published` (bool, default false), `archived` (bool, default false), `sortOrder` (number 0 to 100000, default 0), `createdBy`, `updatedBy`, `createdAt`, `updatedAt`; index `{ published: 1, sortOrder: 1 }`. File, photo and logo fields are text references (max 500 characters); nothing is uploaded or stored by the API.
 
@@ -837,7 +836,7 @@ Coverage rule: an NQR qualification is **covered** when a `qualifications` row w
 
 ---
 
-### 3.29 `reviewCycles` (phase 2) — Task Q-04
+### 3.33 `reviewCycles` (phase 2) — Task Q-04
 
 One review of a qualification's questions by an awarding body. Items hold question ids and decisions, never question text. Writes: `aa_admin` and `sme` create and close; the `ab_reviewer` of `abId` records decisions. Audited without question text and without the reviewer comment.
 
@@ -857,7 +856,7 @@ Indexes: `{ abId: 1, status: 1, dueDate: 1 }`, `{ qualificationId: 1, status: 1,
 
 Rules: a decision needs an open cycle, a question in the cycle with no decision yet, and a question that is still the latest version and not retired. `keep` changes nothing on the question. `revise` creates the next version through the existing update (always `draft`, needs approval again). `retire` uses the existing retire. If the question action fails the decision is undone.
 
-### 3.30 `reviewSettings` (phase 2) — Task Q-04
+### 3.34 `reviewSettings` (phase 2) — Task Q-04
 
 | Field | Type | Req | Notes |
 |---|---|---|---|
@@ -865,7 +864,7 @@ Rules: a decision needs an open cycle, a question in the cycle with no decision 
 | intervalMonths | number | Y | Integer 1 to 60. No row means `QUESTION_REVIEW_INTERVAL_MONTHS` |
 | updatedBy | ObjectId | N | Ref: `users` |
 
-### 3.31 `reviewReminders` (phase 2) — Task Q-04
+### 3.35 `reviewReminders` (phase 2) — Task Q-04
 
 One row per reminder queued by the nightly job. The unique index is what keeps a reminder from being queued twice. No question text.
 
@@ -882,7 +881,7 @@ Indexes: unique `{ qualificationId: 1, abId: 1, anchorDate: 1, periodNo: 1 }`.
 Review due rule (`GET /question-bank/review-due` and the nightly job share it). Only approved, latest questions count. A question is past its interval when its current version was created, or its last `keep` decision in a closed cycle was made, `intervalMonths` or more ago (IST dates, whole months). A qualification is past its interval when `intervalMonths` have passed since its last complete cycle close (or its `createdAt`). A qualification is *due* when it, or any of its questions, is past the interval. The awarding bodies to tell are the active ones with a batch or a cycle for the qualification.
 
 ---
-### 3.29 `contentReadCounters` (phase 3, S-02)
+### 3.36 `contentReadCounters` (phase 3, S-02)
 
 How many questions each user has read today. Counts only, never content. One row per user per IST day, created by the first read of the day and raised atomically (`$inc` with the cap in the filter), so parallel requests cannot pass the cap together.
 
@@ -895,7 +894,7 @@ How many questions each user has read today. Counts only, never content. One row
 
 Indexes: unique `{ userId: 1, day: 1 }`. The cap is in `server/src/config/content-controls.js` (`CONTENT_READ_DAILY_CAP`, optional per-role `CONTENT_READ_ROLE_CAPS`). Q460.
 
-### 3.30 `contentAnomalies` (phase 3, S-02)
+### 3.37 `contentAnomalies` (phase 3, S-02)
 
 One row per user per IST day on which a question read was refused with `429 CONTENT_READ_LIMIT`. Holds the user, role and numbers only: no question text and no question ids.
 
@@ -913,7 +912,7 @@ One row per user per IST day on which a question read was refused with `429 CONT
 
 Indexes: unique `{ userId: 1, day: 1 }`; `{ lastAt: -1 }`. Updated in place by later refusals the same day (unlike `auditLogs`); the record of who read what stays in `accessLogs`.
 
-### 3.31 `securityAudits` (phase 3, S-02)
+### 3.38 `securityAudits` (phase 3, S-02)
 
 A record of one security audit (VAPT, code review and so on). Archived, never deleted.
 
@@ -931,7 +930,7 @@ A record of one security audit (VAPT, code review and so on). Archived, never de
 
 Indexes: `{ status: 1, auditDate: -1 }`.
 
-### 3.32 `securityFindings` (phase 3, S-02)
+### 3.39 `securityFindings` (phase 3, S-02)
 
 One finding raised by an audit.
 

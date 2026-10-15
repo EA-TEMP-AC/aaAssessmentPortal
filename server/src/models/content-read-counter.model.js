@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 
 /**
- * contentReadCounters. docs/SCHEMA.md §3.29. S-02.
+ * contentReadCounters. docs/SCHEMA.md §3.36. S-02.
  * One row per user per IST day: how many questions that user has read. Counts only, no content.
  */
 const contentReadCounterSchema = new mongoose.Schema(

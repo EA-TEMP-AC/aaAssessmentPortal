@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 
 /**
- * contentAnomalies. docs/SCHEMA.md §3.30. S-02.
+ * contentAnomalies. docs/SCHEMA.md §3.37. S-02.
  * One row per user per IST day on which a content read was refused for being over the cap.
  * Holds the user, role and numbers only, never question text or ids.
  */

@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 
 /**
- * reviewCycles. docs/SCHEMA.md §3.29. Task Q-04.
+ * reviewCycles. docs/SCHEMA.md §3.33. Task Q-04.
  * One review of a qualification's questions by an awarding body. Items hold question ids
  * and decisions only, never question text. `comment` is reviewer free text and stays
  * out of audit rows.

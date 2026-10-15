@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 
 /**
- * reviewSettings. docs/SCHEMA.md §3.30. Task Q-04.
+ * reviewSettings. docs/SCHEMA.md §3.34. Task Q-04.
  * Review interval for one qualification. No row means compliance.QUESTION_REVIEW_INTERVAL_MONTHS.
  */
 const reviewSettingSchema = new mongoose.Schema(

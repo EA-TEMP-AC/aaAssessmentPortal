@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 
 /**
- * reviewReminders. docs/SCHEMA.md §3.31. Task Q-04.
+ * reviewReminders. docs/SCHEMA.md §3.35. Task Q-04.
  * One row per reminder queued for a qualification, awarding body and period. The unique
  * index is what stops the nightly job queuing the same reminder twice. No question text.
  */
