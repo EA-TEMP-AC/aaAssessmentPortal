@@ -29,18 +29,56 @@ const VISIBLE: Record<Role, readonly string[]> = {
     "Public site",
     "Settings",
   ],
-  mis: ["Home", "Batches", "Users", "Registry", "Master data", "Schemes", "Projects", "Signatories", "Recognition", "Results", "Audit log", "Analytics", "Working days"],
-  mis: ["Home", "Batches", "Users", "Registry", "Master data", "Recognition", "Results", "Evidence", "Audit log", "Analytics", "Working days"],
-  mis: ["Home", "Batches", "Users", "Registry", "Master data", "Recognition", "Results", "Audit log", "Analytics", "Working days", "Public site"],
+  mis: [
+    "Home",
+    "Batches",
+    "Users",
+    "Registry",
+    "Master data",
+    "Schemes",
+    "Projects",
+    "Signatories",
+    "Recognition",
+    "Results",
+    "Evidence",
+    "Audit log",
+    "Analytics",
+    "Working days",
+    "Public site",
+  ],
   sme: ["Home"],
   assessor: ["Home", "Batches", "Registry", "Results"],
   proctor: ["Home", "Batches", "Registry"],
   candidate: ["Home", "Batches", "Master data", "Results"],
   tp: ["Home", "Batches", "Master data", "Results"],
-  ab_reviewer: ["Home", "Batches", "AB queue", "Registry", "Master data", "Schemes", "Projects", "Signatories", "Results", "Audit log", "Analytics"],
-  ncvet_viewer: ["Home", "Batches", "Registry", "Master data", "Schemes", "Projects", "Signatories", "Recognition", "Results", "Audit log", "Analytics"],
-  ab_reviewer: ["Home", "Batches", "AB queue", "Registry", "Master data", "Results", "Evidence", "Audit log", "Analytics"],
-  ncvet_viewer: ["Home", "Batches", "Registry", "Master data", "Recognition", "Results", "Evidence", "Audit log", "Analytics"],
+  ab_reviewer: [
+    "Home",
+    "Batches",
+    "AB queue",
+    "Registry",
+    "Master data",
+    "Schemes",
+    "Projects",
+    "Signatories",
+    "Results",
+    "Evidence",
+    "Audit log",
+    "Analytics",
+  ],
+  ncvet_viewer: [
+    "Home",
+    "Batches",
+    "Registry",
+    "Master data",
+    "Schemes",
+    "Projects",
+    "Signatories",
+    "Recognition",
+    "Results",
+    "Evidence",
+    "Audit log",
+    "Analytics",
+  ],
 };
 
 it.each(Object.entries(VISIBLE) as [Role, readonly string[]][])(
@@ -49,7 +87,11 @@ it.each(Object.entries(VISIBLE) as [Role, readonly string[]][])(
     setSession(sessionFor(role));
     renderApp("/home");
     const nav = screen.getByRole("navigation", { name: "Primary" });
-    expect(within(nav).getAllByRole("link").map((link) => link.textContent)).toEqual(labels);
+    expect(
+      within(nav)
+        .getAllByRole("link")
+        .map((link) => link.textContent),
+    ).toEqual(labels);
   },
 );
 
@@ -65,10 +107,23 @@ it("includes AB queue in ncvet_viewer navigation on /ab-queue when ncvetViewerCa
         });
       }
       if (url.pathname.endsWith("/batches")) {
-        return jsonResponse(200, { page: 1, pageSize: 20, total: 0, items: [] });
+        return jsonResponse(200, {
+          page: 1,
+          pageSize: 20,
+          total: 0,
+          items: [],
+        });
       }
-      if (url.pathname.endsWith("/qualifications") || url.pathname.endsWith("/training-partners")) {
-        return jsonResponse(200, { page: 1, pageSize: 100, total: 0, items: [] });
+      if (
+        url.pathname.endsWith("/qualifications") ||
+        url.pathname.endsWith("/training-partners")
+      ) {
+        return jsonResponse(200, {
+          page: 1,
+          pageSize: 100,
+          total: 0,
+          items: [],
+        });
       }
       return jsonResponse(404);
     }),
@@ -76,13 +131,19 @@ it("includes AB queue in ncvet_viewer navigation on /ab-queue when ncvetViewerCa
   setSession(sessionFor("ncvet_viewer"));
   renderApp("/ab-queue");
   const nav = await screen.findByRole("navigation", { name: "Primary" });
-  expect(await within(nav).findByRole("link", { name: "AB queue" })).toHaveAttribute("href", "/ab-queue");
+  expect(
+    await within(nav).findByRole("link", { name: "AB queue" }),
+  ).toHaveAttribute("href", "/ab-queue");
 });
 
 it("filters nav items correctly via navItemsForRole", () => {
-  const without = navItemsForRole("ncvet_viewer", { ncvetViewerCanSeeAbQueue: false });
+  const without = navItemsForRole("ncvet_viewer", {
+    ncvetViewerCanSeeAbQueue: false,
+  });
   expect(without.some((item) => item.id === "ab-queue")).toBe(false);
 
-  const withQueue = navItemsForRole("ncvet_viewer", { ncvetViewerCanSeeAbQueue: true });
+  const withQueue = navItemsForRole("ncvet_viewer", {
+    ncvetViewerCanSeeAbQueue: true,
+  });
   expect(withQueue.some((item) => item.id === "ab-queue")).toBe(true);
 });

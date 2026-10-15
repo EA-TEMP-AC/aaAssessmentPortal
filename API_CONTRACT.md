@@ -1334,7 +1334,7 @@ Roles: `aa_admin`, `sme`. Body `{ "allowIncomplete": false }` (optional). `409 U
 Read: `aa_admin`, `sme`, `ab_reviewer`. Write: `aa_admin`, `sme`. Body `{ "intervalMonths": 6 }`, integer 1 to 60. `200` `{ qualificationId, intervalMonths, isDefault }`; the default is 12 from `compliance.QUESTION_REVIEW_INTERVAL_MONTHS`. Audit `review_setting.update` with before and after.
 
 ### GET /review-due?page=&pageSize=
-Roles: `aa_admin`, `sme`, `ab_reviewer` (only qualifications their awarding body has a batch or cycle for). `200` `{ items: [{ qualificationId, code, name, intervalMonths, lastCompletedReviewAt, dueQuestionCount, qualificationOverdue, awardingBodyIds }], total, page, pageSize, totalPages }`. Rule: docs/SCHEMA.md §3.31.
+Roles: `aa_admin`, `sme`, `ab_reviewer` (only qualifications their awarding body has a batch or cycle for). `200` `{ items: [{ qualificationId, code, name, intervalMonths, lastCompletedReviewAt, dueQuestionCount, qualificationOverdue, awardingBodyIds }], total, page, pageSize, totalPages }`. Rule: docs/SCHEMA.md §3.35.
 
 ### Nightly reminder job
 Runs once a day in the server process (same pattern as the SLA job; not an endpoint). For each due qualification and each active awarding body linked to it, it queues one `emailQueue` row (`kind: "question_review_due"`) to that body's `notificationEmails`: qualification code and name, number of questions past the interval, last completed review date. No question text. One reminder per qualification, awarding body and period (`reviewReminders` unique index); running the job again queues nothing new. A qualification with no active awarding body linked is skipped. No audit row.
