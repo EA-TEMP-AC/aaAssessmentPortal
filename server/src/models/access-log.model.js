@@ -5,7 +5,13 @@ import mongoose from "mongoose";
  * One row per person whose personal data a read endpoint returned. Append-only.
  * Holds ids and field names only, never the data that was read.
  */
-export const ACCESS_SUBJECT_TYPES = Object.freeze(["user", "learner", "assessor", "proctor"]);
+export const ACCESS_SUBJECT_TYPES = Object.freeze([
+  "user",
+  "learner",
+  "assessor",
+  "proctor",
+  "evidence",
+]);
 export const ACCESS_KINDS = Object.freeze(["list", "detail"]);
 
 const BLOCKED_QUERY_HOOKS = [

@@ -535,7 +535,7 @@ One row per person whose personal data a read endpoint returned. Append-only (up
 |---|---|---|
 | `actorId` | ObjectId | user who read |
 | `actorRole` | string | role at the time |
-| `subjectType` | string | `user`, `learner`, `assessor`, `proctor` |
+| `subjectType` | string | `user`, `learner`, `assessor`, `proctor`, `evidence` (V-01: one row per evidence file download) |
 | `subjectId` | string | id of the person read (`users._id`, `learners._id`, ...). The roster endpoint logs `learnerId`, not the candidate row id |
 | `kind` | string | `list` or `detail` |
 | `fields` | string[] | names of the personal fields the response carried, for example `["name","phone","externalRef"]` |
@@ -550,9 +550,46 @@ Logged reads: `GET /users`, `/users/:id`, `/learners`, `/learners/:id`, `/assess
 
 ---
 
+### 3.24 `evidence` (phase 2, V-01) - Guidelines 4.11b; NCVET:TR s9
+
+One row per file in the evidence vault. The file is in object storage (section 3.24.1), never in MongoDB. Rows are immutable: the model rejects update, replace and delete, except that `lastVerification` and `verifyCount` may be set by the verify endpoint. Evidence of cancelled and rejected batches is kept.
+
+| Field | Type | Notes |
+|---|---|---|
+| `_id` | ObjectId | |
+| `clientEventId` | string | unique; offline idempotency key |
+| `batchId` | ObjectId | required |
+| `abId` | ObjectId | copied from the batch at upload, for awarding-body scoping |
+| `candidateId` | ObjectId or null | a `candidates` row of this batch |
+| `kind` | string | `photo`, `id_proof`, `attendance`, `equipment`, `other`, `video` |
+| `contentType` | string | from the bytes: `image/jpeg`, `image/png`, `application/pdf`, `video/mp4` |
+| `size` | number | bytes, counted by the server. Limit 25 MB (image, PDF), 200 MB (video) |
+| `sha256` | string | hex, computed by the server from the uploaded bytes |
+| `storageDriver`, `storageKey` | string | `local` or `s3`; key is `evidence/<random uuid>.<ext>`. Never returned by the API. No client file name is stored |
+| `uploaderUserId`, `uploaderRole` | ObjectId, string | |
+| `capturedAt` | Date | device clock, as sent |
+| `uploadedAt` | Date | server clock |
+| `locationStatus` | string | `captured`, `unavailable`, `not_provided` |
+| `latitude`, `longitude`, `accuracy` | number or null | `captured` only; as sent |
+| `locationUnavailableReason` | string or null | required when `unavailable` |
+| `deviceId` | string or null | |
+| `payloadHash` | string | sha256 of the canonical metadata plus file checksum; decides replay vs `CONFLICT_IDEMPOTENT`. Never returned |
+| `lastVerification` | object or null | `{ at, byUserId, result (ok, mismatch, missing), actualSha256, actualSize }`; the actual values only on mismatch |
+| `verifyCount` | number | |
+
+Indexes: `{ clientEventId: 1 }` unique; `{ batchId: 1, capturedAt: -1 }`; `{ candidateId: 1, capturedAt: -1 }`; `{ abId: 1, capturedAt: -1 }`; `{ uploaderUserId: 1, capturedAt: -1 }`; `{ sha256: 1 }`.
+
+Read scope: aa_admin, mis, ncvet_viewer all rows; ab_reviewer `abId`; assessor and proctor `uploaderUserId` (their own uploads, not the batch's); candidate, tp, sme none.
+
+#### 3.24.1 Storage
+
+One interface: `put`, `get` (stream) and `signedUrl`. There is no delete and no overwrite. Drivers: local disk (`EVIDENCE_STORAGE_DRIVER=local`, development and tests only) and S3-compatible (`s3`, AWS SDK v3 with configurable endpoint, region, bucket, path-style and credentials from the environment). Production must name a driver and may not use `local`. Hosting provider and region (India) are open (DECISIONS 6, 240, 322).
+
+---
+
 ### 3.16 Phase 2 / 3 collections
 
-Reserved: `questions`, `tests`, `attempts`, `evidence`; `proctoringSessions`, `proctoringFlags`, `grievances`, `erfScores`, `siteDocuments`, `securityAudits`, `exportCredentials`.
+Reserved: `tests`, `attempts`; `proctoringSessions`, `proctoringFlags`, `grievances`, `erfScores`, `siteDocuments`, `securityAudits`, `exportCredentials`.
 
 The old `sectors` placeholder is replaced by `aaRecognition` plus `SectorName` on the qualification (§3.17, §1.5).
 
@@ -716,6 +753,9 @@ Schema and contract only. **B-10** writes `learnerFeedback` once the batch is `a
 | Resend credentials | A | D | D | D | D | D | D | D | D | aa_admin only; refused for disabled users |
 | Question bank write / import | A | D | A | D | D | D | D | D | D | Q-01; aa_admin and sme only; audited (content redacted) |
 | Question bank approve | A | D | D | D | D | D | D | A | D | Q-01; ab_reviewer and aa_admin; audited |
+| Evidence upload (`POST /batches/:id/evidence`) | A | D | D | own | own | D | D | D | D | V-01; assessor and proctor of the batch; not into `cancelled` or `rejected` batches |
+| Evidence list / get / file | A | R | D | own | own | D | D | R° | R | V-01; ° own `abId`; assessor and proctor see only their own uploads; every file download is access-logged |
+| Evidence verify | A | D | D | D | D | D | D | D | D | V-01; aa_admin only; audited |
 | Question bank read / coverage | A | D | A | D | D | D | D | A | D | Q-01; question content confidential from candidate and tp |
 
 

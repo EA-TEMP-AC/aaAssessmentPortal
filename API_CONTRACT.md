@@ -38,6 +38,9 @@ Phase 1 endpoints have examples. Phase 2+ stubs without full examples.
 | `RESULT_OUTCOME_MISMATCH` | 400 | Client `outcome` ≠ server |
 | `RESULT_INCOMPLETE` | 409 | Submit with an active roster candidate that has no row, or a row with marks missing |
 | `EVIDENCE_REQUIRED` | 409 | Flag true (Phase 2) |
+| `UNSUPPORTED_FILE_TYPE` | 415 | Evidence file is not JPEG, PNG, PDF or MP4 by its bytes (V-01) |
+| `FILE_TYPE_MISMATCH` | 415 | Evidence file's real type differs from the type the client declared (V-01) |
+| `FILE_TOO_LARGE` | 413 | Evidence file over 25 MB (image, PDF) or 200 MB (video) (V-01) |
 | `REASSESS_ALREADY_OPEN` | 409 | A learner being reassessed already has a live, unpublished reassessment batch from the same parent. `details.conflicts` names each learner and the existing batch |
 | `REASSESS_NOT_ELIGIBLE` | 409 | Reassessment rules failed. `details.reason`: `not_published`, `window`, `outcome`, or `type`. Window is one year from the original result’s publication date (Guidelines 4.7) |
 | `CONFLICT_IDEMPOTENT` | 409 | Same `clientEventId`, different payload, path, or user |
@@ -973,7 +976,7 @@ Secrets redacted. Append-only.
 
 `aa_admin` only (others `403`). Who read personal data of which person (S-01, TR s20). Rows are written by the list and detail endpoints that return personal data: `GET /users`, `/users/:id`, `/learners`, `/learners/:id`, `/assessors`, `/assessors/:id`, `/assessors/available`, `/proctors`, `/proctors/:id`, and `GET /batches/:id/candidates` (logged against the learner). One row per person returned; a list of 20 writes 20 rows with the same `requestId`. Rows hold ids and field names only, never the data. A read that cannot be logged returns `500` and no data.
 
-Filters (all optional): `subjectType` = `user|learner|assessor|proctor`; `subjectId`; `actorId` (user id); `actorRole`; `kind` = `list|detail`; `from`, `to` (ISO date or time, on `createdAt`, `from` <= `to`); `page` (default 1); `pageSize` (default 20, max 100). An unknown filter or a bad value is `400 VALIDATION_ERROR`. Newest first.
+Filters (all optional): `subjectType` = `user|learner|assessor|proctor|evidence`; `subjectId`; `actorId` (user id); `actorRole`; `kind` = `list|detail`; `from`, `to` (ISO date or time, on `createdAt`, `from` <= `to`); `page` (default 1); `pageSize` (default 20, max 100). An unknown filter or a bad value is `400 VALIDATION_ERROR`. Newest first.
 
 `200`:
 ```json
@@ -1228,7 +1231,86 @@ Response `400 Bad Request` (when partial is false and errors exist):
 
 ---
 
+## Evidence vault (Phase 2, V-01)
+
+Backend only. The browser screen is V-02. Files live in object storage (local disk in development, an S3-compatible bucket in production; see README) under random keys. The API never returns a storage key, never uses a client file name as a path, and offers no way to replace or delete a file.
+
+Read roles: `aa_admin`, `mis` and `ncvet_viewer` see every row; `ab_reviewer` sees rows of its own awarding body (no `abId` means no rows); `assessor` and `proctor` see only rows they uploaded. `candidate`, `tp` and `sme` get `403`. A row outside the caller's scope is `403`; an unknown id is `404`.
+
+### POST /batches/:id/evidence
+
+`multipart/form-data`. Roles: `aa_admin`, or the `assessor` or `proctor` assigned to the batch. Any other role, or another assessor or proctor, is `403`. Unknown batch `404`. A batch in `cancelled` or `rejected` is `409 INVALID_TRANSITION`; every other status accepts uploads.
+
+Parts:
+
+| Part | Required | Notes |
+|---|---|---|
+| `file` | yes | One file. Real type read from the bytes: `image/jpeg`, `image/png`, `application/pdf`, `video/mp4`. Anything else `415 UNSUPPORTED_FILE_TYPE`. If the part declares one of the four types and the bytes say another, `415 FILE_TYPE_MISMATCH`. The file name is ignored and never stored. Images and PDFs up to 25 MB, video up to 200 MB, else `413 FILE_TOO_LARGE`. An empty file is `400` |
+| `clientEventId` | yes | Idempotency key, 1 to 200 characters |
+| `kind` | yes | `photo`, `id_proof`, `attendance`, `equipment`, `other`, `video`. `video` needs an MP4 and an MP4 needs `video`; the other kinds take JPEG, PNG or PDF, except `photo`, which takes JPEG or PNG (`400` otherwise) |
+| `capturedAt` | yes | ISO 8601 with offset, from the device clock. Kept as sent |
+| `candidateId` | no | A candidate row (roster id) of this batch, else `400` |
+| `deviceId` | no | |
+| `latitude`, `longitude`, `accuracy` | no | `latitude` -90 to 90, `longitude` -180 to 180, `accuracy` metres, 0 or more. Latitude and longitude go together; `accuracy` needs them |
+| `locationStatus` | no | `captured` or `unavailable`. `unavailable` needs `locationUnavailableReason` (up to 200 characters) and no coordinates. A reason with a fix is `400` |
+
+No location at all is allowed and stored as `locationStatus: "not_provided"`. Unknown parts, and server-owned ones (`uploadedAt`, `sha256`, `size`, `uploaderId`), are `400`.
+
+The server computes `sha256` and `size`, sets `uploadedAt`, and records the uploader and their role.
+
+`201` (stored) or `200` (replay):
+```json
+{
+  "id": "66f0...", "clientEventId": "evt-17", "batchId": "66f0...", "abId": "66f0...",
+  "candidateId": "66f0...", "kind": "photo", "contentType": "image/jpeg",
+  "size": 183422, "sha256": "9f86d0...", "uploaderId": "66f0...", "uploaderRole": "assessor",
+  "capturedAt": "2026-11-20T05:00:00.000Z", "uploadedAt": "2026-11-20T05:00:07.412Z",
+  "locationStatus": "captured", "latitude": 19.076, "longitude": 72.8777, "accuracy": 12.5,
+  "locationUnavailableReason": null, "hasLocation": true, "deviceId": "dev-9f3a",
+  "verification": null, "verifyCount": 0, "replayed": false
+}
+```
+
+**Idempotency.** The same `clientEventId` with the same user, batch, metadata and file bytes returns the stored row with `200` and `replayed: true`; nothing new is stored, and the replay is not re-checked against the batch status, so an offline queue can resend after the batch was cancelled. The same `clientEventId` with anything different (another user, another file, other metadata) is `409 CONFLICT_IDEMPOTENT`.
+
+Audit: `evidence.upload` (or `evidence.replay`) with the response fields and `meta.{contentType,size,sha256}`. File contents are never written to the audit log.
+
+### GET /evidence?batchId=&candidateId=&kind=&uploaderId=&from=&to=&hasLocation=&page=&pageSize=
+
+Read roles above. All filters optional; an unknown filter or bad value is `400`. `from` and `to` are ISO dates or times applied to `capturedAt`. `uploaderId` is a user id. `hasLocation=true` means `locationStatus` is `captured`; `false` is every other status. `page` default 1, `pageSize` default 20, max 100. Newest `capturedAt` first.
+
+`200`: `{ "page": 1, "pageSize": 20, "total": 3, "items": [ <evidence row as above, without replayed> ] }`
+
+### GET /evidence/:id
+
+`200` the row. Metadata reads are not written to the access log (DECISIONS 325).
+
+### GET /evidence/:id/file
+
+Same roles and scope as the row. Writes an access-log row for **every** download (`subjectType: "evidence"`, `fields: ["file"]`, plus a `learner` row when the evidence names a candidate), before anything is sent. If the log cannot be written the response is `500` and no file or link is returned.
+
+- S3 driver: `200` JSON `{ "url", "expiresAt", "contentType", "size", "sha256" }`. The link is short-lived (`EVIDENCE_SIGNED_URL_SECONDS`, default 120) and the response is `Cache-Control: no-store`.
+- Local driver: `200` with the file bytes, `Content-Type` from the stored type, `Content-Disposition: attachment; filename="evidence-<id>.<ext>"`, `X-Content-Type-Options: nosniff`, `Cache-Control: private, no-store`.
+
+If the stored object is missing, `404 NOT_FOUND`.
+
+### POST /evidence/:id/verify
+
+`aa_admin` only. Re-reads the stored file and compares size and sha256 with the row. Always `200` for a row that exists; the outcome is in `verification.result`: `ok`, `mismatch` (bytes changed) or `missing` (object gone). The result, time and user are saved on the row (`verifyCount` goes up by one) and the recorded checksum is never rewritten. A `mismatch` also returns what the stored file hashes to now.
+
+```json
+{ "id": "66f0...", "sha256": "9f86d0...", "verifyCount": 1,
+  "verification": { "at": "2026-11-21T09:00:00.000Z", "byUserId": "66f0...", "result": "mismatch",
+                    "expectedSha256": "9f86d0...", "actualSha256": "1a2b3c...", "actualSize": 183000 } }
+```
+
+Audit: `evidence.verify` with `meta.result`.
+
+`PUT`, `PATCH` and `DELETE` on `/evidence/:id` and `/evidence/:id/file` do not exist (`404`).
+
+---
+
 ## Phase 2+ stubs
 
-Evidence, tests generator, proctoring, grievances, analytics, public site, accessibility, security — unchanged intent; see SCHEMA. Recognition and Annexure II sectors are Phase 1 (`/admin/recognition`, `qualifications.sector`). ERF weights are in docs/ERF.md (task C-01). Phase 2 notes that are not endpoints yet: live NCVET monitoring link, geo-tagged photos and videos for offline and blended batches (Guidelines 4.11b), the 24-hour travel rule, theory-only online batches with no assessor, and gender-parity staff reporting (open questions 80–84).
+Tests generator, proctoring, grievances, analytics, public site, accessibility, security — unchanged intent; see SCHEMA. Recognition and Annexure II sectors are Phase 1 (`/admin/recognition`, `qualifications.sector`). ERF weights are in docs/ERF.md (task C-01). Phase 2 notes that are not endpoints yet: live NCVET monitoring link, geo-tagged photos and videos for offline and blended batches (Guidelines 4.11b; backend built as V-01, see Evidence vault above), the 24-hour travel rule, theory-only online batches with no assessor, and gender-parity staff reporting (open questions 80–84).
 

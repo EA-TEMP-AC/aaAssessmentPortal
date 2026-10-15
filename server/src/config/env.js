@@ -46,6 +46,30 @@ const envSchema = z.object({
   FIELD_ENCRYPTION_KEY_ID: optionalString,
   /** Base64, at least 32 bytes. Keyed hash for the lookup columns. */
   FIELD_HASH_KEY: optionalString,
+  /**
+   * Evidence vault storage (V-01). `local` writes to disk (development and tests), `s3` uses an
+   * S3-compatible bucket. Production must name a driver. Credentials come only from here.
+   */
+  EVIDENCE_STORAGE_DRIVER: z.preprocess(emptyToUndefined, z.enum(["local", "s3"]).optional()),
+  /** Directory for the local driver. Defaults to `var/evidence` under the server folder. */
+  EVIDENCE_LOCAL_DIR: optionalString,
+  EVIDENCE_S3_ENDPOINT: z.preprocess(emptyToUndefined, z.string().url().optional()),
+  EVIDENCE_S3_REGION: optionalString,
+  EVIDENCE_S3_BUCKET: optionalString,
+  EVIDENCE_S3_FORCE_PATH_STYLE: z.preprocess((value) => {
+    if (value === undefined || value === null || value === "") return undefined;
+    if (value === true || value === "true") return true;
+    if (value === false || value === "false") return false;
+    return value;
+  }, z.boolean().default(false)),
+  /** When both are unset the AWS SDK default credential chain is used. */
+  EVIDENCE_S3_ACCESS_KEY_ID: optionalString,
+  EVIDENCE_S3_SECRET_ACCESS_KEY: optionalString,
+  /** Lifetime of a download link, in seconds. */
+  EVIDENCE_SIGNED_URL_SECONDS: z.preprocess(
+    emptyToUndefined,
+    z.coerce.number().int().min(10).max(900).default(120),
+  ),
 });
 
 const parsed = envSchema.safeParse(process.env);
