@@ -5,6 +5,7 @@ import {
   AUDIT_ROLES,
   BATCH_ROLES,
   MASTER_DATA_ROLES,
+  PUBLIC_SITE_ROLES,
   RECOGNITION_ROLES,
   REGISTRY_ROLES,
   RESULTS_ROLES,
@@ -101,6 +102,13 @@ export const NAV_ITEMS: readonly NavItem[] = [
     to: "/working-days",
     description: "Choose weekend days and record holidays. Changes do not rewrite due dates already stored on batches.",
     roles: WORKING_DAY_ROLES,
+  },
+  {
+    id: "public-site",
+    label: "Public site",
+    to: "/admin/public-site",
+    description: "Content for the public website: team, people, sample papers, policies, documents and events.",
+    roles: PUBLIC_SITE_ROLES,
   },
   {
     id: "settings",

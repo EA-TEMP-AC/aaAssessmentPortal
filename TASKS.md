@@ -120,6 +120,7 @@ A-03 Phase 2 notes (not Phase 1 scope): live NCVET monitoring link for online as
 | C-02 | DEP export | backend | C-01 | todo | Blocked until format known |
 | W-01 | Public site data model + admin CRUD (team, organogram, assessors, proctors, sample papers, industry linkages, grievance, POSH, office docs) | backend | B-04 | review | TR s22. Branch: `task/W-01-public-site-data` |
 | W-02 | Public website frontend + monthly calendar | frontend | W-01 | todo | |
+| W-03 | Public site admin screens at /admin/public-site: nine section lists, draft/published/archived, consent, publish and archive | frontend | W-01,B-16 | review | Web only, no server changes. aa_admin publishes and archives; mis drafts. Open questions 540 to 545. Branch: `task/W-03-public-site-admin` |
 | X-01 | Accommodations model + accessible question variants | backend | Q-01 | todo | TR s23 |
 | X-02 | Accessible result publishing (formats) | backend+frontend | B-05 | todo | |
 | X-03 | Accessibility pass on web UI (keyboard, screen reader, contrast) | frontend | F-* | todo | Also satisfies TR s21 usability |

@@ -11,6 +11,7 @@ import { AnalyticsPage } from "./pages/AnalyticsPage";
 import { AuditLogPage } from "./pages/AuditLogPage";
 import { ChangePasswordPage } from "./pages/ChangePasswordPage";
 import { MasterDataPage } from "./pages/MasterDataPage";
+import { PublicSiteAdminPage } from "./pages/PublicSiteAdminPage";
 import { RecognitionPage } from "./pages/RecognitionPage";
 import { RegistryPage } from "./pages/RegistryPage";
 import { SettingsAccessPage } from "./pages/SettingsAccessPage";
@@ -71,6 +72,8 @@ export function AppRoutes() {
                       <WorkingDaysPage />
                     ) : item.id === "batches" ? (
                       <BatchesPage />
+                    ) : item.id === "public-site" ? (
+                      <PublicSiteAdminPage />
                     ) : item.id === "settings" ? (
                       <SettingsAccessPage />
                     ) : (
