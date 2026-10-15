@@ -11,6 +11,8 @@ export const ACCESS_SUBJECT_TYPES = Object.freeze([
   "assessor",
   "proctor",
   "evidence",
+  "question",
+  "testPaper",
 ]);
 export const ACCESS_KINDS = Object.freeze(["list", "detail"]);
 

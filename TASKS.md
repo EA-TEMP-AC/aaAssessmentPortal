@@ -127,7 +127,7 @@ A-03 Phase 2 notes (not Phase 1 scope): live NCVET monitoring link for online as
 | X-03 | Accessibility pass on web UI (keyboard, screen reader, contrast) | frontend | F-* | todo | Also satisfies TR s21 usability |
 | S-03 | Learner repository export interface: versioned export + scoped read-only credentials, all access audit-logged | backend | B-05,S-01 | todo | TR s25; export schema documented in docs/ |
 | S-01 | Encryption at rest, access logging, retention, DPDP checklist | backend | B-01 | review | TR s18-s20. Branch task/S-01-data-protection. Backend only. Open questions 260-272. Follow-ups proposed in docs/DPDP_CHECKLIST.md (DPDP-1 to DPDP-6) |
-| S-02 | Security audit tracker + content-theft controls (watermarking, no bulk export, signed URLs) | backend | S-01 | todo | "Zero content theft" is a goal; track audits |
+| S-02 | Security audit tracker + content-theft controls (watermarking, no bulk export, signed URLs) | backend | S-01 | review | "Zero content theft" is a goal; track audits. Built: audit tracker and findings (`/security`), daily content read cap with anomalies, 50-question page limit, question and testPaper access-log rows, watermark helper. Not built: signed URLs (no export exists). Branch `task/S-02-content-controls`. Open questions 460-466 |
 | T-03 | Phase 3 tests | qa | all P,N,C,W,X,S | todo | |
 | R-03 | Review Phase 3 branches | reviewer | each | todo | |
 

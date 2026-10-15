@@ -26,6 +26,7 @@ import {
   updateQuestion,
 } from "./question-bank.service.js";
 import { reviewCycleRouter } from "./review-cycle.routes.js";
+import { guardContentRead } from "../content-controls/content-guard.js";
 import { sectorCoverageRouter } from "./sector-coverage.routes.js";
 
 export const questionBankRouter = Router();
@@ -84,6 +85,7 @@ questionBankRouter.get(
   asyncHandler(async (req, res) => {
     const query = listQuestionsQuerySchema.parse(req.query);
     const results = await listQuestions(req.user, query);
+    await guardContentRead(req, { questionIds: results.items.map((q) => q._id), kind: "list" });
     res.status(200).json(results);
   }),
 );
@@ -114,6 +116,7 @@ questionBankRouter.get(
   asyncHandler(async (req, res) => {
     const { id } = idParamSchema.parse(req.params);
     const question = await getQuestion(req.user, id);
+    await guardContentRead(req, { questionIds: [question._id], kind: "detail" });
     res.status(200).json(question);
   }),
 );

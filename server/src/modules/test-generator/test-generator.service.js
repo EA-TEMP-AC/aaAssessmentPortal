@@ -1,5 +1,6 @@
 import { createHash, randomInt } from "node:crypto";
 import mongoose from "mongoose";
+import { MAX_QUESTIONS_PER_PAGE } from "../../config/content-controls.js";
 import { AppError, notFound } from "../../lib/errors.js";
 import { Qualification } from "../../models/qualification.model.js";
 import { Question } from "../../models/question.model.js";
@@ -334,13 +335,19 @@ async function loadPaper(id) {
   return paper;
 }
 
-export async function getPaper(id, { withQuestions }) {
+export async function getPaper(id, { withQuestions, itemPage = 1 }) {
   const paper = await loadPaper(id);
   const out = paper.toObject();
   if (withQuestions) {
-    const docs = await Question.find({ _id: { $in: paper.items.map((i) => i.questionId) } }).lean();
+    // No response carries more than MAX_QUESTIONS_PER_PAGE questions with their answers.
+    const itemTotal = out.items.length;
+    const pageItems = out.items.slice(
+      (itemPage - 1) * MAX_QUESTIONS_PER_PAGE,
+      itemPage * MAX_QUESTIONS_PER_PAGE,
+    );
+    const docs = await Question.find({ _id: { $in: pageItems.map((i) => i.questionId) } }).lean();
     const byId = new Map(docs.map((d) => [String(d._id), d]));
-    out.items = out.items.map((i) => {
+    out.items = pageItems.map((i) => {
       const q = byId.get(String(i.questionId));
       return {
         ...i,
@@ -349,6 +356,9 @@ export async function getPaper(id, { withQuestions }) {
         correctAnswer: q?.correctAnswer ?? null,
       };
     });
+    out.itemPage = itemPage;
+    out.itemPageSize = MAX_QUESTIONS_PER_PAGE;
+    out.itemTotal = itemTotal;
   }
   return out;
 }

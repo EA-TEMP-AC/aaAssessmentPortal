@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MAX_QUESTIONS_PER_PAGE } from "../../config/content-controls.js";
 import { isNationalIdKey } from "../../lib/redact.js";
 import {
   QUESTION_DIFFICULTIES,
@@ -194,7 +195,7 @@ export const listQuestionsQuerySchema = nationalIdGuard(
         return true;
       }, z.boolean()),
       page: queryNumber({ min: 1, max: 1_000_000, fallback: 1 }),
-      pageSize: queryNumber({ min: 1, max: 100, fallback: 20 }),
+      pageSize: queryNumber({ min: 1, max: MAX_QUESTIONS_PER_PAGE, fallback: 20 }),
     })
     .strict(),
 );

@@ -3,6 +3,7 @@ import { asyncHandler } from "../../lib/async-handler.js";
 import { requireAuth } from "../../middleware/require-auth.js";
 import { requireRoles } from "../../middleware/require-roles.js";
 import { TEST_APPROVE_ROLES, TEST_GENERATE_ROLES, TEST_READ_ROLES } from "../../models/roles.js";
+import { guardContentRead } from "../content-controls/content-guard.js";
 import {
   generateSchema,
   getQuerySchema,
@@ -110,6 +111,13 @@ testGeneratorRouter.get(
   asyncHandler(async (req, res) => {
     const { id } = idParamSchema.parse(req.params);
     const query = getQuerySchema.parse(req.query);
-    res.status(200).json(await getPaper(id, { withQuestions: query.withQuestions === "true" }));
+    const withQuestions = query.withQuestions === "true";
+    const paper = await getPaper(id, { withQuestions, itemPage: query.itemPage });
+    await guardContentRead(req, {
+      paperId: id,
+      questionIds: withQuestions ? paper.items.map((i) => i.questionId) : [],
+      kind: "detail",
+    });
+    res.status(200).json(paper);
   }),
 );

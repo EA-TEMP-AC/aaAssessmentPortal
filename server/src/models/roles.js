@@ -299,3 +299,11 @@ export const REVIEW_CYCLE_READ_ROLES = Object.freeze(["aa_admin", "sme", "ab_rev
 
 /** POST /review-cycles/:id/decisions. Q-04: ab_reviewer of the cycle's awarding body only. */
 export const REVIEW_CYCLE_DECIDE_ROLES = Object.freeze(["ab_reviewer"]);
+/** Security audit tracker writes. S-02: aa_admin only. */
+export const SECURITY_AUDIT_WRITE_ROLES = Object.freeze(["aa_admin"]);
+
+/** Security audit tracker reads and the summary. S-02. */
+export const SECURITY_AUDIT_READ_ROLES = Object.freeze(["aa_admin", "mis", "ncvet_viewer"]);
+
+/** GET /security/content-anomalies. S-02: aa_admin only. */
+export const CONTENT_ANOMALY_READ_ROLES = Object.freeze(["aa_admin"]);

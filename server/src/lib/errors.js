@@ -127,3 +127,13 @@ export function reassessAlreadyOpen(conflicts) {
     { reason: "already_open", conflicts },
   );
 }
+
+/** A user is over the daily cap on reading question content. S-02. */
+export function contentReadLimit(details) {
+  return new AppError(
+    429,
+    "CONTENT_READ_LIMIT",
+    "Daily limit on reading question content reached",
+    details,
+  );
+}
