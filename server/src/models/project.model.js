@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 
 /**
- * projects. docs/SCHEMA.md §3.24. A project sits under one scheme. `code` is unique
+ * projects. docs/SCHEMA.md §3.27. A project sits under one scheme. `code` is unique
  * across all projects. Dates are `YYYY-MM-DD` IST. Never deleted, only deactivated.
  */
 const projectSchema = new mongoose.Schema(

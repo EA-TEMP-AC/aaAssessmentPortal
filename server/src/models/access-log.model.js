@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 
 /**
- * accessLogs. docs/SCHEMA.md §3.21. NCVET:TR s20; DPDP access accountability.
+ * accessLogs. docs/SCHEMA.md §3.23. NCVET:TR s20; DPDP access accountability.
  * One row per person whose personal data a read endpoint returned. Append-only.
  * Holds ids and field names only, never the data that was read.
  */

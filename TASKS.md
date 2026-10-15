@@ -89,10 +89,8 @@ A-03 Phase 2 notes (not Phase 1 scope): live NCVET monitoring link for online as
 | Q-02 | Auto difficulty classification (easy/medium/tough) from attempt data + per-question usage report | backend | Q-01,E-03 | todo | TR s13 |
 | Q-03 | Flag mostly-wrong questions + notify AB/TP | backend | Q-02 | todo | |
 | Q-04 | Review cycles with AB + periodic upgrade reminders | backend | Q-01 | todo | |
-| Q-05 | Per-sector coverage check (>=5% of NQR qualifications), sector config + NQR CSV import | backend | Q-01 | todo | One row per Annexure II sector on the recognition record. ratioClass is not this sector. |
 | E-01 | Auto test generator: qualification>NOS>PC, random selection | backend | Q-01 | review | Seeded randomness for audit. Branch task/E-01-test-generator; POST /tests/generate, GET /tests, GET /tests/:id, approve, regenerate-check; open questions 340-347 |
 | Q-05 | Per-sector coverage check (>=5% of NQR qualifications), sector config + NQR CSV import | backend | Q-01 | review | One row per Annexure II sector on the recognition record. ratioClass is not this sector. Branch task/Q-05-sector-coverage |
-| E-01 | Auto test generator: qualification>NOS>PC, random selection | backend | Q-01 | todo | Seeded randomness for audit |
 | E-02 | Difficulty + Bloom weight config per assessment (set with AB) | backend | E-01 | todo | Weights stored, versioned |
 | E-03 | Attempt engine: deliver, answer, submit, score | backend | E-01 | todo | |
 | E-04 | Content refresh mechanism (retire/replace questions, version tests) | backend | E-03 | todo | |

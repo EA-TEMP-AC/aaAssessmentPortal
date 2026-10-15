@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 
 /**
- * schemes. docs/SCHEMA.md §3.24. Funding schemes that batches can be tagged with.
+ * schemes. docs/SCHEMA.md §3.27. Funding schemes that batches can be tagged with.
  * `code` is unique. Never deleted, only deactivated.
  */
 const schemeSchema = new mongoose.Schema(

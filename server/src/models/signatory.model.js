@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 export const SIGNATORY_SCOPES = Object.freeze(["scheme", "project", "agency"]);
 
 /**
- * authorisedSignatories. docs/SCHEMA.md §3.24. Who may sign for a scheme, a project,
+ * authorisedSignatories. docs/SCHEMA.md §3.27. Who may sign for a scheme, a project,
  * or the whole agency, within a validity window (`YYYY-MM-DD` IST). No signature
  * images and no personal ID numbers. Never deleted, only deactivated.
  */

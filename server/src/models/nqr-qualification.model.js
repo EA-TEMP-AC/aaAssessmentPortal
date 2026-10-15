@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 import { SECTOR_NAMES } from "../config/annexure.js";
 
 /**
- * nqrQualifications. docs/SCHEMA.md §3.21. Task Q-05.
+ * nqrQualifications. docs/SCHEMA.md §3.26. Task Q-05.
  * The National Qualifications Register list per sector, loaded by CSV.
  * `code` matches `qualifications.code` when the AA holds that qualification.
  */

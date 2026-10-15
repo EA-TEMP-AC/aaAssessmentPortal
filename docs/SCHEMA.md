@@ -368,8 +368,8 @@ Indexes: `{ code: 1 }` unique; `{ sector: 1 }`.
 | assessmentEndDate | string | Y | ≥ start |
 | tpId | ObjectId | Y | |
 | centreId | ObjectId | Y | |
-| schemeId | ObjectId | N | `schemes` (§3.24). Null when not tagged. Must exist and be active at create; set from the project when only `projectId` is sent (H-01) |
-| projectId | ObjectId | N | `projects` (§3.24). Null when not tagged. Must exist, be active, and belong to `schemeId` (H-01) |
+| schemeId | ObjectId | N | `schemes` (§3.27). Null when not tagged. Must exist and be active at create; set from the project when only `projectId` is sent (H-01) |
+| projectId | ObjectId | N | `projects` (§3.27). Null when not tagged. Must exist, be active, and belong to `schemeId` (H-01) |
 | candidateCount | number | Y | |
 | sector | SectorName | Y | Copied from the qualification. Client cannot set it |
 | ratioClass | RatioClass | Y | Copied from the qualification. Client cannot set it |
@@ -589,7 +589,7 @@ Read scope: aa_admin, mis, ncvet_viewer all rows; ab_reviewer `abId`; assessor a
 One interface: `put`, `get` (stream) and `signedUrl`. There is no delete and no overwrite. Drivers: local disk (`EVIDENCE_STORAGE_DRIVER=local`, development and tests only) and S3-compatible (`s3`, AWS SDK v3 with configurable endpoint, region, bucket, path-style and credentials from the environment). Production must name a driver and may not use `local`. Hosting provider and region (India) are open (DECISIONS 6, 240, 322).
 
 ---
-### 3.24 `schemes` / `projects` / `authorisedSignatories` (phase 1) — H-01
+### 3.27 `schemes` / `projects` / `authorisedSignatories` (phase 1) — H-01
 
 Never deleted; `active: false` is the deactivated state. Dates are `YYYY-MM-DD` IST. No signature images, no personal ID numbers.
 
@@ -638,7 +638,7 @@ Reserved: `tests`, `attempts`; `proctoringSessions`, `proctoringFlags`, `grievan
 
 The old `sectors` placeholder is replaced by `aaRecognition` plus `SectorName` on the qualification (§3.17, §1.5).
 
-### 3.23 Public website content (phase 1) — NCVET:TR s22
+### 3.28 Public website content (phase 1) — NCVET:TR s22
 
 Nine collections, all with `published` (bool, default false), `sortOrder` (number 0 to 100000, default 0), `createdBy`, `updatedBy`, `createdAt`, `updatedAt`; index `{ published: 1, sortOrder: 1 }`. File, photo and logo fields are text references (max 500 characters); nothing is uploaded or stored by the API.
 
@@ -756,7 +756,7 @@ One generated test paper. Holds the seed, the rules and the chosen question ids 
 Indexes: `{ qualificationId: 1, status: 1, createdAt: -1 }`.
 
 Selection: pool is approved, latest, non-retired questions of the qualification in the language, one per `rootQuestionId`. Quotas run in canonical order on one seeded stream (mulberry32). Inside a quota the PCs are visited round-robin in a seeded order, so every PC with a question is used before any PC is used twice. A question is never taken twice in a paper.
-### 3.20 `sectorConfigs` (phase 2) — Task Q-05
+### 3.25 `sectorConfigs` (phase 2) — Task Q-05
 
 One row per Annexure II sector on the recognition record. `sector` is a `SectorName`, never a `RatioClass`. Only a sector listed in `aaRecognition.sectors` can be added (`409 SECTOR_NOT_RECOGNISED`). Writes: `aa_admin`. Audited with before and after.
 
@@ -766,7 +766,7 @@ One row per Annexure II sector on the recognition record. `sector` is a `SectorN
 | active | bool | Y | Default `true`. Inactive sectors are left out of the coverage list |
 | createdBy, updatedBy | ObjectId | N | Ref: `users` |
 
-### 3.21 `nqrQualifications` (phase 2) — Task Q-05
+### 3.26 `nqrQualifications` (phase 2) — Task Q-05
 
 National Qualifications Register list per sector, loaded by CSV (`POST /question-bank/nqr-qualifications/import`). No personal data and no national ID fields.
 

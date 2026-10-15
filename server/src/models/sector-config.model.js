@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 import { SECTOR_NAMES } from "../config/annexure.js";
 
 /**
- * sectorConfigs. docs/SCHEMA.md §3.20. Task Q-05.
+ * sectorConfigs. docs/SCHEMA.md §3.25. Task Q-05.
  * One row per Annexure II sector on the recognition record. Not the ratio class.
  */
 const sectorConfigSchema = new mongoose.Schema(

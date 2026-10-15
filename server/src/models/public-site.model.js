@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 import { SECTOR_NAMES } from "../config/annexure.js";
 
 /**
- * Public website content. docs/SCHEMA.md §3.23. NCVET:TR s22.
+ * Public website content. docs/SCHEMA.md §3.28. NCVET:TR s22.
  * Each collection holds one kind of item. Every item has `published` (default false) and
  * `sortOrder`. Files and photos are references (a string), never uploaded here: DECISIONS.md.
  * Assessor and proctor entries link to the registry by id and copy the name only, never
