@@ -98,7 +98,7 @@ it.each(ROLES)("shows user administration only to aa_admin and mis (%s)", async 
     expect(await screen.findByRole("heading", { name: ROLE_LABELS[role] })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Users" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Users" })).not.toBeInTheDocument();
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(fetchMock.mock.calls.filter((call) => !requestUrl(call[0]).pathname.endsWith("/settings/access"))).toHaveLength(0);
   }
 });
 

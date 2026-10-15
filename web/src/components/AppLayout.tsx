@@ -1,9 +1,8 @@
-﻿import { useState } from "react";
-import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+﻿import { useEffect, useState } from "react";
+import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { logout } from "../api/auth";
 import { getAccessSettings } from "../api/settings";
-import { useSession } from "../api/session";
+import { setAccessSettings, useSession, useSessionAccessSettings } from "../api/session";
 import { ROLE_LABELS } from "../routing/access";
 import { navItemsForRole } from "../routing/nav";
 
@@ -30,20 +29,40 @@ export function SignOutButton() {
 
 export function AppLayout() {
   const session = useSession();
-  const location = useLocation();
   const isNcvetViewer = session?.user.role === "ncvet_viewer";
 
-  // AB queue: on load, ncvet_viewer reads GET /settings/access.
-  const accessSettings = useQuery({
-    queryKey: ["settings", "access"],
-    queryFn: ({ signal }) => getAccessSettings(signal),
-    enabled: isNcvetViewer && location.pathname.startsWith("/ab-queue"),
-  });
+  const accessSettings = useSessionAccessSettings();
+
+  // Q182: ncvet_viewer loads the access settings once the shell mounts (after sign-in or a
+  // restored session) and again whenever the page regains focus. A failure hides the link.
+  useEffect(() => {
+    if (!isNcvetViewer) return;
+    let controller: AbortController | null = null;
+    const load = () => {
+      controller?.abort();
+      const own = new AbortController();
+      controller = own;
+      getAccessSettings(own.signal).then(
+        (next) => {
+          if (!own.signal.aborted) setAccessSettings(next);
+        },
+        () => {
+          if (!own.signal.aborted) setAccessSettings(null);
+        },
+      );
+    };
+    load();
+    window.addEventListener("focus", load);
+    return () => {
+      window.removeEventListener("focus", load);
+      controller?.abort();
+    };
+  }, [isNcvetViewer]);
 
   if (!session) return null;
 
   const items = navItemsForRole(session.user.role, {
-    ncvetViewerCanSeeAbQueue: accessSettings.data?.ncvetViewerCanSeeAbQueue,
+    ncvetViewerCanSeeAbQueue: accessSettings?.ncvetViewerCanSeeAbQueue,
   });
 
   return (

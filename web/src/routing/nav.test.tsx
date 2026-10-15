@@ -20,17 +20,18 @@ const VISIBLE: Record<Role, readonly string[]> = {
     "Recognition",
     "Results",
     "Audit log",
+    "Analytics",
     "Working days",
     "Settings",
   ],
-  mis: ["Home", "Batches", "Users", "Registry", "Master data", "Recognition", "Results", "Audit log", "Working days"],
+  mis: ["Home", "Batches", "Users", "Registry", "Master data", "Recognition", "Results", "Audit log", "Analytics", "Working days"],
   sme: ["Home"],
   assessor: ["Home", "Batches", "Registry", "Results"],
   proctor: ["Home", "Batches", "Registry"],
   candidate: ["Home", "Batches", "Master data", "Results"],
   tp: ["Home", "Batches", "Master data", "Results"],
-  ab_reviewer: ["Home", "Batches", "AB queue", "Registry", "Master data", "Results", "Audit log"],
-  ncvet_viewer: ["Home", "Batches", "Registry", "Master data", "Recognition", "Results", "Audit log"],
+  ab_reviewer: ["Home", "Batches", "AB queue", "Registry", "Master data", "Results", "Audit log", "Analytics"],
+  ncvet_viewer: ["Home", "Batches", "Registry", "Master data", "Recognition", "Results", "Audit log", "Analytics"],
 };
 
 it.each(Object.entries(VISIBLE) as [Role, readonly string[]][])(
@@ -43,7 +44,7 @@ it.each(Object.entries(VISIBLE) as [Role, readonly string[]][])(
   },
 );
 
-it("includes AB queue in ncvet_viewer navigation when on /ab-queue and ncvetViewerCanSeeAbQueue is true", async () => {
+it("includes AB queue in ncvet_viewer navigation on /ab-queue when ncvetViewerCanSeeAbQueue is true", async () => {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (input: RequestInfo | URL) => {

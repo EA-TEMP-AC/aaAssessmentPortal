@@ -64,9 +64,11 @@ it("shows recognition as read-only for an NCVET viewer", async () => {
   expect(screen.getByText("2029-03-31")).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Save recognition" })).not.toBeInTheDocument();
   expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
-  expect(fetchMock).toHaveBeenCalledTimes(1);
-  expect(methodOf(fetchMock.mock.calls[0]?.[1])).toBe("GET");
-  expect(requestUrl(fetchMock.mock.calls[0]?.[0] ?? "").pathname).toBe("/api/v1/admin/recognition");
+  // The shell also loads the access settings for an NCVET viewer (Q182).
+  const calls = fetchMock.mock.calls.filter((call) => !requestUrl(call[0]).pathname.endsWith("/settings/access"));
+  expect(calls).toHaveLength(1);
+  expect(methodOf(calls[0]?.[1])).toBe("GET");
+  expect(requestUrl(calls[0]?.[0] ?? "").pathname).toBe("/api/v1/admin/recognition");
 });
 
 it("lets an AA admin create recognition after a 404, including PAN India", async () => {

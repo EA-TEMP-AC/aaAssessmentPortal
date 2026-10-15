@@ -66,7 +66,7 @@ it.each(DENIED)("hides working days from %s", async (role) => {
   expect(await screen.findByRole("heading", { name: ROLE_LABELS[role] })).toBeInTheDocument();
   expect(screen.queryByRole("heading", { name: "Working days" })).not.toBeInTheDocument();
   expect(screen.queryByRole("link", { name: "Working days" })).not.toBeInTheDocument();
-  expect(fetchMock).not.toHaveBeenCalled();
+  expect(fetchMock.mock.calls.filter((call) => !String(call[0]).endsWith("/settings/access"))).toHaveLength(0);
 });
 
 it.each(ALLOWED)("shows working-day settings to %s", async (role) => {

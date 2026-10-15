@@ -804,3 +804,18 @@ textarea {
     scroll-behavior: auto;
   }
 }
+
+.stat-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: 0.75rem; margin: 0 0 1.25rem; }
+.stat-tile { border: 1px solid #d5dbe3; border-radius: 6px; background: #ffffff; padding: 0.5rem 0.75rem; }
+.stat-tile dt { font-size: 0.875rem; color: #3b4654; }
+.stat-tile dd { margin: 0; font-size: 1.5rem; font-weight: 700; color: #10233f; }
+.analytics-tabs { display: flex; flex-wrap: wrap; gap: 0.25rem; margin-bottom: 0.75rem; }
+.analytics-tab { background: #ffffff; color: #0b3a6e; }
+.analytics-tab-active { background: #0b3a6e; color: #ffffff; }
+.chart-metric { display: flex; gap: 1rem; border: 0; padding: 0; }
+.bar-chart { margin: 0 0 1rem; max-width: 44rem; }
+.bar-chart svg { font-size: 12px; }
+.bar-chart-bar { fill: #0b3a6e; }
+.bar-chart-grid { stroke: #d5dbe3; }
+.bar-chart-label, .bar-chart-value, .bar-chart-tick, .bar-chart-axis-title { fill: #1b1f24; }
+.bar-chart-axis-title { font-weight: 600; }

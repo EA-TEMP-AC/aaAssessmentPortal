@@ -82,6 +82,9 @@ export const RESULTS_ROLES: readonly Role[] = [
 /** SCHEMA §5 audit read. */
 export const AUDIT_ROLES: readonly Role[] = ["aa_admin", "mis", "ab_reviewer", "ncvet_viewer"];
 
+/** API_CONTRACT Analytics: read-only for these roles. */
+export const ANALYTICS_ROLES: readonly Role[] = ["aa_admin", "mis", "ncvet_viewer", "ab_reviewer"];
+
 /** SCHEMA §5 holidays / working-day config. */
 export const WORKING_DAY_ROLES: readonly Role[] = ["aa_admin", "mis"];
 

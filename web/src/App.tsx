@@ -7,6 +7,7 @@ import { LoginPage } from "./pages/LoginPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import { PasswordGatePage } from "./pages/PasswordGatePage";
 import { AbQueuePage } from "./pages/AbQueuePage";
+import { AnalyticsPage } from "./pages/AnalyticsPage";
 import { AuditLogPage } from "./pages/AuditLogPage";
 import { ChangePasswordPage } from "./pages/ChangePasswordPage";
 import { MasterDataPage } from "./pages/MasterDataPage";
@@ -54,6 +55,8 @@ export function AppRoutes() {
                   element={
                     item.id === "ab-queue" ? (
                       <AbQueuePage />
+                    ) : item.id === "analytics" ? (
+                      <AnalyticsPage />
                     ) : item.id === "audit" ? (
                       <AuditLogPage />
                     ) : item.id === "users" ? (

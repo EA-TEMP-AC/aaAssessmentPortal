@@ -1,6 +1,7 @@
 ﻿import type { Role } from "./access";
 import {
   ALL_ROLES,
+  ANALYTICS_ROLES,
   AUDIT_ROLES,
   BATCH_ROLES,
   MASTER_DATA_ROLES,
@@ -86,6 +87,13 @@ export const NAV_ITEMS: readonly NavItem[] = [
     to: "/audit-logs",
     description: "Audit entries your account is allowed to read.",
     roles: AUDIT_ROLES,
+  },
+  {
+    id: "analytics",
+    label: "Analytics",
+    to: "/analytics",
+    description: "Batch, result and SLA figures by assessor, training partner, job role and state.",
+    roles: ANALYTICS_ROLES,
   },
   {
     id: "working-days",
