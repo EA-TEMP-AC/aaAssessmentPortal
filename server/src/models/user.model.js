@@ -1,10 +1,12 @@
 import mongoose from "mongoose";
+import { encryptedFieldsPlugin, normalizeEmail } from "../lib/encrypted-fields.plugin.js";
 import { isSecretKey } from "../lib/redact.js";
 import { USER_ROLES } from "./roles.js";
 
 const userSchema = new mongoose.Schema(
   {
-    email: { type: String, required: true, lowercase: true, trim: true },
+    // Encrypted at rest (S-01). Lookup and uniqueness use emailHash.
+    email: { type: String, required: true },
     passwordHash: { type: String, required: true, select: false },
     name: { type: String, required: true, trim: true },
     role: { type: String, required: true, enum: USER_ROLES },
@@ -19,10 +21,21 @@ const userSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
-userSchema.index({ email: 1 }, { unique: true });
+userSchema.plugin(encryptedFieldsPlugin, {
+  collection: "users",
+  fields: { email: { hash: "emailHash", normalize: normalizeEmail } },
+});
+
+// Partial, not plain unique: rows written before the S-01 migration have no hash yet, and
+// a plain unique index would treat every one of them as the same missing value.
+userSchema.index(
+  { emailHash: 1 },
+  { unique: true, partialFilterExpression: { emailHash: { $type: "string" } } },
+);
 userSchema.index({ role: 1, active: 1 });
 
 userSchema.set("toJSON", {
+  getters: true,
   transform(_doc, ret) {
     for (const key of Object.keys(ret)) {
       if (isSecretKey(key)) delete ret[key];

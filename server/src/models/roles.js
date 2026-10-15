@@ -11,6 +11,9 @@ export const USER_ROLES = Object.freeze([
   "ncvet_viewer",
 ]);
 
+/** GET /audit/access-log. S-01: who read whose personal data. aa_admin only. */
+export const ACCESS_LOG_READ_ROLES = Object.freeze(["aa_admin"]);
+
 /** Audit read. docs/SCHEMA.md §5 permission matrix. */
 export const AUDIT_READ_ROLES = Object.freeze(["aa_admin", "mis", "ab_reviewer", "ncvet_viewer"]);
 

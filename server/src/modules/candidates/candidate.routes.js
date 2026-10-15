@@ -4,6 +4,7 @@ import { clientIp } from "../../lib/client-ip.js";
 import { validationError } from "../../lib/errors.js";
 import { requireRoles } from "../../middleware/require-roles.js";
 import { CANDIDATE_READ_ROLES, CANDIDATE_WRITE_ROLES } from "../../models/roles.js";
+import { recordAccess } from "../audit/access-log.service.js";
 import { parseMultipartCsv } from "./candidate-csv.js";
 import { CANDIDATE_CSV_MAX_BYTES } from "./candidate-limits.js";
 import {
@@ -145,7 +146,14 @@ export function mountCandidateRoutes(router) {
     asyncHandler(async (req, res) => {
       const { id } = batchIdParamSchema.parse(req.params);
       const query = listCandidatesQuerySchema.parse(req.query);
-      await res.status(200).json(await getCandidates(req.user, id, query));
+      const body = await getCandidates(req.user, id, query);
+      await recordAccess(req, {
+        subjectType: "learner",
+        subjectIds: body.items.map((item) => item.learnerId),
+        kind: "list",
+        fields: ["name", "externalRef", "accommodations"],
+      });
+      await res.status(200).json(body);
     }),
   );
 

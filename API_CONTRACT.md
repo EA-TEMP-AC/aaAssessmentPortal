@@ -969,6 +969,32 @@ All holiday mutations **audit-logged**. Do **not** recompute existing batch `sla
 
 Secrets redacted. Append-only.
 
+### GET /audit/access-log?subjectType=&subjectId=&actorId=&actorRole=&kind=&from=&to=&page=&pageSize=
+
+`aa_admin` only (others `403`). Who read personal data of which person (S-01, TR s20). Rows are written by the list and detail endpoints that return personal data: `GET /users`, `/users/:id`, `/learners`, `/learners/:id`, `/assessors`, `/assessors/:id`, `/assessors/available`, `/proctors`, `/proctors/:id`, and `GET /batches/:id/candidates` (logged against the learner). One row per person returned; a list of 20 writes 20 rows with the same `requestId`. Rows hold ids and field names only, never the data. A read that cannot be logged returns `500` and no data.
+
+Filters (all optional): `subjectType` = `user|learner|assessor|proctor`; `subjectId`; `actorId` (user id); `actorRole`; `kind` = `list|detail`; `from`, `to` (ISO date or time, on `createdAt`, `from` <= `to`); `page` (default 1); `pageSize` (default 20, max 100). An unknown filter or a bad value is `400 VALIDATION_ERROR`. Newest first.
+
+`200`:
+```json
+{
+  "page": 1, "pageSize": 20, "total": 1,
+  "items": [{
+    "id": "66f0...", "actorId": "66f0...", "actorRole": "aa_admin",
+    "subjectType": "learner", "subjectId": "66f0...", "kind": "detail",
+    "fields": ["name", "phone", "externalRef"],
+    "route": "GET /api/v1/learners/:id", "requestId": "b0b7...",
+    "ip": "203.0.113.7", "createdAt": "2026-10-15T09:30:00.000Z"
+  }]
+}
+```
+
+Reading the access log is not itself logged. Append-only.
+
+### Personal data in responses (S-01)
+
+Email and phone are encrypted at rest (SCHEMA §7) but returned in plain text exactly as before; no response shape changed. Hash columns (`emailHash`) never appear in a response. A duplicate email on `POST|PATCH /users`, `/assessors`, `/proctors` is still `409 DUPLICATE_RESOURCE`. Searching or sorting by email or phone is not offered.
+
 ---
 
 ## Analytics

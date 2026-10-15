@@ -12,7 +12,9 @@
     "lint": "eslint src tests && prettier --check src tests",
     "format": "prettier --write src tests",
     "test": "vitest run",
-    "seed": "node src/scripts/seed.js"
+    "seed": "node src/scripts/seed.js",
+    "migrate:encrypt": "node src/scripts/encrypt-existing-data.js",
+    "retention:dry-run": "node src/scripts/retention-dry-run.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

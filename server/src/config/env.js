@@ -37,6 +37,15 @@ const envSchema = z.object({
   SMTP_USER: optionalString,
   SMTP_PASSWORD: optionalString,
   SMTP_FROM: z.preprocess(emptyToUndefined, z.string().email().optional()),
+  /**
+   * Field-level encryption (S-01). `id:base64key[,id:base64key]`, each key 32 bytes.
+   * Required when NODE_ENV=production. Parsed and checked in lib/field-crypto.js.
+   */
+  FIELD_ENCRYPTION_KEYS: optionalString,
+  /** Key id used to encrypt new values. Older ids in FIELD_ENCRYPTION_KEYS stay readable. */
+  FIELD_ENCRYPTION_KEY_ID: optionalString,
+  /** Base64, at least 32 bytes. Keyed hash for the lookup columns. */
+  FIELD_HASH_KEY: optionalString,
 });
 
 const parsed = envSchema.safeParse(process.env);

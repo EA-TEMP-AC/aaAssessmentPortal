@@ -10,6 +10,7 @@ import {
   QUALIFICATION_READ_ROLES,
   TRAINING_PARTNER_READ_ROLES,
 } from "../../models/roles.js";
+import { recordAccess } from "../audit/access-log.service.js";
 import {
   createAwardingBodySchema,
   createCentreSchema,
@@ -59,13 +60,25 @@ function setAudit(req, entry) {
   req.audit = entry;
 }
 
+/**
+ * `handlers.access` ({ subjectType, fields }) marks a collection that holds personal data:
+ * every list and detail read is written to accessLogs before the response is sent (S-01).
+ */
 function mountReads(router, readRoles, handlers) {
   router.get(
     "/",
     requireRoles(...readRoles),
     asyncHandler(async (req, res) => {
       const query = handlers.listQuery.parse(req.query);
-      await res.status(200).json(await handlers.list(req.user, query));
+      const body = await handlers.list(req.user, query);
+      if (handlers.access) {
+        await recordAccess(req, {
+          ...handlers.access,
+          subjectIds: body.items.map((item) => item.id),
+          kind: "list",
+        });
+      }
+      await res.status(200).json(body);
     }),
   );
 
@@ -74,7 +87,11 @@ function mountReads(router, readRoles, handlers) {
     requireRoles(...readRoles),
     asyncHandler(async (req, res) => {
       const { id } = idParamSchema.parse(req.params);
-      await res.status(200).json(await handlers.get(req.user, id));
+      const body = await handlers.get(req.user, id);
+      if (handlers.access) {
+        await recordAccess(req, { ...handlers.access, subjectIds: [body.id], kind: "detail" });
+      }
+      await res.status(200).json(body);
     }),
   );
 }
@@ -345,6 +362,7 @@ mountReads(learnersRouter, LEARNER_READ_ROLES, {
   listQuery: listLearnersQuerySchema,
   list: listLearners,
   get: getLearner,
+  access: { subjectType: "learner", fields: ["name", "phone", "externalRef"] },
 });
 
 learnersRouter.patch(
