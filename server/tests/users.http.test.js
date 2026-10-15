@@ -629,4 +629,80 @@ describe("users", () => {
     expect(both.status).toBe(400);
     expectNoSecrets(both.body, ["Reset-Pass-9"]);
   });
+
+  describe("POST /users/:id/resend-credentials", () => {
+    const resend = (token, id, body = {}) =>
+      request(app).post(`/api/v1/users/${id}/resend-credentials`).set(bearer(token)).send(body);
+
+    it("sets a new temporary password, queues a fresh email, revokes tokens, audits without secrets", async () => {
+      const admin = await sessionFor("aa_admin");
+      const target = await sessionFor("proctor", { email: "proctor-2@aa.example" });
+      const before = await RefreshToken.find({ userId: target.userId }).lean();
+      expect(before.length).toBeGreaterThan(0);
+
+      const res = await resend(admin.token, target.userId);
+      expect(res.status, JSON.stringify(res.body)).toBe(202);
+      expect(res.body).toEqual({ emailQueued: true });
+
+      const job = await EmailQueue.findOne({ kind: "credentials_resend" }).lean();
+      expect(job.status).toBe("pending");
+      expect(job.to).toEqual([target.email]);
+      const temporaryPassword = temporaryPasswordFrom(job.text);
+      expectNoSecrets(res.body, [temporaryPassword, target.password]);
+
+      // Every refresh token issued before the resend is revoked.
+      const stale = await RefreshToken.find({ _id: { $in: before.map((row) => row._id) } }).lean();
+      expect(stale.every((row) => row.revokedAt)).toBe(true);
+
+      expect((await login(target.email, target.password)).status).toBe(401);
+      const signedIn = await login(target.email, temporaryPassword);
+      expect(signedIn.status).toBe(200);
+      expect(signedIn.body.user.mustChangePassword).toBe(true);
+
+      const audit = await AuditLog.find({ action: "user.resend_credentials" }).lean();
+      expect(audit).toHaveLength(1);
+      expect(audit[0]).toMatchObject({ entity: "user", entityId: target.userId });
+      expect(audit[0].meta).toMatchObject({ mode: "resend_credentials", emailQueued: true });
+      expectNoSecrets(audit, [temporaryPassword, target.password]);
+      expect(JSON.stringify(audit)).not.toContain(job.text);
+    });
+
+    it("issues a different password and a separate job on each call", async () => {
+      const admin = await sessionFor("aa_admin");
+      const target = await sessionFor("proctor", { email: "proctor-3@aa.example" });
+      await resend(admin.token, target.userId);
+      await resend(admin.token, target.userId);
+      const jobs = await EmailQueue.find({ kind: "credentials_resend" }).lean();
+      expect(jobs).toHaveLength(2);
+      expect(temporaryPasswordFrom(jobs[0].text)).not.toBe(temporaryPasswordFrom(jobs[1].text));
+    });
+
+    it("refuses a disabled user, an unknown user, a bad id and a body", async () => {
+      const admin = await sessionFor("aa_admin");
+      const target = await sessionFor("proctor", { email: "proctor-4@aa.example" });
+      await User.updateOne({ _id: target.userId }, { $set: { active: false } });
+      const disabled = await resend(admin.token, target.userId);
+      expect(disabled.status).toBe(409);
+      expect(disabled.body.error.code).toBe("INVALID_TRANSITION");
+      expect(await EmailQueue.countDocuments({ kind: "credentials_resend" })).toBe(0);
+      expect(await AuditLog.countDocuments({ action: "user.resend_credentials" })).toBe(0);
+
+      expect((await resend(admin.token, "66f0000000000000000000ff")).status).toBe(404);
+      expect((await resend(admin.token, "nope")).status).toBe(400);
+      expect((await resend(admin.token, admin.userId, { sendEmail: true })).status).toBe(400);
+    });
+
+    it("is aa_admin only: mis and every other role get 403", async () => {
+      const target = await sessionFor("proctor", { email: "proctor-5@aa.example" });
+      for (const role of USER_ROLES.filter((r) => r !== "aa_admin")) {
+        const caller = await sessionFor(role, { email: `${role}-caller@aa.example` });
+        const res = await resend(caller.token, target.userId);
+        expect(res.status, role).toBe(403);
+      }
+      expect(
+        (await request(app).post(`/api/v1/users/${target.userId}/resend-credentials`)).status,
+      ).toBe(401);
+      expect(await EmailQueue.countDocuments({ kind: "credentials_resend" })).toBe(0);
+    });
+  });
 });

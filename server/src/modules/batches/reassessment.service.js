@@ -100,12 +100,15 @@ async function eligibleRoster(parent, parentResult, learnerIds) {
   return wanted.map((id) => byLearner.get(id));
 }
 
-/** A reassessment batch in either of these statuses no longer blocks a new one. Q144. */
-const NOT_LIVE_STATUSES = Object.freeze(["cancelled", "rejected"]);
+/**
+ * A reassessment batch in any of these statuses no longer blocks a new one. Q144, and Q167
+ * (decision 173): a published earlier reassessment frees the learner for another attempt.
+ */
+const NOT_LIVE_STATUSES = Object.freeze(["cancelled", "rejected", "published"]);
 
 /**
  * Refuses the request when one of the roster's learners is on an active roster
- * row of a live reassessment batch of the same parent.
+ * row of a live, unpublished reassessment batch of the same parent.
  * @throws REASSESS_ALREADY_OPEN with `details.conflicts: [{ learnerId, batchId }]`
  */
 async function assertNoLiveReassessment(parent, roster) {

@@ -172,11 +172,25 @@ export const ASSESSOR_PAYMENT_WRITE_ROLES = Object.freeze(["aa_admin", "mis"]);
 
 /**
  * Assessor payment lists. ncvet_viewer reads; an assessor reads only rows with
- * their own assessor id (enforced in the service). Everyone else is denied.
+ * their own assessor id (enforced in the service). ab_reviewer passes this gate but is then
+ * denied unless the `abReviewerCanReadAssessorPayments` setting is on (decision 174), and
+ * sees only its own awarding body's batches. Everyone else is denied.
  */
 export const ASSESSOR_PAYMENT_READ_ROLES = Object.freeze([
   "aa_admin",
   "mis",
   "ncvet_viewer",
   "assessor",
+  "ab_reviewer",
 ]);
+
+/** GET /settings/access. B-15 (Q161, Q171): the clients read the flags to show or hide screens. */
+export const ACCESS_SETTINGS_READ_ROLES = Object.freeze([
+  "aa_admin",
+  "mis",
+  "ncvet_viewer",
+  "ab_reviewer",
+]);
+
+/** PUT /settings/access. aa_admin only. */
+export const ACCESS_SETTINGS_WRITE_ROLES = Object.freeze(["aa_admin"]);

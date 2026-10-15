@@ -81,10 +81,21 @@ export async function savePayment(user, batchId, body) {
  * `batchId` limits the list to one batch (unknown batch is 404).
  */
 export async function listPayments(user, query, { batchId } = {}) {
-  if (batchId && !(await Batch.exists({ _id: batchId }))) throw notFound();
+  if (batchId) {
+    const batch = await Batch.findById(batchId).select("abId").lean();
+    if (!batch) throw notFound();
+    if (user?.role === "ab_reviewer" && String(batch.abId) !== String(user.abId)) {
+      throw forbidden();
+    }
+  }
 
   const filter = {};
   if (batchId) filter.batchId = batchId;
+  if (user?.role === "ab_reviewer" && !batchId) {
+    if (!user.abId) throw forbidden();
+    const own = await Batch.find({ abId: user.abId }).select("_id").lean();
+    filter.batchId = { $in: own.map((row) => row._id) };
+  }
   if (user?.role === "assessor") {
     if (!user.linkedProfileId) throw forbidden();
     if (query.assessorId && query.assessorId !== String(user.linkedProfileId)) {

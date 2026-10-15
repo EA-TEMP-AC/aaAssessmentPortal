@@ -339,6 +339,19 @@ describe("e2e: reassessment", () => {
       const r1c = expectStatus(await reassess(world.admin, parent.batch, body(absent.id)), 201);
       expect(new Set([r1b.id, r2b.id, r1c.id]).size).toBe(3);
     });
+
+    it("lets the learner back in once the earlier reassessment is published, not before (Q167)", async () => {
+      const world = await makeWorld();
+      const parent = await publishedParent(world);
+      const body = { ...window("2026-12-01"), learnerIds: [parent.failed.id] };
+      const first = expectStatus(await reassess(world.admin, parent.batch, body), 201);
+      for (const status of ["accepted", "in_progress", "result_submitted", "ab_validated"]) {
+        await Batch.updateOne({ _id: first.id }, { $set: { status } });
+        expectError(await reassess(world.admin, parent.batch, body), 409, "REASSESS_ALREADY_OPEN");
+      }
+      await Batch.updateOne({ _id: first.id }, { $set: { status: "published" } });
+      expectStatus(await reassess(world.admin, parent.batch, body), 201);
+    });
   });
 
   describe("what the new batch inherits", () => {

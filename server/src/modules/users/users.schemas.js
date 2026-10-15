@@ -82,3 +82,5 @@ export const listUsersQuerySchema = z.object({
     fallback: USER_PAGE_SIZE_DEFAULT,
   }),
 });
+
+export const resendCredentialsBodySchema = z.object({}).strict();

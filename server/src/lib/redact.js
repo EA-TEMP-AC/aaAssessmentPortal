@@ -45,3 +45,34 @@ export function redactSecrets(value) {
   }
   return redacted;
 }
+
+/**
+ * National-id keys are dropped, not masked: docs/SCHEMA.md PII rule says no Aadhaar or other
+ * national id is stored anywhere, auditLogs included.
+ */
+const NATIONAL_ID_KEYS = new Set([
+  "uidai",
+  "nationalid",
+  "pan",
+  "pannumber",
+  "voterid",
+  "passportnumber",
+]);
+
+export function isNationalIdKey(key) {
+  const normal = String(key).replace(/[_-]/g, "").toLowerCase();
+  return normal.includes("aadhaar") || normal.includes("aadhar") || NATIONAL_ID_KEYS.has(normal);
+}
+
+export function stripNationalIds(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => stripNationalIds(item));
+  }
+  if (!isPlainObject(value)) return value;
+
+  const kept = {};
+  for (const [key, nested] of Object.entries(value)) {
+    if (!isNationalIdKey(key)) kept[key] = stripNationalIds(nested);
+  }
+  return kept;
+}

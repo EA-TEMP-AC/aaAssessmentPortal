@@ -38,7 +38,7 @@ Phase 1 endpoints have examples. Phase 2+ stubs without full examples.
 | `RESULT_OUTCOME_MISMATCH` | 400 | Client `outcome` ≠ server |
 | `RESULT_INCOMPLETE` | 409 | Submit with an active roster candidate that has no row, or a row with marks missing |
 | `EVIDENCE_REQUIRED` | 409 | Flag true (Phase 2) |
-| `REASSESS_ALREADY_OPEN` | 409 | A learner being reassessed already has a live reassessment batch from the same parent. `details.conflicts` names each learner and the existing batch |
+| `REASSESS_ALREADY_OPEN` | 409 | A learner being reassessed already has a live, unpublished reassessment batch from the same parent. `details.conflicts` names each learner and the existing batch |
 | `REASSESS_NOT_ELIGIBLE` | 409 | Reassessment rules failed. `details.reason`: `not_published`, `window`, `outcome`, or `type`. Window is one year from the original result’s publication date (Guidelines 4.7) |
 | `CONFLICT_IDEMPOTENT` | 409 | Same `clientEventId`, different payload, path, or user |
 
@@ -51,6 +51,8 @@ Phase 1 endpoints have examples. Phase 2+ stubs without full examples.
 ### POST /auth/login
 
 Public. Rate limit: `LOGIN_RATE_LIMIT_MAX` / `LOGIN_RATE_LIMIT_WINDOW_MS` per IP+email → `429 RATE_LIMITED`.
+
+The body (and `device`) accepts only the fields shown. Any other key, such as `aadhaar`, is `400 VALIDATION_ERROR`; the same holds for `POST /auth/refresh`. As a second guard, the audit middleware drops national-id keys (`aadhaar`, `aadhar`, `nationalId`, `panNumber`, `voterId`, `passportNumber` and similar) from `meta.requestBody` on every route (T01-B1).
 
 Request:
 ```json
@@ -153,6 +155,35 @@ Admin-set password → `mustChangePassword: true`. Response `201` without `passw
 ### POST /users/:id/password-reset
 
 Admin set `{ "newPassword": "********" }` → `mustChangePassword: true`, `204`. Or `{ "sendEmail": true }` → `202` queued. Rate-limited.
+
+### POST /users/:id/resend-credentials
+
+`aa_admin` only (`mis` and every other role `403`). Body `{}` (any key is `400 VALIDATION_ERROR`). Issues a new temporary password, sets `mustChangePassword: true`, revokes the user's refresh tokens, and queues a fresh email (`emailQueue.kind` `credentials_resend`). Same effect as the `sendEmail` password reset, without its rate limit. A queue failure does not fail the call.
+
+Response `202`: `{ "emailQueued": true }`. The password is never returned. A disabled user (`active: false`) is `409 INVALID_TRANSITION`; unknown id `404`; malformed id `400`.
+
+Audit: `user.resend_credentials`, entity `user`, `before` and `after` (public user shape), `meta: { "mode": "resend_credentials", "emailQueued": true }`. No password or mail text.
+
+---
+
+## Settings
+
+### GET /settings/access
+
+Roles: `aa_admin`, `mis`, `ncvet_viewer`, `ab_reviewer`; others `403`. Response `200`:
+```json
+{
+  "abReviewerCanReadAssessorPayments": false,
+  "ncvetViewerCanSeeAbQueue": false,
+  "updatedBy": null,
+  "updatedAt": null
+}
+```
+Both flags are `false` until `aa_admin` changes them. Clients read the flags to show or hide screens; the server does not gate the AB queue on `ncvetViewerCanSeeAbQueue` (the queue is the batch list, which `ncvet_viewer` can already read).
+
+### PUT /settings/access
+
+`aa_admin` only. Body: one or both booleans, `{ "abReviewerCanReadAssessorPayments": true }`; an empty body, an unknown key or a non-boolean is `400 VALIDATION_ERROR`. Flags not named keep their value. Response `200`: the same shape as GET. Audit: `settings.access.update`, entity `settings`, entityId `access`, `before` and `after` as the GET shape. Decisions 174 and 175 (Q161, Q171).
 
 ---
 
@@ -443,11 +474,11 @@ Response `201`: a new Batch (the `POST /batches` shape) with `status: "allocated
 | Parent batch is `published` and its result is `published`; the first assessment's result is `published` | `409 REASSESS_NOT_ELIGIBLE`, `details: { "reason": "not_published" }` |
 | Start date inside the window | `409 REASSESS_NOT_ELIGIBLE`, `details: { "reason": "window", "windowStart": "2026-11-26", "windowEnd": "2027-11-26" }` |
 | Every named learner is `Fail` or `Absent` on the parent, and at least one learner is taken | `409 REASSESS_NOT_ELIGIBLE`, `details: { "reason": "outcome", "learnerIds": [ ... ] }` (the refused ids; empty when the parent has nobody to reassess) |
-| None of the learners taken is already on an active roster row of a live reassessment batch of the same parent (live = status not `cancelled` or `rejected`) | `409 REASSESS_ALREADY_OPEN`, `details: { "reason": "already_open", "conflicts": [ { "learnerId": "...", "batchId": "..." } ] }`. One entry per blocked learner, in roster order; `batchId` is that learner's earliest live reassessment batch |
+| None of the learners taken is already on an active roster row of a live reassessment batch of the same parent (live and unpublished = status not `cancelled`, `rejected` or `published`) | `409 REASSESS_ALREADY_OPEN`, `details: { "reason": "already_open", "conflicts": [ { "learnerId": "...", "batchId": "..." } ] }`. One entry per blocked learner, in roster order; `batchId` is that learner's earliest live reassessment batch |
 | Centre exists, has a state, and belongs to the parent's training partner | `400 VALIDATION_ERROR` with `details.centreId` |
 | Recognition (SCHEMA §4.3), with the parent's `sector` and the centre's `state` | `409 RULE_OUTSIDE_RECOGNITION` |
 
-A learner may be reassessed from the same parent again once the earlier reassessment batch is `cancelled` or `rejected`, or the learner was removed from its roster. The check is per learner: a request naming only learners with no live batch goes through. Only batches with the same `reassessmentOf` count; a reassessment of another parent in the chain does not.
+A learner may be reassessed from the same parent again once the earlier reassessment batch is `cancelled`, `rejected` or `published` (decision 173, Q167), or the learner was removed from its roster. The check is per learner: a request naming only learners with no live batch goes through. Only batches with the same `reassessmentOf` count; a reassessment of another parent in the chain does not.
 
 `details.reason: "type"` is reserved and is not returned yet (open Q140).
 
@@ -520,7 +551,7 @@ Owned by **B-11**. Roles: `aa_admin` | `mis`. The batch must already have `asses
 
 ### GET /assessor-payments and GET /batches/:id/assessor-payments
 
-Roles: `aa_admin`, `mis`, and `ncvet_viewer` read all rows. `assessor` reads only rows whose `assessorId` is their own `linkedProfileId`. `ab_reviewer`, `proctor`, `tp`, `candidate`, and `sme` get `403`. The first path lists across batches; the second is limited to one batch (unknown id `404`).
+Roles: `aa_admin`, `mis`, and `ncvet_viewer` read all rows. `assessor` reads only rows whose `assessorId` is their own `linkedProfileId`. `ab_reviewer` gets `403` unless `abReviewerCanReadAssessorPayments` is on (`GET /settings/access`); when it is on they read only rows of batches of their own `abId` (another awarding body's batch id is `403`, a reviewer with no `abId` is `403`) and still cannot write. `proctor`, `tp`, `candidate`, and `sme` get `403`. The first path lists across batches; the second is limited to one batch (unknown id `404`).
 
 Query: `page` (default 1), `pageSize` (default 20, max 100), `assessorId`, `pendingOnly` (`true` returns rows with `pending > 0`; `false` is the same as omitted). Unknown or malformed values are `400 VALIDATION_ERROR`. An assessor who passes another assessor's `assessorId` gets an empty page. Newest `updatedAt` first.
 

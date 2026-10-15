@@ -1,4 +1,10 @@
-import { AppError, duplicateResource, forbidden, notFound } from "../../lib/errors.js";
+import {
+  AppError,
+  duplicateResource,
+  forbidden,
+  invalidTransition,
+  notFound,
+} from "../../lib/errors.js";
 import { generateTemporaryPassword, hashPassword } from "../../lib/password.js";
 import { safeErrorCode } from "../../lib/safe-error.js";
 import { User } from "../../models/user.model.js";
@@ -187,5 +193,46 @@ export async function resetUserPassword(actor, id, body) {
     before: presentUser(existing),
     after: presentUser(after),
     meta: { mode: "email", emailQueued: queued.queued },
+  };
+}
+
+function credentialsText(temporaryPassword) {
+  return [
+    "Your assessment portal sign-in details were re-sent by an administrator.",
+    `Temporary password: ${temporaryPassword}`,
+    "Sign in with this password. You will be asked to change it.",
+  ].join("\n");
+}
+
+/**
+ * aa_admin "resend credentials" (decision 172, Q166). Same effect as the email password reset
+ * (new temporary password, mustChangePassword, refresh tokens revoked) with a fresh queued mail.
+ * A disabled user is refused. A queue failure does not throw. The password is never returned
+ * or audited.
+ */
+export async function resendCredentials(actor, id) {
+  const existing = await User.findById(id).lean();
+  if (!existing) throw notFound();
+  if (!existing.active) throw invalidTransition("The user is disabled");
+  assertCanAssign(actor, existing.role);
+
+  const temporaryPassword = generateTemporaryPassword();
+  const passwordHash = await hashPassword(temporaryPassword);
+  await applyPassword(existing._id, passwordHash);
+
+  const queued = await enqueueEmailSafely({
+    to: [existing.email],
+    subject: "Your assessment portal sign-in details",
+    text: credentialsText(temporaryPassword),
+    kind: "credentials_resend",
+    meta: { userId: existing._id.toString() },
+  });
+
+  const after = await User.findById(existing._id).lean();
+  return {
+    body: { emailQueued: queued.queued },
+    before: presentUser(existing),
+    after: presentUser(after),
+    meta: { mode: "resend_credentials", emailQueued: queued.queued },
   };
 }

@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import { redactSecrets } from "../lib/redact.js";
+import { redactSecrets, stripNationalIds } from "../lib/redact.js";
 import { toObjectIdOrNull } from "../lib/object-id.js";
 import { AuditLog } from "../models/audit-log.model.js";
 import { clientIp } from "../lib/client-ip.js";
@@ -25,7 +25,9 @@ export async function recordAudit(entry) {
 function auditEntryFromRequest(req) {
   const hinted = req.audit ?? {};
   const requestBody =
-    req.body && typeof req.body === "object" ? redactSecrets(req.body) : undefined;
+    req.body && typeof req.body === "object"
+      ? stripNationalIds(redactSecrets(req.body))
+      : undefined;
 
   return {
     actorId: hinted.actorId ?? req.user?._id,

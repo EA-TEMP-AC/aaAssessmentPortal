@@ -8,6 +8,7 @@ import {
   batchIdParamSchema,
   listPaymentsQuerySchema,
 } from "./assessor-payment.schemas.js";
+import { forbidUnlessAbReviewerAllowed } from "./assessor-payment.access.js";
 import { listPayments, savePayment } from "./assessor-payment.service.js";
 
 /** GET /assessor-payments: the paged list across batches. */
@@ -18,6 +19,7 @@ assessorPaymentsRouter.use(requireAuth);
 assessorPaymentsRouter.get(
   "/",
   requireRoles(...ASSESSOR_PAYMENT_READ_ROLES),
+  asyncHandler(forbidUnlessAbReviewerAllowed),
   asyncHandler(async (req, res) => {
     const query = listPaymentsQuerySchema.parse(req.query);
     await res.status(200).json(await listPayments(req.user, query));
@@ -52,6 +54,7 @@ export function mountAssessorPaymentRoutes(router) {
   router.get(
     "/:id/assessor-payments",
     requireRoles(...ASSESSOR_PAYMENT_READ_ROLES),
+    asyncHandler(forbidUnlessAbReviewerAllowed),
     asyncHandler(async (req, res) => {
       const { id } = batchIdParamSchema.parse(req.params);
       const query = listPaymentsQuerySchema.parse(req.query);

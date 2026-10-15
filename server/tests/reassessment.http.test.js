@@ -410,16 +410,33 @@ describe("POST /batches/:id/reassessments", () => {
       }
     });
 
-    it("keeps refusing while the earlier batch is in any later status", async () => {
+    it("keeps refusing while the earlier batch is live and unpublished", async () => {
       await recognition();
       const w = await assessedBatch();
       const admin = await sessionFor("aa_admin");
       const id = await firstReassessment(w, admin);
-      for (const status of ["accepted", "in_progress", "published"]) {
+      for (const status of [
+        "accepted",
+        "in_progress",
+        "assessment_completed",
+        "result_submitted",
+        "ab_validated",
+        "disputed",
+      ]) {
         await Batch.updateOne({ _id: id }, { $set: { status } });
         const res = await reassess(admin.token, w.batch._id, dates("2027-03-01"));
         expectError(res, 409, "REASSESS_ALREADY_OPEN");
       }
+    });
+
+    it("lets a learner be reassessed again once the earlier batch is published (Q167)", async () => {
+      await recognition();
+      const w = await assessedBatch();
+      const admin = await sessionFor("aa_admin");
+      const id = await firstReassessment(w, admin);
+      await Batch.updateOne({ _id: id }, { $set: { status: "published" } });
+      const again = await reassess(admin.token, w.batch._id, dates("2027-03-01"));
+      expect(again.status, JSON.stringify(again.body)).toBe(201);
     });
 
     it("ignores a learner who was removed from the earlier batch's roster", async () => {

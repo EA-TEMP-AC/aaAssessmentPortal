@@ -477,6 +477,22 @@ As before. Holiday writes → audit. No retroactive SLA dueAt recompute.
 
 ---
 
+### 3.22 `settings` (phase 1)
+
+One document, `key: "access"`, created on the first `PUT /settings/access`. A missing document reads as both flags `false`.
+
+| Field | Type | Notes |
+|---|---|---|
+| `key` | string | `"access"`, unique |
+| `abReviewerCanReadAssessorPayments` | boolean | default `false`. When `true`, `ab_reviewer` reads assessor payments of their own awarding body (decision 174) |
+| `ncvetViewerCanSeeAbQueue` | boolean | default `false`. Read by the clients to show the AB queue to `ncvet_viewer` (decision 175) |
+| `updatedBy` | ObjectId | user who last saved |
+| `createdAt`, `updatedAt` | Date | |
+
+Writes are `aa_admin` only and audited with `before` and `after`.
+
+---
+
 ### 3.16 Phase 2 / 3 collections
 
 Reserved: `questions`, `tests`, `attempts`, `evidence`; `proctoringSessions`, `proctoringFlags`, `grievances`, `erfScores`, `siteDocuments`, `securityAudits`, `exportCredentials`.
@@ -577,7 +593,9 @@ Schema and contract only. **B-10** writes `learnerFeedback` once the batch is `a
 | Holidays / working-day | A | A | D | D | D | D | D | D | D | audit on change |
 | Recognition GET/PUT | A | A | D | D | D | D | D | D | R | audit on PUT |
 | Learner feedback write | A | A | D | D | D | D | D | D | D | B-10; batch readers may read it on the batch |
-| Assessor payment read/write | A | A | D | own | D | D | D | D | R | B-11; write is aa_admin and mis; ncvet_viewer reads; an assessor reads only their own rows; ab_reviewer is denied (Q161) |
+| Assessor payment read/write | A | A | D | own | D | D | D | R° | R | B-11; write is aa_admin and mis; ncvet_viewer reads; an assessor reads only their own rows; ° ab_reviewer reads own-AB rows only when `abReviewerCanReadAssessorPayments` is on, else denied (Q161, decision 174) |
+| Settings access GET / PUT | A / A | R / D | D | D | D | D | D | R / D | R / D | §3.22; PUT is aa_admin only and audited |
+| Resend credentials | A | D | D | D | D | D | D | D | D | aa_admin only; refused for disabled users |
 
 **Batch row scope:** aa_admin/mis/ncvet_viewer=all; ab=`abId`; tp=`tpId`; assessor=`assessorId`; proctor=`proctorId`; candidate=batches containing their learner’s candidate row.
 

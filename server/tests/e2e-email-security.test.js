@@ -1152,7 +1152,7 @@ Asha,A-1,${SENTINEL}
     // so the number lands in auditLogs. SCHEMA PII rule: do not store Aadhaar or any national id.
     // Every other write route in the API is strict and answers 400. Enable once login and refresh
     // reject unknown keys, or the audit row stores the parsed body.
-    it.skip("BUG T01-B1: login and refresh reject a national-id field and the audit row never holds it", async () => {
+    it("T01-B1: login and refresh reject a national-id field and the audit row never holds it", async () => {
       const world = await makeWorld();
       const login = await request(app).post(`${API}/auth/login`).send({
         email: world.admin.email,

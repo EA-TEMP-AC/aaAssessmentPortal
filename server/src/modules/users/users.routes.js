@@ -10,9 +10,17 @@ import {
   listUsersQuerySchema,
   passwordResetBodySchema,
   patchUserBodySchema,
+  resendCredentialsBodySchema,
   userIdParamSchema,
 } from "./users.schemas.js";
-import { createUser, getUser, listUsers, resetUserPassword, updateUser } from "./users.service.js";
+import {
+  createUser,
+  getUser,
+  listUsers,
+  resendCredentials,
+  resetUserPassword,
+  updateUser,
+} from "./users.service.js";
 
 export const usersRouter = Router();
 
@@ -101,5 +109,24 @@ usersRouter.post(
       return;
     }
     await res.status(result.httpStatus).json(result.body);
+  }),
+);
+
+usersRouter.post(
+  "/:id/resend-credentials",
+  requireRoles("aa_admin"),
+  asyncHandler(async (req, res) => {
+    const { id } = userIdParamSchema.parse(req.params);
+    resendCredentialsBodySchema.parse(req.body ?? {});
+    const result = await resendCredentials(req.user, id);
+    req.audit = {
+      action: "user.resend_credentials",
+      entity: "user",
+      entityId: id,
+      before: result.before,
+      after: result.after,
+      meta: result.meta,
+    };
+    await res.status(202).json(result.body);
   }),
 );

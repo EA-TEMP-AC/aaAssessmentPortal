@@ -393,5 +393,12 @@ Human decisions on 2026-10-14 (answers to Q161, Q166, Q167, Q171):
 174. **Q161 made a setting.** Default: ab_reviewer is denied assessor-payment reads. aa_admin can switch `abReviewerCanReadAssessorPayments` on later without a code change.
 175. **Q171 made a setting.** Default: ncvet_viewer does not get the AB queue. aa_admin can switch `ncvetViewerCanSeeAbQueue` on later without a code change.
 
+B-15 open questions (2026-10-15):
+176. **National-id stripping is by key name.** The audit middleware drops keys that contain `aadhaar` or `aadhar`, or equal `uidai`, `nationalId`, `pan`, `panNumber`, `voterId` or `passportNumber` (case and `_`/`-` ignored), at any depth, from `meta.requestBody`. A national id typed into a free-text value (a note, a name) is not detected. Login and refresh now reject unknown keys with 400. Is the key list complete, and should free-text values be scanned for 12-digit numbers?
+177. **Resend credentials has no rate limit or cooldown.** Unlike the `sendEmail` password reset, `POST /users/:id/resend-credentials` can be called repeatedly, each call revoking the user's sessions and queuing another mail. Should it share the password-reset limit, or wait a minimum interval per user?
+178. **Resend credentials is aa_admin only, the password reset also allows mis.** Per the B-15 brief. Should `mis` be allowed too (still without escalating to aa_admin), to match the password reset?
+179. **`ncvetViewerCanSeeAbQueue` is advisory.** The server only exposes the flag. `ncvet_viewer` can already read the batch list the queue is built from, so a user who knows the address can read the same data with the flag off. Is that acceptable, or should the server refuse `ncvet_viewer` the result-stage statuses while the flag is off?
+180. **Who can read the access settings.** `GET /settings/access` is open to `aa_admin`, `mis`, `ncvet_viewer` and `ab_reviewer` so each client can hide screens. It also tells `ncvet_viewer` and `ab_reviewer` what the other flag is. Confirm, or return each role only its own flag.
+
 ## Not mandated by NCVET (TR s29), do not market as compliance features
 Specific language, DB, cloud, server architecture, API style, biometric or face-recognition tech, GPS hardware, payment gateway, CRM, help-desk software.

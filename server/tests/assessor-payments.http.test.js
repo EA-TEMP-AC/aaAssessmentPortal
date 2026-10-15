@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import request from "supertest";
 import { createApp } from "../src/app.js";
 import { AssessorPayment } from "../src/models/assessor-payment.model.js";
+import { AccessSettings } from "../src/models/access-settings.model.js";
 import { AuditLog } from "../src/models/audit-log.model.js";
 import { Batch } from "../src/models/batch.model.js";
 import { resetLoginRateLimit } from "../src/modules/auth/login-rate-limit.js";
@@ -382,6 +383,69 @@ describe("assessor payments", () => {
         expectError(await listBatch(s.token, b1._id), 403, "FORBIDDEN");
       }
       expect((await request(app).get("/api/v1/assessor-payments")).status).toBe(401);
+    });
+  });
+
+  describe("ab_reviewer read access (Q161, decision 174)", () => {
+    async function seedTwoAbs() {
+      const own = await makeBatch();
+      const other = await makeBatch({ abId: oid() });
+      const admin = await sessionFor("aa_admin");
+      await put(admin.token, own._id, { amountDue: 1000, amountPaid: 0 });
+      await put(admin.token, other._id, { amountDue: 2000, amountPaid: 0 });
+      return { own, other, admin };
+    }
+    const setFlag = (value) =>
+      AccessSettings.updateOne(
+        { key: "access" },
+        { $set: { abReviewerCanReadAssessorPayments: value } },
+        { upsert: true },
+      );
+
+    it("is denied by default, and when the flag is explicitly false", async () => {
+      const { own } = await seedTwoAbs();
+      const reviewer = await sessionFor("ab_reviewer", { abId });
+      expectError(await list(reviewer.token), 403, "FORBIDDEN");
+      expectError(await listBatch(reviewer.token, own._id), 403, "FORBIDDEN");
+      await setFlag(false);
+      expectError(await list(reviewer.token), 403, "FORBIDDEN");
+    });
+
+    it("reads only its own awarding body's rows once the flag is on", async () => {
+      const { own, other } = await seedTwoAbs();
+      await setFlag(true);
+      const reviewer = await sessionFor("ab_reviewer", { abId });
+
+      const all = await list(reviewer.token);
+      expect(all.status, JSON.stringify(all.body)).toBe(200);
+      expect(all.body.total).toBe(1);
+      expect(all.body.items[0].batchId).toBe(String(own._id));
+
+      expect((await listBatch(reviewer.token, own._id)).body.total).toBe(1);
+      expectError(await listBatch(reviewer.token, other._id), 403, "FORBIDDEN");
+      expectError(await listBatch(reviewer.token, oid()), 404, "NOT_FOUND");
+    });
+
+    it("still refuses writes, and refuses a reviewer with no awarding body", async () => {
+      const { own } = await seedTwoAbs();
+      await setFlag(true);
+      const reviewer = await sessionFor("ab_reviewer", { abId });
+      expectError(
+        await put(reviewer.token, own._id, { amountDue: 1, amountPaid: 0 }),
+        403,
+        "FORBIDDEN",
+      );
+      const noAb = await sessionFor("ab_reviewer");
+      expectError(await list(noAb.token), 403, "FORBIDDEN");
+    });
+
+    it("turns off again when the flag is switched back", async () => {
+      await seedTwoAbs();
+      const reviewer = await sessionFor("ab_reviewer", { abId });
+      await setFlag(true);
+      expect((await list(reviewer.token)).status).toBe(200);
+      await setFlag(false);
+      expectError(await list(reviewer.token), 403, "FORBIDDEN");
     });
   });
 });
