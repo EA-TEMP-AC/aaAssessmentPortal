@@ -5,6 +5,7 @@ import { assertFieldEncryptionConfig } from "./lib/field-crypto.js";
 import { assertEvidenceStorageConfig } from "./modules/evidence/storage/storage.js";
 import { ensureCandidateIndexes } from "./models/candidate.model.js";
 import { startSlaBreachScheduler } from "./modules/batches/sla-breach-job.js";
+import { startReviewReminderScheduler } from "./modules/question-bank/review-reminder-job.js";
 import { startEmailWorker } from "./modules/email/email-worker.js";
 import { smtpIsConfigured } from "./modules/email/email-transport.js";
 
@@ -29,6 +30,8 @@ async function main() {
     if (env.MONGO_URI) {
       startSlaBreachScheduler();
       console.log("SLA breach job scheduled");
+      startReviewReminderScheduler();
+      console.log("Question review reminder job scheduled");
     }
     if (smtpIsConfigured()) {
       startEmailWorker();

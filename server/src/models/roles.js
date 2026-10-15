@@ -260,3 +260,15 @@ export const SECTOR_COVERAGE_READ_ROLES = QUESTION_READ_ROLES;
 
 /** Sector config and NQR qualification import. Q-05: aa_admin only. */
 export const SECTOR_COVERAGE_WRITE_ROLES = Object.freeze(["aa_admin"]);
+
+/**
+ * Review cycles, review interval settings and GET /question-bank/review-due. Q-04.
+ * aa_admin and sme create, list, read and close cycles and set intervals.
+ */
+export const REVIEW_CYCLE_MANAGE_ROLES = Object.freeze(["aa_admin", "sme"]);
+
+/** Q-04. ab_reviewer reads and decides cycles of their own awarding body only (service). */
+export const REVIEW_CYCLE_READ_ROLES = Object.freeze(["aa_admin", "sme", "ab_reviewer"]);
+
+/** POST /review-cycles/:id/decisions. Q-04: ab_reviewer of the cycle's awarding body only. */
+export const REVIEW_CYCLE_DECIDE_ROLES = Object.freeze(["ab_reviewer"]);
