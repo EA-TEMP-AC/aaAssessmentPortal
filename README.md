@@ -77,3 +77,20 @@ Rotating `FIELD_HASH_KEY` means changing it and running `npm run migrate:encrypt
 ### Access log
 
 Reads of personal data are recorded in `accessLogs`, and `aa_admin` reads them at `GET /api/v1/audit/access-log` (API_CONTRACT.md). The compliance picture, including what is not done, is in docs/DPDP_CHECKLIST.md.
+
+## Evidence storage (V-01)
+
+Evidence files (photos, ID proofs, PDFs, MP4 video) are written through one storage interface with two drivers, chosen by `EVIDENCE_STORAGE_DRIVER`. Files get random keys; no client file name is used. The interface has no delete. Production must set a driver and cannot use `local`; the server refuses to start otherwise. Hosting must be in India (DECISIONS 6, 240); the provider is not chosen yet.
+
+| Variable | Required | Meaning |
+|---|---|---|
+| `EVIDENCE_STORAGE_DRIVER` | production | `local` (development, tests; the default outside production) or `s3` |
+| `EVIDENCE_LOCAL_DIR` | no | Folder for the local driver. Default `server/var/evidence` (git-ignored) |
+| `EVIDENCE_S3_BUCKET` | s3 | Bucket name |
+| `EVIDENCE_S3_REGION` | s3 | Region, for example `ap-south-1` |
+| `EVIDENCE_S3_ENDPOINT` | no | Endpoint URL of an S3-compatible service. Leave unset for AWS |
+| `EVIDENCE_S3_FORCE_PATH_STYLE` | no | `true` for services that need path-style addressing (default `false`) |
+| `EVIDENCE_S3_ACCESS_KEY_ID`, `EVIDENCE_S3_SECRET_ACCESS_KEY` | no | Set both or neither. When neither is set the AWS default credential chain is used. Credentials exist only in the environment, never in code, and are never logged |
+| `EVIDENCE_SIGNED_URL_SECONDS` | no | Download link lifetime, 10 to 900 (default 120) |
+
+Turn on server-side encryption and versioning (or object lock) on the bucket, and give the application key put and get rights only, no delete. Uploads pass through a temporary file under the OS temp folder and are removed afterwards. Check file integrity with `POST /api/v1/evidence/:id/verify`.

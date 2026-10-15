@@ -219,3 +219,23 @@ export const QUESTION_APPROVE_ROLES = Object.freeze(["aa_admin", "ab_reviewer"])
 
 /** Question bank reads and coverage. Q-01: aa_admin, sme, and ab_reviewer only. */
 export const QUESTION_READ_ROLES = Object.freeze(["aa_admin", "sme", "ab_reviewer"]);
+
+/** POST /batches/:id/evidence. V-01: aa_admin, or the assessor or proctor of that batch. */
+export const EVIDENCE_UPLOAD_ROLES = Object.freeze(["aa_admin", "assessor", "proctor"]);
+
+/**
+ * Evidence reads. V-01: aa_admin, mis and ncvet_viewer see all; ab_reviewer sees its own awarding
+ * body's batches; assessor and proctor see only their own uploads (enforced in the service).
+ * candidate and tp never.
+ */
+export const EVIDENCE_READ_ROLES = Object.freeze([
+  "aa_admin",
+  "mis",
+  "ncvet_viewer",
+  "ab_reviewer",
+  "assessor",
+  "proctor",
+]);
+
+/** POST /evidence/:id/verify. aa_admin only. */
+export const EVIDENCE_VERIFY_ROLES = Object.freeze(["aa_admin"]);

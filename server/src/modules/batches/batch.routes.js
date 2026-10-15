@@ -25,6 +25,7 @@ import {
 } from "./batch.schemas.js";
 import { mountBatchChildReadRoutes } from "../attendance/attendance.routes.js";
 import { mountAssessorPaymentRoutes } from "../assessor-payments/assessor-payment.routes.js";
+import { mountEvidenceBatchRoutes } from "../evidence/evidence.routes.js";
 import { mountCandidateRoutes } from "../candidates/candidate.routes.js";
 import { mountResultRoutes } from "../results/result.routes.js";
 import { assignAssessor, reassignAssessor } from "./assign.service.js";
@@ -184,3 +185,4 @@ mountAssessorPaymentRoutes(batchesRouter);
 mountCandidateRoutes(batchesRouter);
 mountBatchChildReadRoutes(batchesRouter);
 mountResultRoutes(batchesRouter);
+mountEvidenceBatchRoutes(batchesRouter);
