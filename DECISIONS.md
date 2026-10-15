@@ -540,6 +540,14 @@ W-02 open questions (2026-10-15, public website frontend):
 505. **Organogram edge cases.** The tree is built from every published node (up to 1000). A node whose parent is not published shows at the top level, and a loop is cut so each person shows once.
 506. **POSH committee display.** A committee member is shown by `memberName` with `memberRole`; when `memberName` is empty the `title` is used. Policies and committee members are listed in separate sections.
 
+W-03 open questions (2026-10-15, Public site admin screens, web only). W-03 uses 540 upward.
+540. **Who may archive.** API_CONTRACT says DELETE (archive) is `aa_admin` only, but the server lets `mis` archive a draft. The screen follows the contract: only `aa_admin` sees Archive. Confirm, or let `mis` archive their own drafts (the server already allows it).
+541. **No restore for archived items.** The server returns 404 for an archived item, so an archived item cannot be edited, republished or restored. The screen lists archived items read-only under "Show archived". Confirm, or ask for a restore call.
+542. **Registry and qualification ids are typed in.** `people.registryId` and `sample-papers.qualificationId` are plain id fields with a hint, because the people and qualification pickers were not part of this task. A wrong id comes back from the server as a field error. Confirm, or add pickers from the registry and master data.
+543. **Consent shown for every person.** The consent box and note always show for `people`, and for POSH only when the kind is "Committee member". Publishing without consent is not blocked in the page; the server's 409 is shown in plain words. Confirm, or disable Publish in the list when consent is not recorded.
+544. **Published items cannot be edited by mis.** Matching the server, `mis` sees Edit disabled on a published item with the reason. An `aa_admin` edits a published item directly (it stays live). Confirm, or require unpublish before edit.
+545. **Show archived lists archived only.** The server returns either archived or not-archived items, never both, so the toggle switches the list instead of adding to it, and the status filter is off while it is on. Confirm.
+
 ## Not mandated by NCVET (TR s29), do not market as compliance features
 Specific language, DB, cloud, server architecture, API style, biometric or face-recognition tech, GPS hardware, payment gateway, CRM, help-desk software.
 

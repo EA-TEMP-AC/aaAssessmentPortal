@@ -12,6 +12,7 @@ import { AuditLogPage } from "./pages/AuditLogPage";
 import { ChangePasswordPage } from "./pages/ChangePasswordPage";
 import { EvidencePage } from "./pages/EvidencePage";
 import { MasterDataPage } from "./pages/MasterDataPage";
+import { PublicSiteAdminPage } from "./pages/PublicSiteAdminPage";
 import { RecognitionPage } from "./pages/RecognitionPage";
 import { RegistryPage } from "./pages/RegistryPage";
 import { ProjectsPage, SchemesPage, SignatoriesPage } from "./pages/schemes/SchemeScreens";
@@ -94,6 +95,8 @@ export function AppRoutes() {
                       <WorkingDaysPage />
                     ) : item.id === "batches" ? (
                       <BatchesPage />
+                    ) : item.id === "public-site" ? (
+                      <PublicSiteAdminPage />
                     ) : item.id === "settings" ? (
                       <SettingsAccessPage />
                     ) : (

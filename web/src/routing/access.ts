@@ -95,6 +95,9 @@ export const EVIDENCE_ROLES: readonly Role[] = ["aa_admin", "ab_reviewer", "mis"
 /** API_CONTRACT Analytics: read-only for these roles. */
 export const ANALYTICS_ROLES: readonly Role[] = ["aa_admin", "mis", "ncvet_viewer", "ab_reviewer"];
 
+/** API_CONTRACT public site admin (W-01, B-16). Only aa_admin may publish or archive; mis drafts. */
+export const PUBLIC_SITE_ROLES: readonly Role[] = ["aa_admin", "mis"];
+
 /** SCHEMA §5 holidays / working-day config. */
 export const WORKING_DAY_ROLES: readonly Role[] = ["aa_admin", "mis"];
 

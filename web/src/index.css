@@ -854,4 +854,24 @@ textarea {
 .evidence-verify-bad {
   border-color: #a4161a;
   background: #fdecec;
+.public-warning {
+  background: #fffbeb;
+  color: #78350f;
+  border: 2px solid #78350f;
+  padding: 0.75rem;
+  border-radius: 6px;
+  margin: 0 0 1rem;
+  font-weight: 600;
+}
+
+.field-error {
+  margin: 0.25rem 0 0;
+  color: #7f1d1d;
+  font-weight: 600;
+}
+
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
