@@ -531,6 +531,15 @@ Task S-02 (backend only). Security audit tracker and content-theft controls. Ope
 465. **Who may read the tracker.** `aa_admin` writes. `mis` and `ncvet_viewer` read everything, including finding descriptions of weaknesses that are not fixed yet. `ab_reviewer`, `sme` and the rest get `403`. Confirm that `mis` and `ncvet_viewer` should see descriptions, or give them counts only (the summary) and keep the detail for `aa_admin`.
 466. **Watermark helper only; signed URLs not built.** The helper (`server/src/lib/watermark.js`) gives a plain text mark with user id, role and IST time, and `applyWatermark` / `assertWatermarked` for future exporters. It is not signed, so a copy cannot be proven genuine from the mark alone. No export, PDF or file download of question content exists, and the "signed URLs" in the task row were not part of this task, so none were built. Confirm, or ask for a keyed signature on the mark when the first export is built.
 
+W-02 open questions (2026-10-15, public website frontend):
+500. **Photos and logos.** `photoRef` and `logoRef` are shown as a picture only when the value is an http or https address; anything else shows the person's initials. A picture from another host tells that host the visitor's IP address, and hosting is still undecided. Confirm, or choose to show initials only until files are hosted by us.
+501. **File references.** Sample papers, grievance and POSH documents, and non-utility office documents are links only when `fileRef` is an http or https address (opens in a new tab). Any other value is shown as plain text, never as a link. Utility bills show "Proof on file" and no link, also when the response carries a reference.
+502. **Calendar view.** The month grid is for sighted users only (hidden from screen readers, and hidden on narrow phone screens). The list under it is the accessible view and always shows. Months load up to 1000 events (10 pages of 100). Confirm that the grid does not need its own keyboard navigation.
+503. **Month default.** `/site/events` opens the current month in IST. A bad `?month=` value falls back to the current month instead of showing an error.
+504. **Where the site lives.** The public pages are at `/site` and `/site/<section>`. `/` still goes to sign in, and the footer has a "Staff sign in" link. Confirm whether the public site should be the home of the domain.
+505. **Organogram edge cases.** The tree is built from every published node (up to 1000). A node whose parent is not published shows at the top level, and a loop is cut so each person shows once.
+506. **POSH committee display.** A committee member is shown by `memberName` with `memberRole`; when `memberName` is empty the `title` is used. Policies and committee members are listed in separate sections.
+
 ## Not mandated by NCVET (TR s29), do not market as compliance features
 Specific language, DB, cloud, server architecture, API style, biometric or face-recognition tech, GPS hardware, payment gateway, CRM, help-desk software.
 
