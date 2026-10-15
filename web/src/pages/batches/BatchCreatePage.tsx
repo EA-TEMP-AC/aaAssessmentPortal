@@ -13,6 +13,8 @@ import {
 import { isBlockableRuleCode } from "../../api/ruleErrors";
 import { useSession } from "../../api/session";
 import { FormAlert } from "../masterData/dialog";
+import { useProjectOptions, useSchemeOptions } from "../schemes/schemeData";
+import { serverFieldErrors } from "../schemes/schemeWrite";
 import { canCreateBatch } from "./access";
 
 const OBJECT_ID = /^[a-fA-F0-9]{24}$/;
@@ -31,6 +33,8 @@ const FIELD_ORDER = [
   "assessmentEndDate",
   "tpId",
   "centreId",
+  "schemeId",
+  "projectId",
   "candidateCount",
   "assessmentLanguage",
   "recognitionOverrideReason",
@@ -48,6 +52,8 @@ export function BatchCreatePage() {
     assessmentEndDate: "",
     tpId: "",
     centreId: "",
+    schemeId: "",
+    projectId: "",
     candidateCount: "1",
     assessmentLanguage: "",
     recognitionOverrideReason: "",
@@ -80,6 +86,9 @@ export function BatchCreatePage() {
     enabled: Boolean(session && draft.tpId && OBJECT_ID.test(draft.tpId)),
     queryFn: ({ signal }) => listCentres({ page: 1, pageSize: 100, active: true, tpId: draft.tpId }, signal),
   });
+
+  const schemeOptions = useSchemeOptions(Boolean(session));
+  const projectOptions = useProjectOptions(draft.schemeId || null, Boolean(session));
 
   useEffect(() => {
     mounted.current = true;
@@ -194,6 +203,8 @@ export function BatchCreatePage() {
           };
           const override = draft.recognitionOverrideReason.trim();
           if (canOverride && override) input.recognitionOverrideReason = override;
+          if (draft.schemeId) input.schemeId = draft.schemeId;
+          if (draft.projectId) input.projectId = draft.projectId;
 
           setPending(true);
           setFormError(null);
@@ -213,7 +224,7 @@ export function BatchCreatePage() {
                   return;
                 }
               }
-              showError(errorMessage(error), []);
+              showError(errorMessage(error), serverFieldErrors(error, FIELD_ORDER));
             }
           })();
         }}
@@ -387,6 +398,60 @@ export function BatchCreatePage() {
                 onChange={(event) => update("centreId", event.target.value)}
               />
             )}
+          </div>
+          <div className="field">
+            <label htmlFor="create-scheme">Scheme (optional)</label>
+            <select
+              id="create-scheme"
+              ref={bind("schemeId")}
+              name="schemeId"
+              value={draft.schemeId}
+              aria-invalid={formError?.fields.includes("schemeId") || undefined}
+              aria-describedby="create-scheme-hint"
+              onChange={(event) => {
+                // A project belongs to one scheme, so a new scheme clears the project.
+                setDraft((current) => ({ ...current, schemeId: event.target.value, projectId: "" }));
+                setFormError(null);
+              }}
+            >
+              <option value="">{schemeOptions.status === "loading" ? "Loading…" : "No scheme"}</option>
+              {schemeOptions.options.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+            <p id="create-scheme-hint" className="field-hint">
+              {schemeOptions.status === "error"
+                ? "Schemes could not be loaded. You can still create the batch without one."
+                : "Only active schemes are listed."}
+            </p>
+          </div>
+          <div className="field">
+            <label htmlFor="create-project">Project (optional)</label>
+            <select
+              id="create-project"
+              ref={bind("projectId")}
+              name="projectId"
+              value={draft.projectId}
+              aria-invalid={formError?.fields.includes("projectId") || undefined}
+              aria-describedby="create-project-hint"
+              onChange={(event) => update("projectId", event.target.value)}
+            >
+              <option value="">{projectOptions.status === "loading" ? "Loading…" : "No project"}</option>
+              {projectOptions.options.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+            <p id="create-project-hint" className="field-hint">
+              {projectOptions.status === "error"
+                ? "Projects could not be loaded. You can still create the batch without one."
+                : draft.schemeId
+                  ? "Only active projects of the chosen scheme are listed."
+                  : "Only active projects are listed. Choosing a project without a scheme links the project's scheme."}
+            </p>
           </div>
           <div className="field">
             <label htmlFor="create-count">Candidate count</label>

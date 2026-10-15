@@ -61,6 +61,7 @@ function analyticsCalls(fetchMock: ReturnType<typeof installFetch>) {
 }
 
 beforeEach(() => {
+  window.sessionStorage.clear();
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-10-15T08:00:00Z"));
 });
@@ -279,4 +280,83 @@ it("shows an error for the summary and for a tab without hiding the other", asyn
 
   await userEvent.click(screen.getByRole("tab", { name: "By state" }));
   expect(await screen.findByRole("table")).toBeInTheDocument();
+});
+
+it("offers 10, 20 and 50 rows per page, defaulting to 10", async () => {
+  const fetchMock = installFetch();
+  setSession(sessionFor("aa_admin"));
+  renderApp("/analytics");
+  const select = await screen.findByLabelText("Rows per page");
+  expect(select).toHaveValue("10");
+  expect(within(select).getAllByRole("option").map((o) => o.textContent)).toEqual(["10", "20", "50"]);
+  expect(analyticsCalls(fetchMock).some((u) => u.pathname.endsWith("/by-assessor") && u.searchParams.get("pageSize") === "10")).toBe(true);
+});
+
+it("asks for the chosen rows per page, goes back to page 1, and keeps the chart on the top 10", async () => {
+  const fetchMock = installFetch((url) =>
+    url.pathname.endsWith("/by-assessor") ? jsonResponse(200, listBody([row()], { page: Number(url.searchParams.get("page")), total: 60 })) : undefined,
+  );
+  setSession(sessionFor("aa_admin"));
+  renderApp("/analytics");
+  await screen.findByRole("rowheader", { name: "Assessor One (AS-1)" });
+  await userEvent.click(screen.getByRole("button", { name: "Next page" }));
+  await waitFor(() => expect(analyticsCalls(fetchMock).some((u) => u.searchParams.get("page") === "2")).toBe(true));
+
+  await userEvent.selectOptions(screen.getByLabelText("Rows per page"), "50");
+  await waitFor(() =>
+    expect(analyticsCalls(fetchMock).some((u) => u.searchParams.get("pageSize") === "50" && u.searchParams.get("page") === "1")).toBe(true),
+  );
+  expect(screen.getByLabelText("Rows per page")).toHaveValue("50");
+  const chartCalls = analyticsCalls(fetchMock).filter((u) => u.pathname.endsWith("/by-assessor") && u.searchParams.get("pageSize") === "10" && u.searchParams.get("page") === "1");
+  expect(chartCalls.length).toBeGreaterThan(0);
+});
+
+it("remembers the choice for the session on every table", async () => {
+  const fetchMock = installFetch();
+  setSession(sessionFor("mis"));
+  renderApp("/analytics");
+  await userEvent.selectOptions(await screen.findByLabelText("Rows per page"), "20");
+  expect(window.sessionStorage.getItem("analytics.rowsPerPage")).toBe("20");
+
+  for (const [tabName, path] of [
+    ["By training partner", "by-training-partner"],
+    ["By job role", "by-job-role"],
+    ["By state", "by-state"],
+  ] as const) {
+    await userEvent.click(screen.getByRole("tab", { name: tabName }));
+    expect(await screen.findByLabelText("Rows per page")).toHaveValue("20");
+    await waitFor(() => expect(analyticsCalls(fetchMock).some((u) => u.pathname.endsWith(`/${path}`) && u.searchParams.get("pageSize") === "20")).toBe(true));
+  }
+});
+
+it("starts at the remembered rows per page and ignores a bad stored value", async () => {
+  window.sessionStorage.setItem("analytics.rowsPerPage", "50");
+  installFetch();
+  setSession(sessionFor("aa_admin"));
+  const view = renderApp("/analytics");
+  expect(await screen.findByLabelText("Rows per page")).toHaveValue("50");
+  view.unmount();
+
+  window.sessionStorage.setItem("analytics.rowsPerPage", "7");
+  setSession(sessionFor("aa_admin"));
+  renderApp("/analytics");
+  expect(await screen.findByLabelText("Rows per page")).toHaveValue("10");
+});
+
+it("still works when session storage is blocked", async () => {
+  installFetch();
+  setSession(sessionFor("aa_admin"));
+  const get = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+    throw new Error("blocked");
+  });
+  const set = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+    throw new Error("blocked");
+  });
+  renderApp("/analytics");
+  const select = await screen.findByLabelText("Rows per page");
+  expect(select).toHaveValue("10");
+  await userEvent.selectOptions(select, "20");
+  expect(screen.getByLabelText("Rows per page")).toHaveValue("20");
+  get.mockRestore();
+  set.mockRestore();
 });

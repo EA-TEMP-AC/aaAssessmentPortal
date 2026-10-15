@@ -8,6 +8,7 @@ import {
   RECOGNITION_ROLES,
   REGISTRY_ROLES,
   RESULTS_ROLES,
+  SCHEME_READ_ROLES,
   USER_ADMIN_ROLES,
   WORKING_DAY_ROLES,
 } from "./access";
@@ -66,6 +67,27 @@ export const NAV_ITEMS: readonly NavItem[] = [
     to: "/master-data",
     description: "Awarding bodies, training partners, centres, qualifications, and learners your account is allowed to read.",
     roles: MASTER_DATA_ROLES,
+  },
+  {
+    id: "schemes",
+    label: "Schemes",
+    to: "/schemes",
+    description: "Funding schemes that batches can be linked to.",
+    roles: SCHEME_READ_ROLES,
+  },
+  {
+    id: "projects",
+    label: "Projects",
+    to: "/projects",
+    description: "Projects under a scheme.",
+    roles: SCHEME_READ_ROLES,
+  },
+  {
+    id: "signatories",
+    label: "Signatories",
+    to: "/signatories",
+    description: "People authorised to sign for a scheme, a project, or the whole agency.",
+    roles: SCHEME_READ_ROLES,
   },
   {
     id: "recognition",

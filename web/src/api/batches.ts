@@ -85,6 +85,9 @@ export type BatchRecord = {
   assessmentEndDate: string;
   tpId: string;
   centreId: string;
+  /** H-01: optional links. Null when the batch is not tagged. */
+  schemeId: string | null;
+  projectId: string | null;
   candidateCount: number;
   sector: string;
   ratioClass: RatioClass;
@@ -120,6 +123,8 @@ export type BatchListQuery = {
   from?: string;
   to?: string;
   tpId?: string;
+  schemeId?: string;
+  projectId?: string;
   page?: number;
   pageSize?: number;
 };
@@ -140,6 +145,8 @@ export type CreateBatchInput = {
   assessmentEndDate: string;
   tpId: string;
   centreId: string;
+  schemeId?: string;
+  projectId?: string;
   candidateCount: number;
   assessmentLanguage: string;
   recognitionOverrideReason?: string;
@@ -325,6 +332,9 @@ export function parseBatch(value: unknown): BatchRecord {
   const reassessmentOf = nullableString(value.reassessmentOf ?? null);
   const firstAssessmentBatchId = nullableString(value.firstAssessmentBatchId ?? null);
   if (reassessmentOf === undefined || firstAssessmentBatchId === undefined) throw responseError();
+  const schemeId = nullableString(value.schemeId ?? null);
+  const projectId = nullableString(value.projectId ?? null);
+  if (schemeId === undefined || projectId === undefined) throw responseError();
   const sla = parseSla(value.sla);
   const accommodations = Array.isArray(value.accommodations)
     ? value.accommodations.filter((item): item is string => typeof item === "string")
@@ -339,6 +349,8 @@ export function parseBatch(value: unknown): BatchRecord {
     assessmentEndDate,
     tpId,
     centreId,
+    schemeId,
+    projectId,
     candidateCount,
     sector,
     ratioClass: value.ratioClass,
@@ -390,6 +402,8 @@ export async function listBatches(query: BatchListQuery, signal?: AbortSignal): 
   if (query.from) params.set("from", query.from);
   if (query.to) params.set("to", query.to);
   if (query.tpId) params.set("tpId", query.tpId);
+  if (query.schemeId) params.set("schemeId", query.schemeId);
+  if (query.projectId) params.set("projectId", query.projectId);
   params.set("page", String(query.page && query.page > 0 ? query.page : 1));
   const pageSize = query.pageSize && isBatchPageSize(query.pageSize) ? query.pageSize : BATCH_PAGE_SIZE_DEFAULT;
   params.set("pageSize", String(pageSize));

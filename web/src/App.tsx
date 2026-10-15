@@ -13,6 +13,7 @@ import { ChangePasswordPage } from "./pages/ChangePasswordPage";
 import { MasterDataPage } from "./pages/MasterDataPage";
 import { RecognitionPage } from "./pages/RecognitionPage";
 import { RegistryPage } from "./pages/RegistryPage";
+import { ProjectsPage, SchemesPage, SignatoriesPage } from "./pages/schemes/SchemeScreens";
 import { SettingsAccessPage } from "./pages/SettingsAccessPage";
 import { UsersPage } from "./pages/UsersPage";
 import { WorkingDaysPage } from "./pages/WorkingDaysPage";
@@ -65,6 +66,12 @@ export function AppRoutes() {
                       <RegistryPage />
                     ) : item.id === "master-data" ? (
                       <MasterDataPage />
+                    ) : item.id === "schemes" ? (
+                      <SchemesPage />
+                    ) : item.id === "projects" ? (
+                      <ProjectsPage />
+                    ) : item.id === "signatories" ? (
+                      <SignatoriesPage />
                     ) : item.id === "recognition" ? (
                       <RecognitionPage />
                     ) : item.id === "working-days" ? (
