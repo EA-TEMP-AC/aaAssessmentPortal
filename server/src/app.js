@@ -26,6 +26,10 @@ import { resultsRouter } from "./modules/results/result.routes.js";
 import { recognitionRouter } from "./modules/recognition/recognition.routes.js";
 import { settingsRouter } from "./modules/settings/settings.routes.js";
 import { analyticsRouter } from "./modules/analytics/analytics.routes.js";
+import {
+  publicSiteAdminRouter,
+  publicSiteRouter,
+} from "./modules/public-site/public-site.routes.js";
 import { usersRouter } from "./modules/users/users.routes.js";
 import {
   holidaysRouter,
@@ -44,6 +48,8 @@ export function createApp() {
   app.use("/api/v1/users", usersRouter);
   app.use("/api/v1/settings", settingsRouter);
   app.use("/api/v1/analytics", analyticsRouter);
+  app.use("/api/v1/admin/public-site", publicSiteAdminRouter);
+  app.use("/api/v1/public", publicSiteRouter);
   app.use("/api/v1/awarding-bodies", awardingBodiesRouter);
   app.use("/api/v1/training-partners", trainingPartnersRouter);
   app.use("/api/v1/centres", centresRouter);

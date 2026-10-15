@@ -61,6 +61,10 @@ export const compliance = Object.freeze({
   LOGIN_RATE_LIMIT_WINDOW_MS: 900_000,
   /** project. SCHEMA §2. Max login attempts in the window per IP + email. */
   LOGIN_RATE_LIMIT_MAX: 20,
+  /** project. W-01. Public website rate-limit window per client IP. */
+  PUBLIC_RATE_LIMIT_WINDOW_MS: 60_000,
+  /** project. W-01. Max /public/* requests in the window per client IP. */
+  PUBLIC_RATE_LIMIT_MAX: 120,
   /** project. SCHEMA §2. Qualification pass-mark unit unless overridden. */
   DEFAULT_PASS_MARK_UNIT: "percent",
   /**

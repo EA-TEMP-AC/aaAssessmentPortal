@@ -1034,6 +1034,50 @@ Empty range: `total: 0`, `items: []`. Summary with no batches: zeros and `passRa
 
 ---
 
+## Public website content
+
+Content for the AA public website (NCVET TR s22). Nine sections, one slug each:
+
+| Slug | Content | Admin fields (besides `published`, `sortOrder`) | Public fields (besides `id`) |
+|---|---|---|---|
+| `team-members` | Operational team | `name`, `designation`, `department?`, `bio?`, `photoRef?` | same |
+| `organogram` | Organogram nodes | `name`, `title`, `parentId?`, `photoRef?` | same; `parentId` only while the parent is published |
+| `people` | Assessors and proctors shown publicly | `kind` (`assessor` or `proctor`), `registryId`, `name?`, `roleLabel`, `sector?`, `photoRef?` | `kind`, `name`, `roleLabel`, `sector`, `photoRef` (never `registryId`) |
+| `sample-papers` | Sample assessment papers | `title`, `qualificationId`, `fileRef` | `title`, `fileRef`, `qualification: { code, name, sector }` |
+| `industry-linkages` | Industry linkages | `name`, `description?`, `websiteUrl?` (http or https), `logoRef?` | same |
+| `grievance` | Grievance procedure and contact | `title`, `body?`, `contactName?`, `contactEmail?`, `contactPhone?`, `fileRef?` | same |
+| `posh` | POSH policy and committee | `kind` (`policy` or `committee_member`), `title`, `body?`, `memberName?` (required for a committee member), `memberRole?`, `fileRef?` | same |
+| `office-documents` | Registered office documents | `category` (`ownership`, `lease`, `telephone_bill`, `internet_bill`, `electricity_bill`, `other`), `title`, `note?`, `fileRef` | same |
+| `events` | Monthly calendar of events | `title`, `description?`, `date`, `endDate?`, `location?` (`YYYY-MM-DD`) | same |
+
+Every item has `published` (default `false`) and `sortOrder` (integer 0 to 100000, default 0, lowest first). `photoRef`, `logoRef` and `fileRef` are plain text references (up to 500 characters) to a file or photo hosted elsewhere. This API stores no file and does not fetch one. Hosting is undecided (DECISIONS.md).
+
+### Admin: /admin/public-site/:slug
+
+Roles: `aa_admin` creates, changes and deletes; `mis` reads; every other role `403`. Responses are `Cache-Control: no-store`.
+
+| Call | Result |
+|---|---|
+| `GET /admin/public-site/:slug?page=&pageSize=&published=` | `200 { page, pageSize, total, items }`, every item with all its fields plus `id`, `createdAt`, `updatedAt`, `createdBy`, `updatedBy`. `pageSize` default 20, max 100 |
+| `GET /admin/public-site/:slug/:id` | `200` one item, or `404` |
+| `POST /admin/public-site/:slug` | `201` the item. Unknown fields and missing required fields are `400 VALIDATION_ERROR` |
+| `PATCH /admin/public-site/:slug/:id` | `200` the item. At least one field. `people.kind` and `people.registryId` cannot be changed |
+| `DELETE /admin/public-site/:slug/:id` | `204`. Deleting an organogram node moves its children to the top |
+
+Checks: `people.registryId` must be an assessor (or proctor, by `kind`) in the registry, one entry per registry record, and only the registry `name` is copied (when `name` is not sent); no email, phone, code, qualification or ID data is read. `sample-papers.qualificationId` must exist. `organogram.parentId` must exist and may not make a loop. `events.endDate` may not be before `date`.
+
+Every write is audited: action `public_site.<slug>.create|update|delete`, entity `publicSite`, `before` and `after`, `meta.resource`.
+
+### Public: GET /public/:slug
+
+No login. Read only (no other method exists). Returns only items with `published: true`, in `sortOrder` order (events: by `date`, then `sortOrder`), with only the public fields in the table above. Admin fields (`published`, `sortOrder`, `createdBy`, timestamps, `registryId`, `qualificationId`) are never returned.
+
+Query: `page`, `pageSize` (default 20, max 100); `people?kind=`, `posh?kind=`, `office-documents?category=`, `events?month=YYYY-MM` (events whose dates touch the month). Any other parameter is `400`.
+
+Response `200`: `{ "page": 1, "pageSize": 20, "total": 2, "items": [ ... ] }` with `Cache-Control: public, max-age=300`. An unknown slug is `404`. Rate limit: `PUBLIC_RATE_LIMIT_MAX` requests (120) per `PUBLIC_RATE_LIMIT_WINDOW_MS` (60 seconds) per client IP, then `429 RATE_LIMITED` with `Retry-After`.
+
+---
+
 ## Phase 2+ stubs
 
 Evidence, questions/tests, proctoring, grievances, analytics, public site, accessibility, security — unchanged intent; see SCHEMA. Recognition and Annexure II sectors are Phase 1 (`/admin/recognition`, `qualifications.sector`). ERF weights are in docs/ERF.md (task C-01). Phase 2 notes that are not endpoints yet: live NCVET monitoring link, geo-tagged photos and videos for offline and blended batches (Guidelines 4.11b), the 24-hour travel rule, theory-only online batches with no assessor, and gender-parity staff reporting (open questions 80–84).
