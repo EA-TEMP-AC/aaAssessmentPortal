@@ -114,8 +114,8 @@ export const compliance = Object.freeze({
   PROCTOR_DETECTION_INTERVAL_MS: 1000,
   PROCTOR_FLAG_COOLDOWN_SECONDS: 15,
   PROCTOR_SUSTAINED_SECONDS: Object.freeze({
-    face_not_present: 5,
-    camera_blocked: 5,
+    face_not_present: 2,
+    camera_blocked: 2,
     camera_frozen: 8,
   }),
   /**

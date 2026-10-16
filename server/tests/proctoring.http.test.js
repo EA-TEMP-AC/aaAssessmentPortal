@@ -201,7 +201,7 @@ describe("Proctoring API (server/src/modules/proctoring)", () => {
           snapshotIntervalSeconds: 30,
           detectionIntervalMs: 1000,
           flagCooldownSeconds: 15,
-          sustainedSeconds: { face_not_present: 5, camera_blocked: 5, camera_frozen: 8 },
+          sustainedSeconds: { face_not_present: 2, camera_blocked: 2, camera_frozen: 8 },
         },
       });
       expect(first.config.snapshotIntervalSeconds).toBe(
