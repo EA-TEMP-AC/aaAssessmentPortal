@@ -246,6 +246,7 @@ it("shows the location as text without a map, and the unavailable reason", async
   await user.click(buttons[0]);
   const panel = screen.getByRole("region", { name: "Evidence detail" });
   expect(panel).toHaveFocus();
+  expect(buttons[0]).toHaveAttribute("aria-controls", panel.id);
   expect(within(panel).getByText(/Latitude 19.076, longitude 72.8777, accuracy about 12.5 metres/)).toBeInTheDocument();
   expect(within(panel).getByText(HASH)).toBeInTheDocument();
   expect(within(panel).queryByRole("button", { name: "Verify" })).not.toBeInTheDocument();
