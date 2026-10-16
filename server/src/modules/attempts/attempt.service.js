@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { answerTimings } from "../reports/answer-timing.js";
 import { resolveBatchSettings } from "../../config/batch-settings.js";
 import { compliance } from "../../config/compliance.js";
 import { env } from "../../config/env.js";
@@ -627,6 +628,7 @@ async function presentForStaff(attempt, now, qmap, questions = attempt.questions
   const base = await presentForCandidate(attempt, now, qmap, questions);
   const closed = attempt.status !== "in_progress";
   const candidate = await Candidate.findById(attempt.candidateId).select("name").lean();
+  const timings = answerTimings(attempt);
   return {
     ...base,
     abId: idStr(attempt.abId),
@@ -645,6 +647,9 @@ async function presentForStaff(attempt, now, qmap, questions = attempt.questions
         scoredBy: raw.scoredBy ?? null,
         markedBy: idStr(raw.markedBy),
         markedAt: iso(raw.markedAt),
+        // X-09: when the answer was last saved and the time since the answer before it.
+        answeredAt: iso(raw.answeredAt),
+        secondsSpent: timings.get(q.questionId) ?? null,
       };
       // The key is shown only after the attempt closes, and never to the candidate.
       if (closed) out.correctAnswer = qmap.get(q.questionId)?.correctAnswer ?? null;
@@ -682,8 +687,9 @@ export async function getAttempt(user, id, { itemPage = 1 } = {}) {
   };
 }
 
-function presentRow(a) {
+function presentRow(a, names = new Map()) {
   return {
+    candidateName: names.get(String(a.candidateId)) ?? null,
     id: idStr(a._id),
     testPaperId: idStr(a.testPaperId),
     batchId: idStr(a.batchId),
@@ -732,7 +738,16 @@ export async function listAttempts(user, filters) {
       .lean(),
     Attempt.countDocuments(filter),
   ]);
-  return { items: rows.map(presentRow), total, page: filters.page, pageSize: filters.pageSize };
+  const candidates = await Candidate.find({ _id: { $in: rows.map((r) => r.candidateId) } })
+    .select("name")
+    .lean();
+  const names = new Map(candidates.map((c) => [String(c._id), c.name]));
+  return {
+    items: rows.map((r) => presentRow(r, names)),
+    total,
+    page: filters.page,
+    pageSize: filters.pageSize,
+  };
 }
 
 const presentGroup = (g, name) => ({

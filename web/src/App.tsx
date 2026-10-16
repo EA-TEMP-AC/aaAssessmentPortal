@@ -12,6 +12,8 @@ import { AuditLogPage } from "./pages/AuditLogPage";
 import { ChangePasswordPage } from "./pages/ChangePasswordPage";
 import { EvidencePage } from "./pages/EvidencePage";
 import { ProctoringPage } from "./pages/ProctoringPage";
+import { AnswerSheetPage } from "./pages/AnswerSheetPage";
+import { ProctoringReportPage } from "./pages/ProctoringReportPage";
 import { ExamPage } from "./pages/ExamPage";
 import { ExamWindowGate, ExamWindowPage } from "./pages/ExamWindowPage";
 import { FaceMatchDemoPage } from "./pages/FaceMatchDemoPage";
@@ -43,7 +45,7 @@ import {
   TeamPage,
 } from "./site/pages";
 import { AuthBridge, GuestOnly, RequireAuth, RequireRole, RootRedirect } from "./routing/guards";
-import { EXAM_ROLES } from "./routing/access";
+import { ANSWER_SHEET_ROLES, EXAM_ROLES, PROCTORING_ROLES } from "./routing/access";
 import { NAV_ITEMS } from "./routing/nav";
 import { createQueryClient } from "./queryClient";
 
@@ -67,6 +69,12 @@ export function AppRoutes() {
               </Route>
             ) : null}
             <Route path="/home" element={<RoleHomePage />} />
+            <Route element={<RequireRole roles={ANSWER_SHEET_ROLES} />}>
+              <Route path="/attempts/:attemptId/sheet" element={<AnswerSheetPage />} />
+            </Route>
+            <Route element={<RequireRole roles={PROCTORING_ROLES} />}>
+              <Route path="/proctoring/report/:sessionId" element={<ProctoringReportPage />} />
+            </Route>
             <Route path="/account/password" element={<ChangePasswordPage />} />
             {import.meta.env.DEV ? (
               <Route element={<RequireRole roles={["aa_admin"]} />}>

@@ -1021,3 +1021,45 @@ button.button-danger {
 .exam-progress-text { margin: 0 0 0.75rem; font-weight: 600; }
 .exam-checks { list-style: none; padding: 0; margin: 0 0 1rem; display: grid; gap: 0.5rem; }
 .exam-check-row { border: 1px solid #d5dbe3; border-radius: 6px; padding: 0.5rem 0.75rem; }
+
+/* X-09: report and answer sheet pages */
+.report-sheet {
+  max-width: 60rem;
+}
+.report-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 0.5rem 1.5rem;
+  margin: 1rem 0;
+}
+.report-grid dt {
+  font-weight: 600;
+}
+.report-grid dd {
+  margin: 0;
+}
+.report-flags,
+.sheet-questions {
+  list-style: none;
+  padding: 0;
+}
+.report-flag,
+.sheet-question {
+  border-top: 1px solid #c8c8c8;
+  padding: 0.75rem 0;
+  break-inside: avoid;
+}
+@media print {
+  .app-header,
+  .sidebar,
+  .skip-link,
+  .no-print {
+    display: none !important;
+  }
+  .app-body {
+    display: block;
+  }
+  .report-sheet {
+    max-width: none;
+  }
+}

@@ -934,6 +934,8 @@ describe("Attempt engine API (server/src/modules/attempts)", () => {
         scoringComplete: false,
       });
       expect(row.questions).toBeUndefined();
+      // X-09: the list names the candidate so the answer sheet can be found by name.
+      expect(typeof row.candidateName).toBe("string");
       expect(JSON.stringify(res.body)).not.toContain("SECRET");
     });
 

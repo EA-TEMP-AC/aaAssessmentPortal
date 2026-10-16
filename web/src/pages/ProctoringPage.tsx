@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { errorMessage } from "../api/client";
 import type { EvidenceRow } from "../api/evidence";
@@ -376,7 +377,8 @@ function SessionPanel({
       <h2 id={headingId}>{data ? `Session of ${candidateLabel(data)}` : "Session"}</h2>
       <button type="button" className="button-quiet" onClick={onClose}>
         Close session
-      </button>
+      </button>{" "}
+      <Link to={`/proctoring/report/${id}`}>Open printable report</Link>
       <p role="status" className="proctor-notice">
         {notice}
       </p>

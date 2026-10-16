@@ -214,3 +214,6 @@ export function isBatchRosterWritable(status: string): boolean {
 }
 
 
+
+/** X-09: who may open a candidate's answer sheet. Same roles as the server's attempt list. */
+export const ANSWER_SHEET_ROLES: readonly Role[] = ["aa_admin", "assessor", "ab_reviewer"];

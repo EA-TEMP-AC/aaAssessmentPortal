@@ -9,6 +9,7 @@ import { SCHEME_READ_ROLES } from "../../routing/access";
 import { SCHEME_DATA_KEY } from "../schemes/schemeData";
 import { visibleBatchActions, type BatchAction } from "./access";
 import { ActionDialog } from "./ActionDialog";
+import { BatchReportsSection } from "./BatchReportsSection";
 import { TestPaperSection } from "./TestPaperSection";
 import { BATCH_ACTION_LABELS, BATCH_STATUS_LABELS } from "./labels";
 import { formatInstant } from "./sla";
@@ -18,6 +19,9 @@ import { useNow } from "./useNow";
 import { CandidateRoster } from "./CandidateRoster";
 import { ResultSection } from "./ResultSection";
 import { canSeeResultSection } from "./resultMarks";
+
+/** X-09: the roles that may read attempts and download the marks file. */
+const REPORT_ROLES = ["aa_admin", "assessor", "ab_reviewer"];
 
 type Banner = { id: number; message: string };
 
@@ -262,6 +266,7 @@ export function BatchDetailPage() {
               </>
             ) : null}
             <TestPaperSection batch={batch} role={session.user.role} />
+            {REPORT_ROLES.includes(session.user.role) ? <BatchReportsSection batchId={batch.id} /> : null}
             <CandidateRoster batch={batch} role={session.user.role} />
             {canSeeResultSection(session.user.role) ? (
               <ResultSection batch={batch} role={session.user.role} />

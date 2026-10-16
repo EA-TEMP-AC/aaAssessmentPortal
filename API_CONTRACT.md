@@ -1893,3 +1893,13 @@ No body. Any `2xx`. Sent every 15 seconds while the exam is open.
 Returns `{ items: [{ id, message, createdAt }] }`. Polled every 15 seconds; each new `id` is shown once to the candidate, who must acknowledge it (the acknowledgement is not sent yet).
 
 Flag types the engine raises (`web/src/exam/proctorBridge.ts`): `tab_hidden`, `fullscreen_exit`, `window_blur`, `permission_revoked`, `object_detected`, `face_not_present`, `multiple_faces`, `person_detected`, `phone_detected`, `camera_blocked`, `camera_frozen`, `face_mismatch`, `id_mismatch`, `id_unreadable` (P-09). No video is uploaded; only flags and occasional snapshots, plus, at Start, the ID card photo (`id_proof`) and the selfie (`proctor_snapshot`). Face flags only ask a person to look; they never block or fail a candidate. The `detail` of a face flag is `{ label: "distance_<hundredths>", count: <samples> }` (docs/PROCTORING_ENGINE.md); no descriptor or image data is ever sent.
+
+
+## Reports (task X-09)
+
+### GET /api/v1/reports/batches/:batchId/marks.xlsx
+Roles: `aa_admin`, `assessor` (own batches), `ab_reviewer` (own awarding body). `404` for a batch outside the caller's scope. No query keys (`400` otherwise). Returns an .xlsx (`Content-Disposition: attachment`, `Cache-Control: no-store`): one row per candidate on the roster with status, start and finish time (IST), marks obtained, maximum, percentage, whether marking is still pending and obtained / maximum for each NOS. Names starting with `=`, `+`, `-`, `@` are written with a leading `'`. Access log: one `learner` list row per candidate (fields `name`, `marks`). Audit: `report.marks_export` with the row count only.
+
+### Changes to existing attempt reads (X-09)
+- `GET /api/v1/attempts/:id` for staff: each question also has `answeredAt` (last save of the answer) and `secondsSpent` (seconds since the answer before it, or since the start for the first; `null` when not answered). Estimate, see DECISIONS 921.
+- `GET /api/v1/attempts`: each row also has `candidateName` (`null` when unknown).
