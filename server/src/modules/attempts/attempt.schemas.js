@@ -12,6 +12,9 @@ const objectId = (label) => z.string().regex(/^[a-fA-F0-9]{24}$/, `Invalid ${lab
 
 export const idParamSchema = z.object({ id: objectId("attempt ID") }).strict();
 
+/** GET /attempts/available takes no query keys. */
+export const availableQuerySchema = z.object({}).strict();
+
 export const getQuerySchema = z
   .object({ itemPage: z.coerce.number().int().min(1).max(1_000_000).default(1) })
   .strict();

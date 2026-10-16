@@ -10,6 +10,7 @@ import { AuditLog } from "../../models/audit-log.model.js";
 import { AttendanceRecord } from "../../models/attendance-record.model.js";
 import { Batch } from "../../models/batch.model.js";
 import { Candidate } from "../../models/candidate.model.js";
+import { Qualification } from "../../models/qualification.model.js";
 import { Question } from "../../models/question.model.js";
 import { TestPaper } from "../../models/test-paper.model.js";
 import { MAX_QUESTIONS_PER_PAGE } from "../../config/content-controls.js";
@@ -201,6 +202,180 @@ export async function closeExpiredAttempts({ now = new Date(), limit = 200 } = {
 
 /* ------------------------------------------------------------------- start */
 
+/**
+ * The rules a new attempt must pass, in the order POST /attempts/start checks them. Start and
+ * GET /attempts/available both use this, so the list and the start never disagree. Returns
+ * null when the paper may be started, else { status, code, message, details }.
+ * `today` is the IST calendar date; `deliverable` is false when a paper question is missing.
+ */
+export function startBlocker({ batch, paper, absent, deliverable, today }) {
+  if (batch.status !== "in_progress") {
+    return {
+      status: 409,
+      code: "ATTEMPT_BATCH_NOT_IN_PROGRESS",
+      message: "The batch is not in progress",
+      details: { status: batch.status },
+    };
+  }
+  if (today < batch.assessmentStartDate || today > batch.assessmentEndDate) {
+    return {
+      status: 409,
+      code: "ATTEMPT_OUTSIDE_ASSESSMENT_WINDOW",
+      message: "Today is outside the assessment dates of this batch",
+      details: {
+        assessmentStartDate: batch.assessmentStartDate,
+        assessmentEndDate: batch.assessmentEndDate,
+      },
+    };
+  }
+  if (absent) {
+    return {
+      status: 409,
+      code: "ATTEMPT_CANDIDATE_ABSENT",
+      message: "The candidate is marked absent for this batch",
+    };
+  }
+  // A paper that is unknown, a draft, or for another qualification looks the same: not found.
+  if (
+    !paper ||
+    paper.status !== "approved" ||
+    paper.complete !== true ||
+    idStr(paper.qualificationId) !== idStr(batch.qualificationId)
+  ) {
+    return { status: 404, code: "NOT_FOUND", message: "Unknown id" };
+  }
+  if (!sameLanguage(paper.rules?.language, batch.assessmentLanguage)) {
+    return {
+      status: 409,
+      code: "ATTEMPT_LANGUAGE_MISMATCH",
+      message: "The test paper language differs from the batch assessment language",
+    };
+  }
+  if (!deliverable) {
+    return {
+      status: 409,
+      code: "ATTEMPT_PAPER_UNAVAILABLE",
+      message: "The test paper cannot be delivered",
+    };
+  }
+  return null;
+}
+
+/**
+ * What the start button may do for one paper. An open attempt resumes (start replays it); a
+ * closed one cannot be started again (start replays it closed, so the reason is ATTEMPT_CLOSED).
+ */
+export function startableFor(attempt, blocker) {
+  if (attempt?.status === "in_progress") return { ok: true };
+  if (attempt) return { ok: false, reason: "ATTEMPT_CLOSED" };
+  return blocker ? { ok: false, reason: blocker.code } : { ok: true };
+}
+
+const shortCode = (id) => String(id).slice(-6).toUpperCase();
+
+/**
+ * GET /attempts/available. Every approved, complete paper of the qualification of each
+ * in-progress batch where this candidate is on the active roster. Ids, labels, counts and
+ * the candidate's own attempt state only: never question ids, text, options, keys or marks.
+ */
+export async function listAvailable(user) {
+  if (user.linkedProfileId == null) return { items: [] };
+  const rosters = await Candidate.find({ learnerId: user.linkedProfileId, active: true })
+    .select("_id batchId")
+    .lean();
+  if (rosters.length === 0) return { items: [] };
+  const rosterByBatch = new Map(rosters.map((r) => [idStr(r.batchId), r]));
+  const batches = await Batch.find({
+    _id: { $in: rosters.map((r) => r.batchId) },
+    status: "in_progress",
+  })
+    .select("status qualificationId assessmentStartDate assessmentEndDate assessmentLanguage")
+    .sort({ assessmentStartDate: 1, _id: 1 })
+    .lean();
+  if (batches.length === 0) return { items: [] };
+
+  const qualificationIds = [...new Set(batches.map((b) => idStr(b.qualificationId)))];
+  const rosterIds = batches.map((b) => rosterByBatch.get(idStr(b._id))._id);
+  const [papers, qualifications, absences, attempts] = await Promise.all([
+    TestPaper.find({
+      qualificationId: { $in: qualificationIds },
+      status: "approved",
+      complete: true,
+    })
+      .select("qualificationId status complete rules.language durationMinutes items.questionId")
+      .sort({ createdAt: 1, _id: 1 })
+      .lean(),
+    Qualification.find({ _id: { $in: qualificationIds } })
+      .select("code name")
+      .lean(),
+    AttendanceRecord.find({ candidateId: { $in: rosterIds }, present: false })
+      .select("candidateId")
+      .lean(),
+    Attempt.find({ candidateId: { $in: rosterIds } })
+      .select("testPaperId candidateId status startedAt deadlineAt acceptUntil")
+      .lean(),
+  ]);
+
+  const allIds = papers.flatMap((p) => p.items.map((i) => i.questionId));
+  const present = new Set(
+    (await Question.find({ _id: { $in: allIds } }).distinct("_id")).map(String),
+  );
+  const qualById = new Map(qualifications.map((q) => [idStr(q._id), q]));
+  const absentRosters = new Set(absences.map((a) => idStr(a.candidateId)));
+  const now = new Date();
+  const attemptByKey = new Map();
+  for (const row of attempts) {
+    let attempt = row;
+    // Lazy timeout, as on any other read: an open attempt past its accept window closes here.
+    if (attempt.status === "in_progress" && isPastAcceptWindow(attempt, now)) {
+      const full = await Attempt.findById(attempt._id).lean();
+      if (full) attempt = (await expireIfDue(full, now, "read")).attempt;
+    }
+    attemptByKey.set(`${idStr(attempt.candidateId)}:${idStr(attempt.testPaperId)}`, attempt);
+  }
+
+  const today = istCalendarDate(now);
+  const items = [];
+  for (const batch of batches) {
+    const roster = rosterByBatch.get(idStr(batch._id));
+    const qual = qualById.get(idStr(batch.qualificationId));
+    const batchName = `${qual ? `${qual.code} ${qual.name}` : "Batch"}, ${
+      batch.assessmentStartDate
+    } to ${batch.assessmentEndDate}`;
+    for (const paper of papers) {
+      if (idStr(paper.qualificationId) !== idStr(batch.qualificationId)) continue;
+      const attempt = attemptByKey.get(`${idStr(roster._id)}:${idStr(paper._id)}`) ?? null;
+      const blocker = startBlocker({
+        batch,
+        paper,
+        absent: absentRosters.has(idStr(roster._id)),
+        deliverable: paper.items.every((i) => present.has(String(i.questionId))),
+        today,
+      });
+      items.push({
+        batchId: idStr(batch._id),
+        batchName,
+        paperId: idStr(paper._id),
+        paperCode: shortCode(paper._id),
+        paperName: `Paper ${shortCode(paper._id)}`,
+        language: paper.rules?.language ?? null,
+        questionCount: paper.items.length,
+        durationMinutes: paper.durationMinutes ?? compliance.ATTEMPT_DEFAULT_DURATION_MINUTES,
+        attempt: attempt
+          ? {
+              id: idStr(attempt._id),
+              status: attempt.status,
+              startedAt: iso(attempt.startedAt),
+              deadline: iso(attempt.deadlineAt),
+            }
+          : null,
+        startable: startableFor(attempt, blocker),
+      });
+    }
+  }
+  return { items };
+}
+
 export async function startAttempt(user, { batchId, testPaperId }) {
   if (user.linkedProfileId == null) throw forbidden();
   const batch = await Batch.findById(batchId).lean();
@@ -216,58 +391,21 @@ export async function startAttempt(user, { batchId, testPaperId }) {
     return { attempt, created: false };
   }
 
-  if (batch.status !== "in_progress") {
-    throw new AppError(409, "ATTEMPT_BATCH_NOT_IN_PROGRESS", "The batch is not in progress", {
-      status: batch.status,
-    });
-  }
-  const today = istCalendarDate(new Date());
-  if (today < batch.assessmentStartDate || today > batch.assessmentEndDate) {
-    throw new AppError(
-      409,
-      "ATTEMPT_OUTSIDE_ASSESSMENT_WINDOW",
-      "Today is outside the assessment dates of this batch",
-      {
-        assessmentStartDate: batch.assessmentStartDate,
-        assessmentEndDate: batch.assessmentEndDate,
-      },
-    );
-  }
-  const absent = await AttendanceRecord.exists({
-    batchId: batch._id,
-    candidateId: roster._id,
-    present: false,
+  const [absent, paper] = await Promise.all([
+    AttendanceRecord.exists({ batchId: batch._id, candidateId: roster._id, present: false }),
+    TestPaper.findById(testPaperId).lean(),
+  ]);
+  const ids = paper?.items?.map((i) => i.questionId) ?? [];
+  const deliverable =
+    paper != null && (await Question.countDocuments({ _id: { $in: ids } })) === ids.length;
+  const blocker = startBlocker({
+    batch,
+    paper,
+    absent: Boolean(absent),
+    deliverable,
+    today: istCalendarDate(new Date()),
   });
-  if (absent) {
-    throw new AppError(
-      409,
-      "ATTEMPT_CANDIDATE_ABSENT",
-      "The candidate is marked absent for this batch",
-    );
-  }
-  // A paper that is unknown, a draft, or for another qualification looks the same: not found.
-  const paper = await TestPaper.findById(testPaperId).lean();
-  if (
-    !paper ||
-    paper.status !== "approved" ||
-    paper.complete !== true ||
-    idStr(paper.qualificationId) !== idStr(batch.qualificationId)
-  ) {
-    throw notFound();
-  }
-  if (!sameLanguage(paper.rules?.language, batch.assessmentLanguage)) {
-    throw new AppError(
-      409,
-      "ATTEMPT_LANGUAGE_MISMATCH",
-      "The test paper language differs from the batch assessment language",
-    );
-  }
-
-  const ids = paper.items.map((i) => i.questionId);
-  const found = await Question.countDocuments({ _id: { $in: ids } });
-  if (found !== ids.length) {
-    throw new AppError(409, "ATTEMPT_PAPER_UNAVAILABLE", "The test paper cannot be delivered");
-  }
+  if (blocker) throw new AppError(blocker.status, blocker.code, blocker.message, blocker.details);
 
   const order = shuffle([...paper.items], createRng(randomInt(0, 4294967296)));
   const questions = order.map((i) => ({
