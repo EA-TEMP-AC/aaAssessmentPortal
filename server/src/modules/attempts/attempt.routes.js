@@ -12,6 +12,7 @@ import {
 } from "../../models/roles.js";
 import {
   answersSchema,
+  availableQuerySchema,
   getQuerySchema,
   idParamSchema,
   listQuerySchema,
@@ -23,6 +24,7 @@ import {
   auditView,
   getAttempt,
   getSummary,
+  listAvailable,
   listAttempts,
   presentAttempt,
   presentClosed,
@@ -51,6 +53,16 @@ attemptsRouter.post(
       after: auditView(attempt),
     };
     res.status(created ? 201 : 200).json(await presentAttempt(req.user, attempt));
+  }),
+);
+
+/** GET /api/v1/attempts/available. The candidate's own papers and whether each can start. */
+attemptsRouter.get(
+  "/available",
+  requireRoles(...ATTEMPT_CANDIDATE_ROLES),
+  asyncHandler(async (req, res) => {
+    availableQuerySchema.parse(req.query);
+    res.status(200).json(await listAvailable(req.user));
   }),
 );
 
