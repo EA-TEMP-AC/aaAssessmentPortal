@@ -1653,6 +1653,16 @@ Role: `candidate` (on the active roster of the batch). Body `{ "batchId", "testP
 Errors: `403 FORBIDDEN` (not on the active roster), `404 NOT_FOUND` (unknown batch; paper unknown, draft, incomplete or for another qualification), `409 ATTEMPT_BATCH_NOT_IN_PROGRESS`, `409 ATTEMPT_OUTSIDE_ASSESSMENT_WINDOW` (today in IST is before `assessmentStartDate` or after `assessmentEndDate`; `details` has both dates), `409 ATTEMPT_CANDIDATE_ABSENT` (attendance row with `present: false`), `409 ATTEMPT_LANGUAGE_MISMATCH` (`paper.rules.language` differs from the batch `assessmentLanguage`, compared trimmed and without case), `409 ATTEMPT_PAPER_UNAVAILABLE`. These apply to new attempts only; an existing attempt is still returned.
 Audit: `attempt.start`, or `attempt.start_replay`.
 
+### GET /api/v1/attempts/available
+Role: `candidate` only; every other role `403 FORBIDDEN`. No query keys (`400 VALIDATION_ERROR` otherwise). Task B-19.
+Lists, for each batch where the candidate is on the active roster and the batch is `in_progress`, every `approved`, complete test paper of the batch's qualification. Returns `{ items: [...] }`, batches by assessment start date, papers oldest first. Each item:
+`{ batchId, batchName, paperId, paperCode, paperName, language, questionCount, durationMinutes, attempt, startable }`.
+- `batchName` is the qualification code and name with the assessment dates; `paperName` is "Paper " plus `paperCode` (last 6 characters of the paper id, upper case). Q700.
+- `language` is the paper's `rules.language`. `durationMinutes` is the paper's value, else 60.
+- `attempt` is `null` or the candidate's own attempt on that paper: `{ id, status, startedAt, deadline }`. An open attempt past its accept window is closed as `timed_out` by this read (Q703).
+- `startable` is `{ ok: true }` or `{ ok: false, reason }`. The rules are the ones `POST /attempts/start` uses (one shared function): `reason` is the error code start would return (`ATTEMPT_OUTSIDE_ASSESSMENT_WINDOW`, `ATTEMPT_LANGUAGE_MISMATCH`, `ATTEMPT_CANDIDATE_ABSENT`, `ATTEMPT_PAPER_UNAVAILABLE`). An `in_progress` attempt is `ok: true` (start resumes it). A `submitted` or `timed_out` attempt is `ok: false` with `ATTEMPT_CLOSED` (start replays it closed, Q701).
+Never returns question ids, question text, options, answer keys, marks or scores, and never another candidate's attempts. Writes nothing except a lazy timeout.
+
 ### GET /api/v1/attempts/:id
 Roles: `candidate` (own attempt only), `aa_admin`, `assessor` (the batch's assessor), `ab_reviewer` (own awarding body). Anything else `403 FORBIDDEN`. An attempt past its accept window is closed as `timed_out` by this read. The candidate view is the start shape. The staff view adds `abId`, `candidateId`, `learnerId`, `candidateName`, `scores` and, per question, `nosId`, `pcId`, `awardedMarks`, `scoreStatus`, `scoredBy`, `markedBy`, `markedAt`, and `correctAnswer` only once the attempt is closed. The staff view is paged like `GET /tests/:id`: `?itemPage=` (default 1), at most 50 questions per page, with `itemPage`, `itemPageSize` and `itemTotal` in the reply. It counts the questions returned against the daily content read cap and writes access-log rows. The candidate view is not paged. Who sees answer keys is unchanged.
 
