@@ -16,6 +16,7 @@ import { Evidence } from "../src/models/evidence.model.js";
 import { Proctor } from "../src/models/proctor.model.js";
 import { resetLoginRateLimit } from "../src/modules/auth/login-rate-limit.js";
 import { createLocalStorage } from "../src/modules/evidence/storage/local.driver.js";
+import { createS3Storage } from "../src/modules/evidence/storage/s3.driver.js";
 import { setEvidenceStorage } from "../src/modules/evidence/storage/storage.js";
 import { clearCollections, startMongo, stopMongo } from "./helpers/db.js";
 import { createUser, webDevice } from "./helpers/fixtures.js";
@@ -288,6 +289,34 @@ describe("evidence vault", () => {
       });
       expect(again.status).toBe(200);
       expect(again.body.replayed).toBe(true);
+    });
+
+    it("stores an id_proof with S3 server-side encryption on (D3)", async () => {
+      const w = await world();
+      const sent = [];
+      const local = createLocalStorage({ dir: storageDir });
+      setEvidenceStorage(
+        createS3Storage({
+          bucket: "aa-evidence",
+          client: {
+            send: async (command) => {
+              sent.push(command.input);
+              await local.put({ key: command.input.Key, body: command.input.Body });
+              return {};
+            },
+          },
+        }),
+      );
+      try {
+        const res = await upload(w.assessorSession.token, w.batch._id, {
+          fields: { kind: "id_proof" },
+        });
+        expect(res.status, JSON.stringify(res.body)).toBe(201);
+        expect(sent).toHaveLength(1);
+        expect(sent[0]).toMatchObject({ Bucket: "aa-evidence", ServerSideEncryption: "AES256" });
+      } finally {
+        setEvidenceStorage(createLocalStorage({ dir: storageDir }));
+      }
     });
 
     it("accepts png, pdf and mp4 by their bytes", async () => {

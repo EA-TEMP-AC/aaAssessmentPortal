@@ -79,12 +79,17 @@ export async function chargeContentReads(req, count) {
 /**
  * Guard for an endpoint that returns question content: counts the reads, then writes the
  * access-log rows. Either failing means the caller sends nothing.
+ * `exemptFromCap` skips the count and the cap (Q588: staff attempt views) but the access-log
+ * rows are still written.
  *
  * @param {import("express").Request} req
- * @param {{ questionIds?: Array<string|object>, paperId?: string|object, kind: "list"|"detail" }} entry
+ * @param {{ questionIds?: Array<string|object>, paperId?: string|object, kind: "list"|"detail", exemptFromCap?: boolean }} entry
  */
-export async function guardContentRead(req, { questionIds = [], paperId, kind }) {
-  await chargeContentReads(req, questionIds.length);
+export async function guardContentRead(
+  req,
+  { questionIds = [], paperId, kind, exemptFromCap = false },
+) {
+  if (!exemptFromCap) await chargeContentReads(req, questionIds.length);
   if (paperId) {
     await recordAccess(req, {
       subjectType: "testPaper",

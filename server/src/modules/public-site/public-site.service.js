@@ -104,6 +104,7 @@ export async function createItem(slug, actor, body) {
       createdBy: actor._id,
       updatedBy: actor._id,
     });
+    invalidatePublicPages(slug);
     return presentAdmin(slug, created.toObject());
   } catch (err) {
     return writeError(err);
@@ -160,6 +161,7 @@ export async function updateItem(slug, actor, id, body) {
         { new: true, runValidators: true },
       )
       .lean();
+    invalidatePublicPages(slug);
     return { before: presentAdmin(slug, existing), after: presentAdmin(slug, saved) };
   } catch (err) {
     return writeError(err);
@@ -186,7 +188,25 @@ export async function deleteItem(slug, actor, id) {
   if (slug === "organogram") {
     await def.model.updateMany({ parentId: existing._id }, { $set: { parentId: null } });
   }
+  invalidatePublicPages(slug);
   return presentAdmin(slug, saved);
+}
+
+/** D7: the people and POSH pages are answered from memory for 60 seconds. */
+export const SHORT_CACHE_SLUGS = Object.freeze(["people", "posh"]);
+export const SHORT_CACHE_SECONDS = 60;
+/** @type {Map<string, { at: number, body: object }>} */
+const publicPageCache = new Map();
+
+export function resetPublicPageCache() {
+  publicPageCache.clear();
+}
+
+/** An admin write drops the cached pages of that section at once. */
+function invalidatePublicPages(slug) {
+  for (const key of publicPageCache.keys()) {
+    if (key.startsWith(`${slug}:`)) publicPageCache.delete(key);
+  }
 }
 
 const REGISTRY_CACHE_MS = 60_000;
@@ -195,6 +215,7 @@ let registryCache = null;
 
 export function resetRegistryIdCache() {
   registryCache = null;
+  publicPageCache.clear();
 }
 
 /** Ids of active assessors (valid TOA) and proctors, reused for 60 seconds. */
@@ -213,7 +234,17 @@ async function activeRegistryIds(now = Date.now()) {
 }
 
 /** Anonymous list: published items only, whitelisted fields, never an admin field. */
-export async function listPublic(slug, query) {
+export async function listPublic(slug, query, now = Date.now()) {
+  if (!SHORT_CACHE_SLUGS.includes(slug)) return listPublicUncached(slug, query);
+  const key = `${slug}:${JSON.stringify(query)}`;
+  const hit = publicPageCache.get(key);
+  if (hit && now - hit.at < SHORT_CACHE_SECONDS * 1000) return hit.body;
+  const body = await listPublicUncached(slug, query);
+  publicPageCache.set(key, { at: now, body });
+  return body;
+}
+
+async function listPublicUncached(slug, query) {
   const def = RESOURCES[slug];
   const filter = { published: true, archived: { $ne: true } };
 

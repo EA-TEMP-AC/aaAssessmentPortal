@@ -3,6 +3,7 @@ import request from "supertest";
 import { createApp } from "../src/app.js";
 import { compliance } from "../src/config/compliance.js";
 import { Attempt } from "../src/models/attempt.model.js";
+import { AccessLog } from "../src/models/access-log.model.js";
 import { AuditLog } from "../src/models/audit-log.model.js";
 import { Batch } from "../src/models/batch.model.js";
 import { Candidate } from "../src/models/candidate.model.js";
@@ -1123,7 +1124,7 @@ describe("Attempt engine API (server/src/modules/attempts)", () => {
       }
     });
 
-    it("pages the staff view at 50 questions and counts the reads", async () => {
+    it("pages the staff view at 50 questions, logs the access and spends no daily cap (Q588)", async () => {
       const { body } = await start(w.candidate, w);
       const stored = await Attempt.findById(body.id).lean();
       const many = Array.from({ length: 60 }, (_, i) => stored.questions[i % 6]);
@@ -1133,13 +1134,36 @@ describe("Attempt engine API (server/src/modules/attempts)", () => {
       expect(first.status).toBe(200);
       expect(first.body.questions).toHaveLength(50);
       expect(first.body).toMatchObject({ itemPage: 1, itemPageSize: 50, itemTotal: 60 });
-      expect((await ContentReadCounter.findOne({}).lean()).count).toBe(50);
+      expect(await ContentReadCounter.countDocuments({})).toBe(0);
 
       const second = await request(app)
         .get(`/api/v1/attempts/${body.id}?itemPage=2`)
         .set(bearer(w.admin.token));
       expect(second.body.questions).toHaveLength(10);
-      expect((await ContentReadCounter.findOne({}).lean()).count).toBe(60);
+      expect(await ContentReadCounter.countDocuments({})).toBe(0);
+
+      // Every staff view is still access-logged, per question and per request.
+      const logged = await AccessLog.find({ actorId: w.admin.userId, subjectType: "question" });
+      expect(logged.length).toBeGreaterThanOrEqual(1);
+      expect(logged.every((row) => row.kind === "detail" && row.fields.includes("stem"))).toBe(
+        true,
+      );
+    });
+
+    it("lets staff view past the daily cap, which is already spent (Q588)", async () => {
+      const { body } = await start(w.candidate, w);
+      const day = istCalendarDate(new Date());
+      for (const staff of [w.admin, w.assessor, w.reviewer]) {
+        await ContentReadCounter.create({
+          userId: staff.userId,
+          day,
+          count: 500,
+        });
+        const res = await getAttempt(staff, body.id);
+        expect(res.status, JSON.stringify(res.body)).toBe(200);
+        expect((await ContentReadCounter.findOne({ userId: staff.userId, day })).count).toBe(500);
+      }
+      expect(await AccessLog.countDocuments({ subjectType: "question" })).toBeGreaterThanOrEqual(3);
     });
   });
 });

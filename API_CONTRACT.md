@@ -598,7 +598,7 @@ Roles: write `aa_admin` | `mis`; read those plus `ncvet_viewer`. Audit on `PUT`.
 
 Owned by **B-06c**. Roles: the batch read roles (`aa_admin`, `mis`, `assessor`, `proctor`, `candidate`, `tp`, `ab_reviewer`, `ncvet_viewer`), each in their batch row scope (SCHEMA §5). `sme` is `403`. Unknown batch id is `404`. An existing batch outside the caller's scope is `403`. Every response is `200` `{ "items": [ ... ] }` with no paging.
 
-- `GET /batches/:id/login-events?from=&to=&actorType=`: login events for the batch, oldest `capturedAt` first. Items are the login-event response object without `replayed`. `from` and `to` are ISO-8601 instants (with `Z` or an offset), inclusive bounds on `capturedAt`; `from` after `to` is `400`. `actorType` is `assessor`, `proctor`, or `student`. A `candidate` gets only their own student events.
+- `GET /batches/:id/login-events?from=&to=&actorType=`: login events for the batch, oldest `capturedAt` first. Items are the login-event response object without `replayed`. `from` and `to` are ISO-8601 instants (with `Z` or an offset), inclusive bounds on `capturedAt`; `from` after `to` is `400`. `actorType` is `assessor`, `proctor`, or `student`. A `candidate` gets only their own student events (D8). `tp` (own batches) gets the same items with `lat`, `lng` and `accuracy` set to `null` and `device.deviceId` removed (`device` keeps `platform` and `appVersion`); the location status, unavailable reason and no-fix flags stay. `aa_admin`, `mis`, `ncvet_viewer`, `ab_reviewer`, `assessor` and `proctor` (each within their scope) see every field.
 - `GET /batches/:id/attendance`: the attendance rows (shape below), ordered by `candidateId`. A `candidate` gets only their own row.
 - `GET /batches/:id/checklist`: every checklist submission (shape below, without `replayed`, `batchStatus`, and `batchStatusVersion`), newest `capturedAt` first. `?latest=true` returns only the newest one. A `latest` value other than `true` or `false` is `400`.
 
@@ -1127,7 +1127,7 @@ No login. Read only (no other method exists). Returns only items with `published
 
 Query: `page`, `pageSize` (default 20, max 100); `people?kind=`, `posh?kind=`, `office-documents?category=`, `events?month=YYYY-MM` (events whose dates touch the month). Any other parameter is `400`. The public `page` is at most 100 (`400` above it). The `people` list reuses its set of active registry ids for 60 seconds, so a change in the registry can take up to a minute to show.
 
-Response `200`: `{ "page": 1, "pageSize": 20, "total": 2, "items": [ ... ] }` with `Cache-Control: public, max-age=300`. An unknown slug is `404`. Rate limit: `PUBLIC_RATE_LIMIT_MAX` requests (120) per `PUBLIC_RATE_LIMIT_WINDOW_MS` (60 seconds) per client IP, then `429 RATE_LIMITED` with `Retry-After`. Behind a reverse proxy set `TRUST_PROXY` (below) so the limit uses the real client IP.
+Response `200`: `{ "page": 1, "pageSize": 20, "total": 2, "items": [ ... ] }` with `Cache-Control: public, max-age=300`, except `people` and `posh`, which are `public, max-age=60` (D7). The server also keeps the `people` and `posh` answers in memory for 60 seconds per slug and query; any admin create, change or delete of that slug drops them at once (a browser or CDN copy can still be up to 60 seconds old). An unknown slug is `404`. Rate limit: `PUBLIC_RATE_LIMIT_MAX` requests (120) per `PUBLIC_RATE_LIMIT_WINDOW_MS` (60 seconds) per client IP, then `429 RATE_LIMITED` with `Retry-After`. Behind a reverse proxy set `TRUST_PROXY` (below) so the limit uses the real client IP.
 ---
 
 ## Question bank (Phase 2, Q-01)
@@ -1424,7 +1424,7 @@ Same roles and scope as the row. Writes an access-log row for **every** download
 - S3 driver: `200` JSON `{ "url", "expiresAt", "contentType", "size", "sha256" }`. The link is short-lived (`EVIDENCE_SIGNED_URL_SECONDS`, default 120) and the response is `Cache-Control: no-store`.
 - Local driver: `200` with the file bytes, `Content-Type` from the stored type, `Content-Disposition: attachment; filename="evidence-<id>.<ext>"`, `X-Content-Type-Options: nosniff`, `Cache-Control: private, no-store`.
 
-Query: `inline=true|false` (optional, default `false`; any other value or parameter is `400`). With S3 and `inline=true`, the link is issued with `Content-Disposition: inline` instead of `attachment`, so a browser can show an image or PDF in the page. It applies only to `image/*` and `application/pdf` files; any other type still gets `attachment`. The Download button does not send it. The local driver always sends `attachment`.
+Query: `inline=true|false` (optional, default `false`; any other value or parameter is `400`). With S3 and `inline=true`, the link is issued with `Content-Disposition: inline` instead of `attachment`, so a browser can show an image or PDF in the page. It applies only to `image/*` and `application/pdf` files; any other type still gets `attachment`. The Download button does not send it. The local driver always sends `attachment`. The Evidence page's Preview sends `inline=true` (Q600); the local driver ignores it and streams the bytes.
 
 If the stored object is missing, `404 NOT_FOUND`.
 
@@ -1601,7 +1601,7 @@ Roles: `aa_admin`, `mis`. All writes are audited.
   Roles: `aa_admin` only. Soft-delete / archive: sets `archived: true` and `published: false`. Hard deletion is never performed. Archived items are hidden from default admin lists and never appear on public endpoints. Response: `204 No Content`.
 
 ### Public endpoints (`/api/public/:slug`)
-Anonymous read-only access. Response header: `Cache-Control: public, max-age=300`. Rate-limited per IP (`PUBLIC_RATE_LIMIT_MAX` per minute).
+Anonymous read-only access. Response header: `Cache-Control: public, max-age=300` (`people` and `posh`: `public, max-age=60`, D7). Rate-limited per IP (`PUBLIC_RATE_LIMIT_MAX` per minute).
 
 - Only items with `published: true` and `archived: false` are returned.
 - Whitelisted fields only (audit metadata, `createdBy`, `updatedBy`, `registryId`, etc. are omitted).
@@ -1677,7 +1677,7 @@ Lists, for each batch where the candidate is on the active roster and the batch 
 Never returns question ids, question text, options, answer keys, marks or scores, and never another candidate's attempts. Writes nothing except a lazy timeout.
 
 ### GET /api/v1/attempts/:id
-Roles: `candidate` (own attempt only), `aa_admin`, `assessor` (the batch's assessor), `ab_reviewer` (own awarding body). Anything else `403 FORBIDDEN`. An attempt past its accept window is closed as `timed_out` by this read. The candidate view is the start shape. The staff view adds `abId`, `candidateId`, `learnerId`, `candidateName`, `scores` and, per question, `nosId`, `pcId`, `awardedMarks`, `scoreStatus`, `scoredBy`, `markedBy`, `markedAt`, and `correctAnswer` only once the attempt is closed. The staff view is paged like `GET /tests/:id`: `?itemPage=` (default 1), at most 50 questions per page, with `itemPage`, `itemPageSize` and `itemTotal` in the reply. It counts the questions returned against the daily content read cap and writes access-log rows. The candidate view is not paged. Who sees answer keys is unchanged.
+Roles: `candidate` (own attempt only), `aa_admin`, `assessor` (the batch's assessor), `ab_reviewer` (own awarding body). Anything else `403 FORBIDDEN`. An attempt past its accept window is closed as `timed_out` by this read. The candidate view is the start shape. The staff view adds `abId`, `candidateId`, `learnerId`, `candidateName`, `scores` and, per question, `nosId`, `pcId`, `awardedMarks`, `scoreStatus`, `scoredBy`, `markedBy`, `markedAt`, and `correctAnswer` only once the attempt is closed. The staff view is paged like `GET /tests/:id`: `?itemPage=` (default 1), at most 50 questions per page, with `itemPage`, `itemPageSize` and `itemTotal` in the reply. It writes access-log rows for the questions returned but does not count against the daily content read cap (Q588); the cap still applies to the question bank and `GET /tests/:id?withQuestions=true`. The candidate view is not paged. Who sees answer keys is unchanged.
 
 ### PUT /api/v1/attempts/:id/answers
 Role: `candidate`, own attempt. Body `{ "answers": [{ "questionId", "answer" }] }` (1 to 200 rows, no repeated question, `answer` up to 10000 characters, `null` or blank clears). For MCQ the answer must be an option key (case-insensitive; the stored key is kept). Last write wins per question. Accepted until `acceptUntil` (deadline plus grace). One bad row saves nothing. Returns `{ saved, savedAt, deadlineAt, remainingSeconds }`.

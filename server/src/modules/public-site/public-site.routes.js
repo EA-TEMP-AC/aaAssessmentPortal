@@ -17,6 +17,8 @@ import {
   deleteItem,
   getAdmin,
   listAdmin,
+  SHORT_CACHE_SECONDS,
+  SHORT_CACHE_SLUGS,
   listPublic,
   updateItem,
 } from "./public-site.service.js";
@@ -155,7 +157,8 @@ publicSiteRouter.get(
   asyncHandler(async (req, res) => {
     const slug = slugOf(req);
     const body = await listPublic(slug, publicListQuery(slug).parse(req.query));
-    res.set("Cache-Control", `public, max-age=${PUBLIC_CACHE_SECONDS}`);
+    const seconds = SHORT_CACHE_SLUGS.includes(slug) ? SHORT_CACHE_SECONDS : PUBLIC_CACHE_SECONDS;
+    res.set("Cache-Control", `public, max-age=${seconds}`);
     res.status(200).json(body);
   }),
 );

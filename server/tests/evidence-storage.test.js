@@ -53,6 +53,38 @@ describe("S3 driver (mocked client)", () => {
     expect(command.input.Body).toBe(body);
   });
 
+  it("asks for server-side encryption on every put (AES256 by default)", async () => {
+    const { storage, send } = setup();
+    await storage.put({
+      key: "evidence/k.jpg",
+      body: Readable.from([Buffer.from("abc")]),
+      size: 3,
+      contentType: "image/jpeg",
+    });
+    expect(send.mock.calls[0][0].input).toMatchObject({ ServerSideEncryption: "AES256" });
+    expect(send.mock.calls[0][0].input.SSEKMSKeyId).toBeUndefined();
+  });
+
+  it("uses KMS with a key id when configured", async () => {
+    const send = vi.fn(async () => ({}));
+    const storage = createS3Storage({
+      bucket: "b",
+      client: { send },
+      serverSideEncryption: "aws:kms",
+      kmsKeyId: "arn:aws:kms:ap-south-1:1:key/abc",
+    });
+    await storage.put({
+      key: "evidence/k.jpg",
+      body: Readable.from([Buffer.from("abc")]),
+      size: 3,
+      contentType: "image/jpeg",
+    });
+    expect(send.mock.calls[0][0].input).toMatchObject({
+      ServerSideEncryption: "aws:kms",
+      SSEKMSKeyId: "arn:aws:kms:ap-south-1:1:key/abc",
+    });
+  });
+
   it("gets an object as a stream", async () => {
     const { storage, send } = setup(async () => ({
       Body: Readable.from([Buffer.from("hello")]),

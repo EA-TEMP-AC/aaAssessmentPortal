@@ -313,6 +313,21 @@ it("previews an image from a signed link (S3) without printing the link", async 
   expect(createObjectURL).not.toHaveBeenCalled();
 });
 
+it("asks for an inline link on Preview (Q600) but not on Download", async () => {
+  const mock = stub(fileHandler(() => jsonResponse(200, { url: SIGNED, expiresAt: "2026-11-20T05:02:00.000Z" })));
+  const { user, panel } = await openDetail();
+  const fileCalls = () => mock.mock.calls.map((c) => url(c[0])).filter((u) => u.pathname.endsWith("/evidence/ev1/file"));
+
+  await user.click(within(panel).getByRole("button", { name: "Preview" }));
+  await within(panel).findByRole("img");
+  expect(fileCalls()).toHaveLength(1);
+  expect(fileCalls()[0].searchParams.get("inline")).toBe("true");
+
+  await user.click(within(panel).getByRole("button", { name: /Download/ }));
+  await waitFor(() => expect(fileCalls()).toHaveLength(2));
+  expect(fileCalls()[1].search).toBe("");
+});
+
 it("previews a PDF in an object element", async () => {
   stub((u) =>
     u.pathname.endsWith("/file")

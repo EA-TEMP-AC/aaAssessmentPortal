@@ -350,6 +350,23 @@ export async function recordLoginEvent(user, actorType, body, context = {}) {
   return { event, replayed: false, abId: batch?.abId ?? null };
 }
 
+/** D8: roles that never see exact GPS or the device id. */
+const LOGIN_EVENT_COARSE_ROLES = Object.freeze(["tp"]);
+
+/**
+ * Drops lat, lng, accuracy and the device id. The location status, the
+ * unavailable reason, the no-fix flags and the platform stay.
+ */
+export function withoutGpsAndDeviceId(event) {
+  const { lat, lng, accuracy, device, ...rest } = event;
+  void lat;
+  void lng;
+  void accuracy;
+  const { deviceId, ...deviceRest } = device ?? {};
+  void deviceId;
+  return { ...rest, lat: null, lng: null, accuracy: null, device: device ? deviceRest : null };
+}
+
 /**
  * GET /batches/:id/login-events. The caller's batch scope is checked first.
  * A candidate sees only their own student events.
@@ -371,10 +388,12 @@ export async function listBatchLoginEvents(user, batch, query = {}) {
     if (query.to) filter.capturedAt.$lte = new Date(query.to);
   }
   const docs = await LoginEvent.find(filter).sort({ capturedAt: 1, _id: 1 }).lean();
+  const coarse = LOGIN_EVENT_COARSE_ROLES.includes(user?.role);
   return {
     items: docs.map((doc) => {
-      const event = presentLoginEvent(doc, { replayed: false });
+      let event = presentLoginEvent(doc, { replayed: false });
       delete event.replayed;
+      if (coarse) event = withoutGpsAndDeviceId(event);
       return event;
     }),
   };

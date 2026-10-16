@@ -91,6 +91,7 @@ Evidence files (photos, ID proofs, PDFs, MP4 video) are written through one stor
 | `EVIDENCE_S3_ENDPOINT` | no | Endpoint URL of an S3-compatible service. Leave unset for AWS |
 | `EVIDENCE_S3_FORCE_PATH_STYLE` | no | `true` for services that need path-style addressing (default `false`) |
 | `EVIDENCE_S3_ACCESS_KEY_ID`, `EVIDENCE_S3_SECRET_ACCESS_KEY` | no | Set both or neither. When neither is set the AWS default credential chain is used. Credentials exist only in the environment, never in code, and are never logged |
+| `EVIDENCE_S3_SSE`, `EVIDENCE_S3_KMS_KEY_ID` | no | Server-side encryption sent with every upload: `AES256` (default) or `aws:kms` with an optional key id |
 | `EVIDENCE_SIGNED_URL_SECONDS` | no | Download link lifetime, 10 to 900 (default 120) |
 
 Turn on server-side encryption and versioning (or object lock) on the bucket, and give the application key put and get rights only, no delete. Uploads pass through a temporary file under the OS temp folder and are removed afterwards. Check file integrity with `POST /api/v1/evidence/:id/verify`.

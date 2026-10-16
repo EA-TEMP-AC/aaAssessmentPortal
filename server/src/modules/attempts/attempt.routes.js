@@ -161,6 +161,8 @@ attemptsRouter.get(
       await guardContentRead(req, {
         questionIds: view.questions.map((q) => q.questionId),
         kind: "detail",
+        // Q588: a staff attempt view is access-logged but does not use up the daily read cap.
+        exemptFromCap: true,
       });
     }
     res.status(200).json(view);

@@ -33,7 +33,7 @@ Not encrypted, on purpose or not yet: names, `externalRef`, `accommodations`, tr
 
 **Migration.** `npm run migrate:encrypt` (`--dry-run` to report only) encrypts rows still in plain text, fills missing hashes, re-encrypts rows written under an older key id, and replaces the old unique `email_1` index with the hash index. It is safe to run twice. A row it cannot decrypt is reported and left alone.
 
-**Retention.** `server/src/config/retention.js` lists a period per data class (§3.23 and the file header). `npm run retention:dry-run` reports counts of records past their period. Nothing is deleted (decision 263).
+**Retention.** `server/src/config/retention.js` lists a period per data class (§3.23 and the file header), including evidence of kind `id_proof` and `proctor_snapshot` (D3). `npm run retention:dry-run` reports counts of records past their period. Nothing is deleted (decision 263).
 
 ---
 
@@ -593,7 +593,9 @@ One row per file in the evidence vault. The file is in object storage (section 3
 
 Indexes: `{ clientEventId: 1 }` unique; `{ batchId: 1, capturedAt: -1 }`; `{ candidateId: 1, capturedAt: -1 }`; `{ abId: 1, capturedAt: -1 }`; `{ uploaderUserId: 1, capturedAt: -1 }`; `{ sha256: 1 }`; `{ sessionId: 1, capturedAt: -1 }`.
 
-Read scope: aa_admin, mis, ncvet_viewer all rows; ab_reviewer `abId`; assessor and proctor `uploaderUserId` (their own uploads, not the batch's), plus `proctor_snapshot` rows of their assigned batches (P-01); candidate, tp, sme none. A candidate uploads only `proctor_snapshot` or `id_proof` for their own session. **P-09, D3:** rows of kind `id_proof` are visible only to `aa_admin` and the uploader, for every role, in list, detail, file and verify; each such read is access-logged. ID card photos and selfies are personal data with no retention period yet and need encryption at rest (docs/DPDP_CHECKLIST.md).
+**Encryption at rest (D3).** With the S3 driver every object is written with `ServerSideEncryption` (`AES256` by default; `EVIDENCE_S3_SSE=aws:kms` with optional `EVIDENCE_S3_KMS_KEY_ID`), so `id_proof` and `proctor_snapshot` files are encrypted at rest. The local driver (development and tests only; refused in production) does not encrypt; use an encrypted volume. **Retention:** `config/retention.js` has `evidenceIdProof` (365 days from `uploadedAt`) and `evidenceProctorSnapshot` (90 days); `npm run retention:dry-run` lists counts (and ids with `--ids=N`). Nothing is deleted.
+
+Read scope: aa_admin, mis, ncvet_viewer all rows; ab_reviewer `abId`; assessor and proctor `uploaderUserId` (their own uploads, not the batch's), plus `proctor_snapshot` rows of their assigned batches (P-01); candidate, tp, sme none. A candidate uploads only `proctor_snapshot` or `id_proof` for their own session. **P-09, D3:** rows of kind `id_proof` are visible only to `aa_admin` and the uploader, for every role, in list, detail, file and verify; each such read is access-logged. ID card photos and selfies are personal data; proposed retention periods are in `config/retention.js` and need sign-off (Q725).
 
 #### 3.24.1 Storage
 
