@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ApiError, errorMessage } from "../api/client";
-import { isPaperCode, startAttempt, type Attempt } from "../api/attempts";
-import { listBatches, type BatchRecord } from "../api/batches";
+import { startAttempt, type Attempt } from "../api/attempts";
+import { listAvailableAssessments, type AvailableAssessment } from "../api/availableAssessments";
 import { ExamScreen, type ExamOutcome } from "../exam/ExamScreen";
 import { exitExamFullscreen, requestExamFullscreen } from "../exam/fullscreen";
 import { PrecheckScreen, type FrameCheckOptions } from "../exam/PrecheckScreen";
 import { stopStream } from "../exam/precheck";
 
-type Choice = { batch: BatchRecord; testPaperId: string };
+type Choice = { batchId: string; paperId: string; heading: string };
 
 type Phase =
   | { name: "choose" }
@@ -22,94 +22,123 @@ type Props = {
   autosaveDebounceMs?: number;
 };
 
-function formatDate(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return iso;
-  return new Intl.DateTimeFormat("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium" }).format(date);
+const LANGUAGE_NAMES: Record<string, string> = {
+  en: "English",
+  hi: "Hindi",
+  bn: "Bengali",
+  ne: "Nepali",
+  ta: "Tamil",
+  te: "Telugu",
+  mr: "Marathi",
+  gu: "Gujarati",
+  kn: "Kannada",
+  ml: "Malayalam",
+  pa: "Punjabi",
+  or: "Odia",
+  as: "Assamese",
+  ur: "Urdu",
+};
+
+function languageName(value: string | null): string {
+  if (!value) return "Not recorded";
+  return LANGUAGE_NAMES[value.trim().toLowerCase()] ?? value;
+}
+
+/** Plain words for the reasons GET /attempts/available and POST /attempts/start share. */
+function reasonText(code: string): string {
+  switch (code) {
+    case "ATTEMPT_OUTSIDE_ASSESSMENT_WINDOW":
+      return "today is outside the assessment dates of your batch.";
+    case "ATTEMPT_LANGUAGE_MISMATCH":
+      return "this paper is not in the language of your batch. Tell your assessor or proctor.";
+    case "ATTEMPT_CANDIDATE_ABSENT":
+      return "you are marked absent for this batch. Speak to your assessor.";
+    case "ATTEMPT_PAPER_UNAVAILABLE":
+      return "this paper cannot be shown. Tell your assessor or proctor.";
+    case "ATTEMPT_BATCH_NOT_IN_PROGRESS":
+      return "this batch is not open for exams right now.";
+    case "ATTEMPT_CLOSED":
+      return "this exam is already closed.";
+    default:
+      return "it cannot be started right now. Ask your assessor or proctor.";
+  }
+}
+
+function stateText(item: AvailableAssessment): string {
+  if (item.attempt?.status === "in_progress") return "In progress";
+  if (item.attempt?.status === "submitted") return "Submitted";
+  if (item.attempt?.status === "timed_out") return "Timed out";
+  if (item.startable.ok) return "Not started";
+  return `Not available now: ${reasonText(item.startable.reason)}`;
 }
 
 function startErrorText(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.status === 404) {
-      return "That paper code was not found for this batch. Check the code with your assessor or proctor.";
+      return "This paper was not found for your batch. Tell your assessor or proctor.";
     }
-    if (error.code === "ATTEMPT_BATCH_NOT_IN_PROGRESS") return "This batch is not open for exams right now.";
-    if (error.code === "ATTEMPT_PAPER_UNAVAILABLE") return "This paper is not available. Tell your assessor or proctor.";
+    if (error.code.startsWith("ATTEMPT_")) return `This exam cannot start: ${reasonText(error.code)}`;
     if (error.status === 403) return "You are not on the list of candidates for this batch.";
   }
   return errorMessage(error);
 }
 
-function BatchCard({ batch, onContinue }: { batch: BatchRecord; onContinue: (testPaperId: string) => void }) {
-  const [code, setCode] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const inputId = `paper-${batch.id}`;
-  const hintId = `${inputId}-hint`;
-  const errorId = `${inputId}-error`;
-
+function PaperRow({ item, onChoose }: { item: AvailableAssessment; onChoose: (choice: Choice) => void }) {
+  const stateId = `paper-${item.batchId}-${item.paperId}-state`;
+  const resume = item.attempt?.status === "in_progress";
+  const enabled = item.startable.ok && (item.attempt === null || resume);
   return (
-    <li className="exam-batch">
-      <h2>Batch {batch.id}</h2>
+    <li className="exam-paper">
+      <h3>{item.paperName}</h3>
       <dl className="batch-facts">
         <div>
-          <dt>Sector</dt>
-          <dd>{batch.sector || "Not recorded"}</dd>
-        </div>
-        <div>
-          <dt>Assessment dates</dt>
-          <dd>
-            {formatDate(batch.assessmentStartDate)} to {formatDate(batch.assessmentEndDate)}
-          </dd>
-        </div>
-        <div>
           <dt>Language</dt>
-          <dd>{batch.assessmentLanguage || "Not recorded"}</dd>
+          <dd>{languageName(item.language)}</dd>
+        </div>
+        <div>
+          <dt>Questions</dt>
+          <dd>{item.questionCount}</dd>
+        </div>
+        <div>
+          <dt>Duration</dt>
+          <dd>{item.durationMinutes} minutes</dd>
+        </div>
+        <div>
+          <dt>State</dt>
+          <dd id={stateId}>{stateText(item)}</dd>
         </div>
       </dl>
-      <form
-        noValidate
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (!isPaperCode(code)) {
-            setError("Enter the 24-character paper code exactly as your assessor or proctor gave it.");
-            return;
-          }
-          setError(null);
-          onContinue(code.trim().toLowerCase());
-        }}
+      <button
+        type="button"
+        disabled={!enabled}
+        aria-describedby={stateId}
+        onClick={() => onChoose({ batchId: item.batchId, paperId: item.paperId, heading: item.paperName })}
       >
-        <div className="field">
-          <label htmlFor={inputId}>Paper code</label>
-          <span id={hintId} className="field-hint">
-            Your assessor or proctor gives you this code at the start of the exam. If you already started this paper,
-            the same code takes you back to it.
-          </span>
-          <input
-            id={inputId}
-            value={code}
-            onChange={(event) => setCode(event.target.value)}
-            autoComplete="off"
-            spellCheck={false}
-            aria-describedby={error ? `${hintId} ${errorId}` : hintId}
-            aria-invalid={error ? true : undefined}
-          />
-          {error ? (
-            <span id={errorId} className="field-error">
-              {error}
-            </span>
-          ) : null}
-        </div>
-        <button type="submit">Continue to the camera check</button>
-      </form>
+        {resume ? "Resume" : "Start"}
+        <span className="visually-hidden"> {item.paperName}</span>
+      </button>
     </li>
   );
 }
 
-function BatchList({ onChoose }: { onChoose: (choice: Choice) => void }) {
+type BatchGroup = { batchId: string; batchName: string; items: AvailableAssessment[] };
+
+function groupByBatch(items: AvailableAssessment[]): BatchGroup[] {
+  const groups = new Map<string, BatchGroup>();
+  for (const item of items) {
+    const group = groups.get(item.batchId) ?? { batchId: item.batchId, batchName: item.batchName, items: [] };
+    group.items.push(item);
+    groups.set(item.batchId, group);
+  }
+  return [...groups.values()];
+}
+
+function AssessmentList({ onChoose }: { onChoose: (choice: Choice) => void }) {
   const headingRef = useRef<HTMLHeadingElement>(null);
   const query = useQuery({
-    queryKey: ["exam", "batches"],
-    queryFn: ({ signal }) => listBatches({ status: "in_progress", pageSize: 100 }, signal),
+    queryKey: ["exam", "available"],
+    queryFn: ({ signal }) => listAvailableAssessments(signal),
+    refetchOnMount: "always",
   });
 
   useEffect(() => {
@@ -121,8 +150,8 @@ function BatchList({ onChoose }: { onChoose: (choice: Choice) => void }) {
       <h1 id="exam-list-heading" ref={headingRef} tabIndex={-1}>
         Exam
       </h1>
-      <p>Your batches that are in progress are listed here. You need a working camera to take the exam.</p>
-      {query.isPending ? <p role="status">Loading your batches…</p> : null}
+      <p>The assessments you can take are listed here. You need a working camera to take the exam.</p>
+      {query.isPending ? <p role="status">Loading your assessments…</p> : null}
       {query.isError ? (
         <div role="alert" className="form-error">
           <p>{errorMessage(query.error)}</p>
@@ -131,19 +160,20 @@ function BatchList({ onChoose }: { onChoose: (choice: Choice) => void }) {
           </button>
         </div>
       ) : null}
-      {query.isSuccess && query.data.items.length === 0 ? (
-        <p role="status">
-          You have no batches in progress right now. Your exam appears here once the assessment of your batch starts.
-        </p>
+      {query.isSuccess && query.data.length === 0 ? (
+        <p role="status">No assessments are available to you right now</p>
       ) : null}
-      {query.isSuccess && query.data.items.length > 0 ? (
+      {query.isSuccess && query.data.length > 0 ? (
         <ul className="exam-batches">
-          {query.data.items.map((batch) => (
-            <BatchCard
-              key={batch.id}
-              batch={batch}
-              onContinue={(testPaperId) => onChoose({ batch, testPaperId })}
-            />
+          {groupByBatch(query.data).map((group) => (
+            <li key={group.batchId} className="exam-batch">
+              <h2>{group.batchName}</h2>
+              <ul className="exam-papers">
+                {group.items.map((item) => (
+                  <PaperRow key={item.paperId} item={item} onChoose={onChoose} />
+                ))}
+              </ul>
+            </li>
           ))}
         </ul>
       ) : null}
@@ -206,7 +236,7 @@ export function ExamPage({ frameCheck, autosaveDebounceMs }: Props) {
     setStarting(true);
     setStartError(null);
     try {
-      const attempt = await startAttempt({ batchId: choice.batch.id, testPaperId: choice.testPaperId });
+      const attempt = await startAttempt({ batchId: choice.batchId, testPaperId: choice.paperId });
       setStarting(false);
       if (attempt.status !== "in_progress") {
         finish("closed");
@@ -223,7 +253,7 @@ export function ExamPage({ frameCheck, autosaveDebounceMs }: Props) {
   if (phase.name === "precheck") {
     return (
       <PrecheckScreen
-        heading={`Batch ${phase.choice.batch.id}`}
+        heading={phase.choice.heading}
         starting={starting}
         startError={startError}
         frameCheck={frameCheck}
@@ -249,7 +279,7 @@ export function ExamPage({ frameCheck, autosaveDebounceMs }: Props) {
     return <Finished outcome={phase.outcome} onBack={() => setPhase({ name: "choose" })} />;
   }
   return (
-    <BatchList
+    <AssessmentList
       onChoose={(choice) => {
         setStartError(null);
         setPhase({ name: "precheck", choice });

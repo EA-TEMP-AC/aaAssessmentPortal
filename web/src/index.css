@@ -933,6 +933,9 @@ button.button-danger {
 .exam-batches { list-style: none; padding: 0; margin: 0; display: grid; gap: 1rem; }
 .exam-batch { border: 1px solid #d5dbe3; border-radius: 6px; padding: 1rem; }
 .exam-batch h2 { margin-top: 0; font-size: 1.125rem; }
+.exam-papers { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.75rem; }
+.exam-paper { border-top: 1px solid #d5dbe3; padding-top: 0.75rem; }
+.exam-paper h3 { margin: 0 0 0.5rem; font-size: 1rem; }
 .exam-camera { margin: 0 0 0.75rem; }
 .exam-preview { width: 100%; max-width: 24rem; background: #111827; border-radius: 6px; }
 .exam-check-ok { color: #14532d; font-weight: 600; }
