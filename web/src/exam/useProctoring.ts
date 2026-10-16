@@ -14,6 +14,8 @@ type Input = {
   stream: MediaStream | null;
   /** P-09: ID card photo, selfie and the matcher from the camera check. Memory only. */
   face?: FaceStart | null;
+  /** X-08: when false the engine does not watch full screen (no fullscreen_exit flag). Default false. */
+  requireFullscreen?: boolean;
 };
 
 export type ProctoringView = {
@@ -35,7 +37,7 @@ export type ProctoringView = {
  * Opens the proctoring session for an attempt, starts the engine with the camera
  * stream, sends heartbeats and polls warnings. Nothing here is stored in the browser.
  */
-export function useProctoring({ attemptId, batchId, stream, face }: Input): ProctoringView {
+export function useProctoring({ attemptId, batchId, stream, face, requireFullscreen = false }: Input): ProctoringView {
   const [unavailable, setUnavailable] = useState<string | null>(null);
   const [status, setStatus] = useState<ProctorStatus>({ state: "starting" });
   const [warnings, setWarnings] = useState<ProctorWarning[]>([]);
@@ -142,6 +144,7 @@ export function useProctoring({ attemptId, batchId, stream, face }: Input): Proc
           batchId,
           config: session.config,
           faceMatcher: faceStart?.matcher ?? undefined,
+          watchFullscreen: requireFullscreen,
           onFlag: (flag) => {
             if (live && !stopped.current) {
               const at = Date.now();
@@ -165,7 +168,7 @@ export function useProctoring({ attemptId, batchId, stream, face }: Input): Proc
       live = false;
       stop();
     };
-  }, [attemptId, batchId, stream, stop, clearMatcher]);
+  }, [attemptId, batchId, stream, stop, clearMatcher, requireFullscreen]);
 
   const acknowledge = useCallback((id: string) => {
     setWarnings((current) => current.filter((row) => row.id !== id));

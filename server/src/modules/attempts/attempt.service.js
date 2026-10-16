@@ -455,6 +455,8 @@ export async function listAvailable(user) {
       items.push({
         batchId: idStr(batch._id),
         batchName,
+        assessmentStartDate: batch.assessmentStartDate,
+        assessmentEndDate: batch.assessmentEndDate,
         paperId: idStr(paper._id),
         paperCode: shortCode(paper._id),
         paperName: paper.name || defaultPaperName(qual?.name, paper.rules?.language),

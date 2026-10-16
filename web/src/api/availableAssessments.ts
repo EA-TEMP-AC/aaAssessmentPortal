@@ -12,6 +12,8 @@ export type AvailableAttempt = {
   status: AttemptStatus;
   startedAt: string | null;
   deadline: string | null;
+  /** Seconds left for an open attempt at the time of the read; null for a closed one or an older server. */
+  remainingSeconds: number | null;
 };
 
 export type Startable = { ok: true } | { ok: false; reason: string };
@@ -19,6 +21,9 @@ export type Startable = { ok: true } | { ok: false; reason: string };
 export type AvailableAssessment = {
   batchId: string;
   batchName: string;
+  /** Batch dates, YYYY-MM-DD (IST). Null from an older server. */
+  assessmentStartDate: string | null;
+  assessmentEndDate: string | null;
   paperId: string;
   paperName: string;
   language: string | null;
@@ -57,6 +62,7 @@ function parseAttempt(value: unknown): AvailableAttempt | null {
     status: status as AttemptStatus,
     startedAt: str(value.startedAt),
     deadline: str(value.deadline),
+    remainingSeconds: count(value.remainingSeconds),
   };
 }
 
@@ -76,6 +82,8 @@ export function parseAvailableAssessment(value: unknown): AvailableAssessment {
   return {
     batchId,
     batchName: str(value.batchName) ?? `Batch ${batchId}`,
+    assessmentStartDate: str(value.assessmentStartDate),
+    assessmentEndDate: str(value.assessmentEndDate),
     paperId,
     paperName: str(value.paperName) ?? str(value.paperCode) ?? paperId,
     language: str(value.language),

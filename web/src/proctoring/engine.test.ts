@@ -76,9 +76,11 @@ async function startEngine(
   s: ReturnType<typeof setup>,
   stream = fakeStream().stream,
   faceMatcher?: FakeFaceMatcher,
+  watchFullscreen?: boolean,
 ) {
   await s.engine.start({
     faceMatcher,
+    watchFullscreen,
     stream,
     sessionId: "sess-1",
     attemptId: "att-1",
@@ -271,6 +273,20 @@ describe("flags", () => {
     expect(s.flags.map((f) => f.type).sort()).toEqual(["fullscreen_exit", "tab_hidden", "window_blur"]);
     s.engine.stop();
     Reflect.deleteProperty(document, "visibilityState");
+    Reflect.deleteProperty(document, "fullscreenElement");
+  });
+
+  it("does not raise fullscreen_exit when full screen is not watched (X-08)", async () => {
+    const s = setup();
+    await startEngine(s, undefined, undefined, false);
+    let full: Element | null = document.body;
+    Object.defineProperty(document, "fullscreenElement", { configurable: true, get: () => full });
+    document.dispatchEvent(new Event("fullscreenchange"));
+    full = null;
+    document.dispatchEvent(new Event("fullscreenchange"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(s.flags).toEqual([]);
+    s.engine.stop();
     Reflect.deleteProperty(document, "fullscreenElement");
   });
 

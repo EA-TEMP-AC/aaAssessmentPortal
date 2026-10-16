@@ -40,31 +40,25 @@ export function isBlackFrame(rgba: Uint8ClampedArray): boolean {
 export type BrowserCheck = { id: string; label: string; ok: boolean; required: boolean; help: string };
 
 export function checkBrowser(): BrowserCheck[] {
-  const camera = typeof navigator !== "undefined" && typeof navigator.mediaDevices?.getUserMedia === "function";
+  const supported =
+    typeof navigator !== "undefined" &&
+    typeof navigator.mediaDevices?.getUserMedia === "function" &&
+    typeof fetch === "function";
   const secure = typeof window !== "undefined" && window.isSecureContext !== false;
-  const fullscreen =
-    typeof document !== "undefined" && typeof document.documentElement.requestFullscreen === "function";
   return [
     {
-      id: "camera",
-      label: "Camera access",
-      ok: camera,
+      id: "browser",
+      label: "Browser supported",
+      ok: supported,
       required: true,
-      help: "Use a recent Chrome, Edge, Firefox or Safari.",
+      help: "This browser cannot use the camera. Use a recent Chrome, Edge, Firefox or Safari.",
     },
     {
       id: "secure",
       label: "Secure connection",
       ok: secure,
       required: true,
-      help: "Open the portal with an https:// address.",
-    },
-    {
-      id: "fullscreen",
-      label: "Full screen",
-      ok: fullscreen,
-      required: false,
-      help: "Your browser cannot go full screen. You can still take the exam.",
+      help: "The page is not on a secure connection. Open the portal with an https:// address.",
     },
   ];
 }

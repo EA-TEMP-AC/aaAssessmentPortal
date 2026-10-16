@@ -13,6 +13,7 @@ import { ChangePasswordPage } from "./pages/ChangePasswordPage";
 import { EvidencePage } from "./pages/EvidencePage";
 import { ProctoringPage } from "./pages/ProctoringPage";
 import { ExamPage } from "./pages/ExamPage";
+import { ExamWindowGate, ExamWindowPage } from "./pages/ExamWindowPage";
 import { FaceMatchDemoPage } from "./pages/FaceMatchDemoPage";
 import { MasterDataPage } from "./pages/MasterDataPage";
 import { PapersPage } from "./pages/papers/PapersPage";
@@ -42,6 +43,7 @@ import {
   TeamPage,
 } from "./site/pages";
 import { AuthBridge, GuestOnly, RequireAuth, RequireRole, RootRedirect } from "./routing/guards";
+import { EXAM_ROLES } from "./routing/access";
 import { NAV_ITEMS } from "./routing/nav";
 import { createQueryClient } from "./queryClient";
 
@@ -132,6 +134,13 @@ export function AppRoutes() {
                 />
               </Route>
             ))}
+          </Route>
+        </Route>
+        <Route element={<ExamWindowGate />}>
+          <Route element={<RequireAuth />}>
+            <Route element={<RequireRole roles={EXAM_ROLES} />}>
+              <Route path="/exam/window/:batchId/:paperId" element={<ExamWindowPage />} />
+            </Route>
           </Route>
         </Route>
         <Route path="/site" element={<SiteLayout />}>

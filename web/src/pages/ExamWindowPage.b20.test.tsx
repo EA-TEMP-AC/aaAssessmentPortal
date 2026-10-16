@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, expect, it, vi } from "vitest";
 import { setSession } from "../api/session";
 import { createQueryClient } from "../queryClient";
@@ -18,9 +18,12 @@ import {
   stubFetch,
 } from "../test/examFixtures";
 import { fakeFaceChecks, makeVideosReady } from "../test/faceFixtures";
-import { ExamPage } from "./ExamPage";
+import { ExamWindowPage } from "./ExamWindowPage";
 
-// B-20: the candidate pop-up before the exam starts, and marks on the finished screen.
+// B-20: the candidate pop-up before the exam starts, and marks on the finished screen
+// (moved to the exam window by X-08).
+
+const PATH = `/exam/window/${BATCH_ID}/${PAPER_ID}`;
 
 const available = {
   batchId: BATCH_ID,
@@ -52,21 +55,38 @@ function renderPage() {
   return render(
     <QueryClientProvider client={createQueryClient()}>
       <MemoryRouter
+        initialEntries={[PATH]}
         future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
       >
-        <ExamPage
-          frameCheck={{ sample: () => frame(150), attempts: 2, intervalMs: 1 }}
-          faceChecks={fakeFaceChecks()}
-          autosaveDebounceMs={20}
-        />
+        <Routes>
+          <Route
+            path="/exam/window/:batchId/:paperId"
+            element={
+              <ExamWindowPage
+                frameCheck={{
+                  sample: () => frame(150),
+                  attempts: 2,
+                  intervalMs: 1,
+                }}
+                faceChecks={fakeFaceChecks()}
+                autosaveDebounceMs={20}
+              />
+            }
+          />
+          <Route path="/exam" element={<h1>Dashboard</h1>} />
+        </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
   );
 }
 
 async function passPrecheck(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(screen.getByRole("button", { name: "Check camera" }));
-  await screen.findByText("Camera check passed.");
+  await user.click(await screen.findByRole("button", { name: "Check camera" }));
+  await screen.findByText("The camera works.");
+  await screen.findByText(/Connected to the exam server/);
+  await user.click(
+    screen.getByRole("button", { name: "Next: photo ID and photo" }),
+  );
   await user.click(screen.getByRole("button", { name: "Capture ID card" }));
   await user.click(screen.getByRole("button", { name: "Take selfie" }));
   await screen.findByText(/look alike/);
@@ -88,6 +108,8 @@ function server(
     if (custom) return custom;
     if (u.pathname.endsWith("/attempts/available"))
       return jsonResponse(200, { items: [available] });
+    if (u.pathname.endsWith("/health"))
+      return jsonResponse(200, { status: "ok" });
     if (u.pathname.endsWith("/candidate-info/mine")) {
       return popup instanceof Response
         ? popup
@@ -120,10 +142,6 @@ it("asks for the chosen details after the camera check and before the exam clock
     submitted: false,
   });
   renderPage();
-
-  await user.click(
-    await screen.findByRole("button", { name: "Start Paper 0000AA" }),
-  );
   await passPrecheck(user);
 
   const heading = await screen.findByRole("heading", { name: "Your details" });
@@ -179,9 +197,6 @@ it("skips the pop-up when it is off or the candidate already answered", async ()
   getUserMedia.mockResolvedValue(fakeStream().stream);
   server({ enabled: true, fields: ["email"], submitted: true });
   renderPage();
-  await user.click(
-    await screen.findByRole("button", { name: "Start Paper 0000AA" }),
-  );
   await passPrecheck(user);
   expect(
     await screen.findByRole("heading", { name: "Question 1 of 2" }),
@@ -201,14 +216,11 @@ it("lets the candidate go back from the pop-up; the camera is turned off and no 
     submitted: false,
   });
   renderPage();
-  await user.click(
-    await screen.findByRole("button", { name: "Start Paper 0000AA" }),
-  );
   await passPrecheck(user);
   await screen.findByRole("heading", { name: "Your details" });
   await user.click(screen.getByRole("button", { name: "Go back" }));
   expect(
-    await screen.findByRole("heading", { name: "Exam", level: 1 }),
+    await screen.findByRole("button", { name: "Check camera" }),
   ).toBeInTheDocument();
   expect(track.stop).toHaveBeenCalled();
   expect(callsTo(mock, "/attempts/start", "POST")).toHaveLength(0);
@@ -221,9 +233,6 @@ it("does not start the exam when the server cannot say whether details are neede
     jsonResponse(500, { error: { code: "INTERNAL", message: "Server error" } }),
   );
   renderPage();
-  await user.click(
-    await screen.findByRole("button", { name: "Start Paper 0000AA" }),
-  );
   await passPrecheck(user);
   expect(
     await screen.findByText(
@@ -249,9 +258,6 @@ it("shows the server's refusal when the details are not accepted, and does not s
         : undefined,
   );
   renderPage();
-  await user.click(
-    await screen.findByRole("button", { name: "Start Paper 0000AA" }),
-  );
   await passPrecheck(user);
   await user.type(
     await screen.findByLabelText("Father's name"),
@@ -302,9 +308,6 @@ it("shows the candidate's total on the finished screen only when the batch shows
     return undefined;
   });
   renderPage();
-  await user.click(
-    await screen.findByRole("button", { name: "Start Paper 0000AA" }),
-  );
   await passPrecheck(user);
   await screen.findByRole("heading", { name: "Question 1 of 2" });
   await user.click(screen.getByRole("button", { name: "Submit exam" }));
