@@ -367,6 +367,79 @@ export async function approveQuestion(user, id) {
 }
 
 /**
+ * X-10: sends a draft question for review (draft -> in_review). Same rules as approve for
+ * retired and older versions.
+ */
+export async function submitQuestionForReview(_user, id) {
+  const question = await Question.findById(id);
+  if (!question) {
+    throw new AppError(404, "NOT_FOUND", "Question not found");
+  }
+  if (question.status === "retired") {
+    throw new AppError(409, "QUESTION_RETIRED", "Cannot submit a retired question");
+  }
+  assertLatest(question, "submit");
+  if (question.status === "approved") {
+    throw new AppError(409, "QUESTION_ALREADY_APPROVED", "The question is already approved");
+  }
+  if (question.status === "in_review") {
+    throw new AppError(409, "QUESTION_ALREADY_IN_REVIEW", "The question is already in review");
+  }
+  const submitted = await Question.findOneAndUpdate(
+    { _id: question._id, isLatest: true, status: "draft" },
+    { $set: { status: "in_review" } },
+    { new: true },
+  );
+  if (!submitted) throw new AppError(409, "CONFLICT", "The question changed; reload and try again");
+  return submitted;
+}
+
+export const IMPORT_TEMPLATE_COLUMNS = Object.freeze([
+  "qualification",
+  "nos",
+  "pc",
+  "type",
+  "language",
+  "difficulty",
+  "bloomLevel",
+  "stem",
+  "optionA",
+  "optionB",
+  "optionC",
+  "optionD",
+  "optionE",
+  "optionF",
+  "correctAnswer",
+  "marks",
+]);
+
+/** X-10: an empty .xlsx with the columns the import reads, and a notes sheet after the data sheet. */
+export async function buildImportTemplate() {
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet("Questions");
+  sheet.addRow([...IMPORT_TEMPLATE_COLUMNS]);
+  sheet.getRow(1).font = { bold: true };
+  sheet.columns = IMPORT_TEMPLATE_COLUMNS.map((header) => ({
+    header,
+    key: header,
+    width: header === "stem" ? 60 : 16,
+  }));
+  const notes = workbook.addWorksheet("Notes");
+  [
+    ["Fill the Questions sheet, one question per row, and keep the header row."],
+    ["qualification, nos and pc: the code or id, as shown in Master data."],
+    ["type: mcq, short_answer, scenario, viva or practical. language: for example en."],
+    ["difficulty (optional): easy, medium or tough. marks: 0.5 or more."],
+    [
+      "MCQ rows need at least two of optionA to optionF and a correctAnswer (an option letter or its text).",
+    ],
+    ["Imported questions start as draft."],
+  ].forEach((line) => notes.addRow(line));
+  notes.getColumn(1).width = 100;
+  return Buffer.from(await workbook.xlsx.writeBuffer());
+}
+
+/**
  * Coverage endpoint for a qualification:
  * Lists each PC with its approved question count, and flags PCs
  * with fewer than QUESTION_MIN_APPROVED_PER_PC approved questions.

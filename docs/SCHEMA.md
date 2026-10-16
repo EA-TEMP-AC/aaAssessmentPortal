@@ -771,6 +771,9 @@ One generated test paper. Holds the seed, the rules and the chosen question ids 
 | complete | Boolean | Y | No shortage and marks target met. Only complete papers can be approved |
 | createdBy, submittedBy, approvedBy | ObjectId | Y / N / N | Ref: `users` |
 | submittedAt, approvedAt | Date | N | |
+| returnReason | String | N | X-10. 1 to 2000 characters. Set when ab_reviewer sends a submitted paper back to `draft` (`POST /tests/:id/return`); cleared on the next submit. Free text, never copied into audit rows |
+| returnedBy | ObjectId | N | X-10. Ref: `users`. Cleared on the next submit |
+| returnedAt | Date | N | X-10. Cleared on the next submit |
 
 Indexes: `{ qualificationId: 1, status: 1, createdAt: -1 }`.
 
@@ -1073,6 +1076,9 @@ Schema and contract only. **B-10** writes `learnerFeedback` once the batch is `a
 | Schemes / projects / signatories CRUD (`/schemes`, `/projects`, `/signatories`) | A | A | D | D | D | D | D | R | R | H-01; deactivate, never delete; audited (signatory name redacted); Q380 |
 | Question bank write / import | A | D | A | D | D | D | D | D | D | Q-01; aa_admin and sme only; audited (content redacted) |
 | Question bank approve | A | D | D | D | D | D | D | A | D | Q-01; ab_reviewer and aa_admin; audited |
+| Question submit for review, import template (`POST /question-bank/questions/:id/submit-for-review`, `GET /question-bank/import-template`) | A | D | A | D | D | D | D | D | D | X-10; same writers as question bank write |
+| Paper return to draft (`POST /tests/:id/return`) | D | D | D | D | D | D | D | A | D | X-10, D4; ab_reviewer only, with a reason; audited without the reason text |
+| Qualification list / get (`GET /qualifications`) | A | R | R | D | D | D | D | R | R | X-10: sme added so the question bank and paper screens can offer a qualification, NOS and PC choice; no row scope for sme (same as ab_reviewer) |
 | Evidence upload (`POST /batches/:id/evidence`) | A | D | D | own | own | own¶ | D | D | D | V-01; assessor and proctor of the batch; not into `cancelled` or `rejected` batches; ¶ P-01, P-09: a candidate uploads only `proctor_snapshot` or `id_proof` for their own proctoring session |
 | Evidence list / get / file | A | R | D | own | own | D | D | R° | R | V-01; ° own `abId`; assessor and proctor see their own uploads plus `proctor_snapshot` rows of their batches (P-01); every file download is access-logged; P-09 / D3: `id_proof` rows only for aa_admin and the uploader, every read access-logged |
 | Proctoring session start / heartbeat / flags / own warnings | D | D | D | D | D | own | D | D | D | P-01; the candidate's own attempt and session |

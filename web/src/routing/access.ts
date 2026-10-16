@@ -89,6 +89,28 @@ export const RESULTS_ROLES: readonly Role[] = [
 /** API_CONTRACT attempt engine (E-03): only candidates take exams (F-05). */
 export const EXAM_ROLES: readonly Role[] = ["candidate"];
 
+/** Question bank (Q-01) and test papers (E-01, D4): aa_admin and sme write, ab_reviewer reads and approves. */
+export const QUESTION_BANK_ROLES: readonly Role[] = ["aa_admin", "sme", "ab_reviewer"];
+
+export function canWriteQuestions(role: Role): boolean {
+  return role === "aa_admin" || role === "sme";
+}
+
+/** Server QUESTION_APPROVE_ROLES. */
+export function canApproveQuestions(role: Role): boolean {
+  return role === "aa_admin" || role === "ab_reviewer";
+}
+
+/** D4: only the awarding body reviewer approves or sends back a paper (server TEST_APPROVE_ROLES). */
+export function canApprovePapers(role: Role): boolean {
+  return role === "ab_reviewer";
+}
+
+/** D5: aa_admin picks the one paper of a batch. */
+export function canAssignBatchPaper(role: Role): boolean {
+  return role === "aa_admin";
+}
+
 /** SCHEMA §5 audit read. */
 export const AUDIT_ROLES: readonly Role[] = ["aa_admin", "mis", "ab_reviewer", "ncvet_viewer"];
 

@@ -1200,6 +1200,14 @@ Sets `status: "approved"`, `approvedBy: user._id`, `approvedAt: Date`.
 Errors: `409 QUESTION_NOT_LATEST`, `409 QUESTION_RETIRED`, `409 QUESTION_ALREADY_APPROVED` (approvedBy and approvedAt are never overwritten).
 Response `200 OK`: approved question document (counted against the content read cap and access-logged).
 
+### POST /api/v1/question-bank/questions/:id/submit-for-review
+X-10. Roles: `aa_admin`, `sme`. No body. Draft to `in_review`. The reviewer's approve (above) takes a question in `draft` or `in_review`, so this step is a signal to the reviewer, not a requirement.
+Errors: `404 NOT_FOUND`, `409 QUESTION_NOT_LATEST`, `409 QUESTION_RETIRED`, `409 QUESTION_ALREADY_APPROVED`, `409 QUESTION_ALREADY_IN_REVIEW`. Everyone else `403`.
+Response `200 OK`: the question (counted against the content read cap and access-logged, like approve). Audit `question.submit_for_review`, entity `question`, no question text.
+
+### GET /api/v1/question-bank/import-template
+X-10. Roles: `aa_admin`, `sme`. Returns an empty `.xlsx` (`Content-Disposition: attachment; filename="question-import-template.xlsx"`, `Cache-Control: no-store`). Sheet `Questions` holds only the header row the import reads: `qualification, nos, pc, type, language, difficulty, bloomLevel, stem, optionA, optionB, optionC, optionD, optionE, optionF, correctAnswer, marks`. Sheet `Notes` explains the columns. The import reads the first sheet only. Not audited (no content).
+
 ### GET /api/v1/question-bank/coverage/:qualificationId
 Roles: `aa_admin`, `sme`, `ab_reviewer`.
 Coverage report for a qualification: lists every PC across its NOS with approved question counts and flags PCs with fewer than `QUESTION_MIN_APPROVED_PER_PC` (5, `server/src/config/compliance.js`) approved questions (`flagged: true`). Only approved **latest** versions are counted.
@@ -1470,7 +1478,7 @@ Audit: `test.generate`.
 Roles: `aa_admin`, `sme`, `ab_reviewer`. Query: `qualificationId` (id or code), `status` (`draft`|`submitted`|`approved`), `page`, `pageSize`. Returns `{items, total, page, pageSize}` without `items[]` of each paper.
 
 ### GET /api/v1/tests/:id
-Same roles. `?withQuestions=true` adds `stem`, `options` and `correctAnswer` to each item, at most 50 items a page (S-02): `itemPage` (default 1) picks the page and the response adds `itemPage`, `itemPageSize` (50) and `itemTotal`. Without `withQuestions` the paper is returned in full, as ids only. Counts against the daily content-read cap (see Security audit tracker and content controls). `404 NOT_FOUND`.
+Same roles. The paper also carries `returnReason`, `returnedBy` and `returnedAt` (null unless the reviewer sent it back, X-10). `?withQuestions=true` adds `stem`, `options` and `correctAnswer` to each item, at most 50 items a page (S-02): `itemPage` (default 1) picks the page and the response adds `itemPage`, `itemPageSize` (50) and `itemTotal`. Without `withQuestions` the paper is returned in full, as ids only. Counts against the daily content-read cap (see Security audit tracker and content controls). `404 NOT_FOUND`.
 
 ### POST /api/v1/tests/generate with a weight profile (task E-02)
 Two optional keys: `weightProfileId` (the profile's `rootProfileId`) and `version` (needs `weightProfileId`). With no `version` the latest approved version is used; a named version must be approved. Without `weightProfileId` nothing changes from E-01.
@@ -1493,6 +1501,9 @@ B-18a (D4). Roles: `aa_admin`, `sme`. No body. Draft to `submitted` ("submitted 
 
 ### POST /api/v1/tests/:id/approve
 B-18a (D4, Guidelines 4.2d). Role: `ab_reviewer` only; `aa_admin`, `sme` and every other role are `403`. Submitted to approved; sets `approvedBy` and `approvedAt`. A draft is `409 TEST_NOT_SUBMITTED`. Also `409 TEST_ALREADY_APPROVED`, `409 TEST_PAPER_INCOMPLETE`, `409 TEST_PAPER_STALE` (checked again at approval). Only an approved, complete paper can be set on a batch or delivered. There is no link from a qualification to an awarding body (D2), so any `ab_reviewer` can approve any paper (Q860). Audit: `test.approve` with before and after.
+
+### POST /api/v1/tests/:id/return
+X-10 (D4). Role: `ab_reviewer` only (same as approve); everyone else `403`. Body `{ "reason": "<1 to 2000 characters>" }`, the only key. Moves a `submitted` paper back to `draft` and stores `returnReason`, `returnedBy` and `returnedAt`; the author can then submit it again (submit clears the three fields). `409 TEST_NOT_SUBMITTED` for a draft, `409 TEST_ALREADY_APPROVED` for an approved paper, `404 NOT_FOUND`, `400 VALIDATION_ERROR` for a missing reason. Returns the paper (`200`). Audit: `test.return` with before and after (status only changes); the request body is not logged and `meta` holds only `reasonLength`.
 
 ### POST /api/v1/tests/:id/regenerate-check
 Roles: `aa_admin`, `sme`, `ab_reviewer`. Re-runs the selection with the stored seed and rules on the current bank. Returns `reproducible` (same questions, versions and order), `poolUnchanged` (bank pool is identical to generation time), `missing` and `extra` (`id:version`), and `stale` (stored questions no longer approved and current). If `poolUnchanged` is true and `reproducible` is false, the generator is broken. Audit: `test.regenerate_check`.

@@ -14,6 +14,7 @@ import {
   getQuerySchema,
   idParamSchema,
   listQuerySchema,
+  returnBodySchema,
 } from "./test-generator.schemas.js";
 import {
   approvePaper,
@@ -21,6 +22,7 @@ import {
   getPaper,
   listPapers,
   regenerateCheck,
+  returnPaper,
   submitPaper,
 } from "./test-generator.service.js";
 
@@ -103,6 +105,27 @@ testGeneratorRouter.post(
       entityId: paper._id,
       before: auditView(before),
       after: auditView(paper),
+    };
+    res.status(200).json(paper);
+  }),
+);
+
+/** POST /api/v1/tests/:id/return  (X-10: reviewer sends a submitted paper back with a reason) */
+testGeneratorRouter.post(
+  "/:id/return",
+  requireRoles(...TEST_APPROVE_ROLES),
+  asyncHandler(async (req, res) => {
+    const { id } = idParamSchema.parse(req.params);
+    const { reason } = returnBodySchema.parse(req.body);
+    const { paper, before } = await returnPaper(req.user, id, reason);
+    req.audit = {
+      action: "test.return",
+      entity: "testPaper",
+      entityId: paper._id,
+      before: auditView(before),
+      after: auditView(paper),
+      omitRequestBody: true,
+      meta: { reasonLength: reason.length },
     };
     res.status(200).json(paper);
   }),

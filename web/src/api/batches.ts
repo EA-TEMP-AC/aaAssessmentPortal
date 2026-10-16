@@ -100,6 +100,8 @@ export type BatchRecord = {
   assessorId: string | null;
   proctorId: string | null;
   resultId: string | null;
+  /** D5: the one test paper candidates of this batch can start. Null until aa_admin sets it. */
+  testPaperId: string | null;
   rejectReason: string | null;
   cancelReason: string | null;
   isReassessment: boolean;
@@ -324,6 +326,7 @@ export function parseBatch(value: unknown): BatchRecord {
   const assessorId = nullableString(value.assessorId);
   const proctorId = nullableString(value.proctorId);
   const resultId = nullableString(value.resultId);
+  const testPaperId = nullableString(value.testPaperId ?? null) ?? null;
   if (assessorId === undefined || proctorId === undefined || resultId === undefined) throw responseError();
   const rejectReason = optionalNullableString(value.rejectReason);
   const cancelReason = optionalNullableString(value.cancelReason);
@@ -363,6 +366,7 @@ export function parseBatch(value: unknown): BatchRecord {
     assessorId,
     proctorId,
     resultId,
+    testPaperId,
     rejectReason,
     cancelReason,
     isReassessment: value.isReassessment,

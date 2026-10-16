@@ -419,6 +419,27 @@ export async function submitPaper(user, id) {
   paper.status = "submitted";
   paper.submittedBy = user._id;
   paper.submittedAt = new Date();
+  paper.returnReason = null;
+  paper.returnedBy = null;
+  paper.returnedAt = null;
+  await paper.save();
+  return { paper, before };
+}
+
+/** X-10 (D4): the reviewer sends a submitted paper back to draft with a reason. */
+export async function returnPaper(user, id, reason) {
+  const paper = await loadPaper(id);
+  if (paper.status === "approved") {
+    throw new AppError(409, "TEST_ALREADY_APPROVED", "Test paper is already approved");
+  }
+  if (paper.status !== "submitted") {
+    throw new AppError(409, "TEST_NOT_SUBMITTED", "Only a submitted test paper can be sent back");
+  }
+  const before = paper.toObject();
+  paper.status = "draft";
+  paper.returnReason = reason;
+  paper.returnedBy = user._id;
+  paper.returnedAt = new Date();
   await paper.save();
   return { paper, before };
 }

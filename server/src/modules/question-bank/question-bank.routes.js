@@ -17,12 +17,14 @@ import {
 } from "./question-bank.schemas.js";
 import {
   approveQuestion,
+  buildImportTemplate,
   createQuestion,
   getCoverage,
   getQuestion,
   importQuestions,
   listQuestions,
   retireQuestion,
+  submitQuestionForReview,
   updateQuestion,
 } from "./question-bank.service.js";
 import { reviewCycleRouter } from "./review-cycle.routes.js";
@@ -208,6 +210,49 @@ questionBankRouter.post(
 
     await guardContentRead(req, { questionIds: [approved._id], kind: "detail" });
     res.status(200).json(approved);
+  }),
+);
+
+/**
+ * POST /api/v1/question-bank/questions/:id/submit-for-review
+ * X-10: draft -> in_review. Allowed for the people who write questions.
+ */
+questionBankRouter.post(
+  "/questions/:id/submit-for-review",
+  requireRoles(...QUESTION_WRITE_ROLES),
+  asyncHandler(async (req, res) => {
+    const { id } = idParamSchema.parse(req.params);
+    const submitted = await submitQuestionForReview(req.user, id);
+
+    req.audit = {
+      action: "question.submit_for_review",
+      entity: "question",
+      entityId: submitted._id,
+      after: submitted,
+      meta: { status: "in_review", version: submitted.version },
+    };
+
+    await guardContentRead(req, { questionIds: [submitted._id], kind: "detail" });
+    res.status(200).json(submitted);
+  }),
+);
+
+/**
+ * GET /api/v1/question-bank/import-template
+ * X-10: the empty .xlsx the import expects.
+ */
+questionBankRouter.get(
+  "/import-template",
+  requireRoles(...QUESTION_WRITE_ROLES),
+  asyncHandler(async (_req, res) => {
+    const buffer = await buildImportTemplate();
+    res.status(200);
+    res.set({
+      "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "Content-Disposition": 'attachment; filename="question-import-template.xlsx"',
+      "Cache-Control": "no-store",
+    });
+    res.send(buffer);
   }),
 );
 
