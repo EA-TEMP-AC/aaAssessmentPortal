@@ -548,6 +548,18 @@ W-03 open questions (2026-10-15, Public site admin screens, web only). W-03 uses
 544. **Published items cannot be edited by mis.** Matching the server, `mis` sees Edit disabled on a published item with the reason. An `aa_admin` edits a published item directly (it stays live). Confirm, or require unpublish before edit.
 545. **Show archived lists archived only.** The server returns either archived or not-archived items, never both, so the toggle switches the list instead of adding to it, and the status filter is off while it is on. Confirm.
 
+
+### Human decisions 2026-10-16 (review wave 1, accept all)
+
+- **D1. User creation by `mis`.** `mis` may create and change only `tp`, `assessor`, `proctor` and `candidate` users, not `aa_admin`, `sme`, `ab_reviewer`, `ncvet_viewer` or `mis`. Decided by Vortex. Task B-18.
+- **D2. One question bank.** The question bank, test papers and weight profiles stay one bank for all awarding bodies; no `abId` link for now. Decided by Vortex.
+- **D3. ID card photos are kept.** The evidence kind `id_proof` stays and stores ID card photos for future use (Vortex overrode the recommendation to remove it). Conditions for B-18: only `aa_admin` and the uploader can read `id_proof` files and rows (ab_reviewer access stays open under Q326); every read is access-logged; never extract or store an ID number from the image; add the kind to the retention checklist; storage must be encrypted at rest (S3 server-side encryption, or encrypted volume for local). Decided by Vortex; conditions proposed by Claude, to be confirmed.
+- **D4. Papers approved by the awarding body.** Approving a test paper needs `ab_reviewer` (Guidelines 4.2d). `aa_admin` and `sme` can generate and edit drafts. Decided by Vortex. Task B-18.
+- **D5. One paper per batch.** `aa_admin` sets one test paper per batch; a candidate can start only that paper. Decided by Vortex. Task B-18.
+- **D6. Marks lock.** Manual marks cannot be changed once the batch result is submitted. Decided by Vortex. Task B-18.
+- **D7. Public cache.** The people and POSH public pages are cached for 60 seconds; the other sections stay at 5 minutes. Decided by Vortex. Task B-18.
+- **D8. Login-event reads.** `tp` sees login events of its own batches without GPS and device id; a candidate sees only their own events. Decided by Vortex. Task B-18.
+
 ## Not mandated by NCVET (TR s29), do not market as compliance features
 Specific language, DB, cloud, server architecture, API style, biometric or face-recognition tech, GPS hardware, payment gateway, CRM, help-desk software.
 
