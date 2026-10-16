@@ -38,6 +38,12 @@ const KIND_CONTENT_TYPES = {
   proctor_snapshot: ["image/jpeg"],
 };
 
+/** Kinds a candidate may upload (P-01, P-09). */
+const CANDIDATE_KINDS = Object.freeze(["proctor_snapshot", "id_proof"]);
+/** A candidate's ID card photo: JPEG or PNG, at most 5 MB (P-09). */
+const CANDIDATE_ID_PROOF_TYPES = Object.freeze(["image/jpeg", "image/png"]);
+const CANDIDATE_ID_PROOF_MAX_BYTES = 5 * 1024 * 1024;
+
 const SUPPORTED = new Set(Object.keys(EVIDENCE_MAX_BYTES));
 
 function iso(value) {
@@ -171,14 +177,31 @@ function replay(existing, hashValue) {
  */
 export async function createEvidence(user, batch, fields, file, context = {}) {
   const uploadedAt = context.now ?? new Date();
-  // P-01: proctor_snapshot is the candidate's kind, and the only kind a candidate may send.
+  // P-01: proctor_snapshot is the candidate's kind. P-09: a candidate may also send id_proof (the
+  // photo of their ID card, JPEG or PNG) for their own session. Nothing else.
   const isCandidate = user.role === "candidate";
-  if (isCandidate !== (fields.kind === "proctor_snapshot")) {
-    throw forbidden(
-      isCandidate
-        ? "A candidate may upload only proctor_snapshot evidence"
-        : "Only the candidate uploads proctor_snapshot evidence",
-    );
+  if (isCandidate && !CANDIDATE_KINDS.includes(fields.kind)) {
+    throw forbidden("A candidate may upload only proctor_snapshot or id_proof evidence");
+  }
+  if (!isCandidate && fields.kind === "proctor_snapshot") {
+    throw forbidden("Only the candidate uploads proctor_snapshot evidence");
+  }
+  if (isCandidate && fields.kind === "id_proof") {
+    if (!fields.sessionId) {
+      throw validationError("sessionId is required for a candidate's id_proof", {
+        sessionId: ["sessionId is required for a candidate's id_proof"],
+      });
+    }
+    if (fields.candidateId !== undefined) {
+      throw validationError("candidateId is set from the session", {
+        candidateId: ["candidateId is set from the session for a candidate's id_proof"],
+      });
+    }
+  }
+  if (!isCandidate && fields.sessionId !== undefined) {
+    throw validationError("sessionId is only for a candidate's evidence", {
+      sessionId: ["sessionId is only allowed on a candidate's upload"],
+    });
   }
   const snapshotSession = isCandidate
     ? await loadSnapshotSession(user, fields.sessionId, batch._id)
@@ -218,6 +241,19 @@ export async function createEvidence(user, batch, fields, file, context = {}) {
     throw validationError("kind does not match the file type", {
       kind: [`kind '${fields.kind}' does not accept ${contentType}`],
     });
+  }
+
+  if (isCandidate && fields.kind === "id_proof") {
+    if (!CANDIDATE_ID_PROOF_TYPES.includes(contentType)) {
+      throw validationError("kind does not match the file type", {
+        kind: [`a candidate's id_proof must be JPEG or PNG, not ${contentType}`],
+      });
+    }
+    if (size > CANDIDATE_ID_PROOF_MAX_BYTES) {
+      throw new AppError(413, "FILE_TOO_LARGE", "The file is larger than the limit for its type", {
+        maxBytes: CANDIDATE_ID_PROOF_MAX_BYTES,
+      });
+    }
   }
 
   let candidateId = snapshotSession ? snapshotSession.candidateId : null;
@@ -278,8 +314,18 @@ export async function createEvidence(user, batch, fields, file, context = {}) {
 /**
  * Rows the caller may read. Assessor and proctor: own uploads, plus (P-01) the proctor
  * snapshots of their assigned batches. ab_reviewer: own awarding body.
+ * P-09, DECISIONS D3: `id_proof` rows are readable only by aa_admin and the uploader, whatever
+ * the role's other scope says.
  */
 async function readScope(user) {
+  const scope = await roleScope(user);
+  if (user?.role === "aa_admin") return scope;
+  return {
+    $and: [scope, { $or: [{ kind: { $ne: "id_proof" } }, { uploaderUserId: user._id }] }],
+  };
+}
+
+async function roleScope(user) {
   switch (user?.role) {
     case "aa_admin":
     case "mis":
@@ -365,6 +411,21 @@ export async function recordDownload(req, doc) {
       });
     }
   }
+}
+
+/**
+ * P-09, DECISIONS D3: every read of an `id_proof` row is access-logged. List items and raw rows
+ * both carry `kind`; the id is `id` on an item and `_id` on a row. Awaited before the response.
+ */
+export async function recordIdProofReads(req, rows) {
+  const ids = rows.filter((row) => row.kind === "id_proof").map((row) => row.id ?? row._id);
+  if (ids.length === 0) return;
+  await recordAccess(req, {
+    subjectType: "evidence",
+    subjectIds: ids,
+    kind: ids.length === 1 && rows.length === 1 ? "detail" : "list",
+    fields: ["id_proof"],
+  });
 }
 
 export function downloadName(doc) {
