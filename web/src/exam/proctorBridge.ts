@@ -28,6 +28,7 @@ export interface ProctorConfig {
   detectionIntervalMs: number;
   flagCooldownSeconds: number;
   sustainedSeconds: Record<string, number>;
+  flagSeverity?: Record<string, string>;
 }
 
 export type ProctorStatus = { state: "starting" | "running" | "degraded" | "stopped"; message?: string };
@@ -44,6 +45,8 @@ export interface ProctorEngine {
     onFlag?: (flag: { type: ProctorFlagType }) => void;
     /** P-09: holds the selfie reference; the engine compares the live face with it. */
     faceMatcher?: FaceMatcher;
+    /** X-07: flag photos and flags may carry the location. */
+    captureLocation?: boolean;
   }): Promise<void>;
   stop(): void;
 }

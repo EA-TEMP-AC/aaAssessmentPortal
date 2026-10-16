@@ -8,8 +8,9 @@ import { exitExamFullscreen, requestExamFullscreen } from "../exam/fullscreen";
 import type { FaceStart } from "../exam/faceEvidence";
 import { PrecheckScreen, type FaceCheckOptions, type FrameCheckOptions } from "../exam/PrecheckScreen";
 import { stopStream } from "../exam/precheck";
+import { createLocationProvider } from "../proctoring/location";
 
-type Choice = { batchId: string; paperId: string; heading: string };
+type Choice = { batchId: string; paperId: string; heading: string; captureLocation: boolean };
 
 type Phase =
   | { name: "choose" }
@@ -120,6 +121,7 @@ function PaperRow({ item, onChoose }: { item: AvailableAssessment; onChoose: (ch
             batchId: item.batchId,
             paperId: item.paperId,
             heading: item.paperName,
+            captureLocation: item.captureLocation,
           })
         }
       >
@@ -255,6 +257,9 @@ export function ExamPage({ frameCheck, faceChecks, autosaveDebounceMs }: Props) 
     faceRef.current = face;
     // Full screen has to be asked for inside the click, before anything is awaited.
     requestExamFullscreen();
+    // X-07: the browser asks about location once, here, not in the middle of the exam. The answer is
+    // not waited for, and a refusal changes nothing.
+    if (choice.captureLocation) void createLocationProvider().get();
     setStarting(true);
     setStartError(null);
     try {
@@ -279,6 +284,7 @@ export function ExamPage({ frameCheck, faceChecks, autosaveDebounceMs }: Props) 
     return (
       <PrecheckScreen
         heading={phase.choice.heading}
+        captureLocation={phase.choice.captureLocation}
         starting={starting}
         startError={startError}
         frameCheck={frameCheck}

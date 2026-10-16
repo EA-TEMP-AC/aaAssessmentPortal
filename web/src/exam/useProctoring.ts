@@ -135,6 +135,7 @@ export function useProctoring({ attemptId, batchId, stream, face }: Input): Proc
           batchId,
           config: session.config,
           faceMatcher: faceStart?.matcher ?? undefined,
+          captureLocation: session.captureLocation,
           onFlag: (flag) => {
             if (live && !stopped.current) {
               const at = Date.now();

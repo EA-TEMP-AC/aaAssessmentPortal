@@ -1,4 +1,5 @@
 import { PROCTOR_THRESHOLDS, type ProctorThresholds } from "./config";
+import { renderFlagPhoto, type BannerInput, type PhotoCanvas } from "./banner";
 import { toGray } from "./rules";
 
 /**
@@ -8,7 +9,11 @@ import { toGray } from "./rules";
  */
 
 export type FrameSampler = (video: HTMLVideoElement) => Uint8ClampedArray | null;
-export type SnapshotTaker = (video: HTMLVideoElement) => Promise<Blob | null>;
+/**
+ * With a banner (X-07, flag photos) the JPEG carries the banner strip and is at most
+ * `flagPhotoMaxBytes`; the banner may still be resolving (the location), the frame is copied first.
+ */
+export type SnapshotTaker = (video: HTMLVideoElement, banner?: BannerInput | Promise<BannerInput>) => Promise<Blob | null>;
 
 export function createFrameSampler(thresholds: ProctorThresholds = PROCTOR_THRESHOLDS): {
   sample: FrameSampler;
@@ -39,8 +44,9 @@ export function createFrameSampler(thresholds: ProctorThresholds = PROCTOR_THRES
 
 /** JPEG at most `snapshotMaxWidth` wide, quality `snapshotQuality`. */
 export function createSnapshotTaker(thresholds: ProctorThresholds = PROCTOR_THRESHOLDS): SnapshotTaker {
-  return (video) =>
-    new Promise((resolve) => {
+  return (video, banner) => {
+    if (banner) return takeFlagPhoto(video, banner, thresholds);
+    return new Promise((resolve) => {
       const width = video.videoWidth;
       const height = video.videoHeight;
       if (!width || !height) return resolve(null);
@@ -65,6 +71,29 @@ export function createSnapshotTaker(thresholds: ProctorThresholds = PROCTOR_THRE
         thresholds.snapshotQuality,
       );
     });
+  };
+}
+
+/** The flag photo: the frame at the same size limit as a snapshot, plus the banner. */
+async function takeFlagPhoto(
+  video: HTMLVideoElement,
+  banner: BannerInput | Promise<BannerInput>,
+  thresholds: ProctorThresholds,
+): Promise<Blob | null> {
+  const width = video.videoWidth;
+  const height = video.videoHeight;
+  if (!width || !height) return null;
+  const scale = Math.min(1, thresholds.snapshotMaxWidth / width);
+  try {
+    return await renderFlagPhoto(
+      () => document.createElement("canvas") as unknown as PhotoCanvas,
+      { image: video, width: Math.round(width * scale), height: Math.round(height * scale) },
+      banner,
+      thresholds.flagPhotoMaxBytes,
+    );
+  } catch {
+    return null;
+  }
 }
 
 export type DetectionFrame = HTMLVideoElement | ImageBitmap;

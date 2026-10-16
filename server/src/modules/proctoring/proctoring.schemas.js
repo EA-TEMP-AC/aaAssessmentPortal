@@ -39,6 +39,15 @@ const detailSchema = z
   })
   .strict();
 
+/** X-07: where the browser was when it took the flag photo. Coordinates are personal data. */
+const locationSchema = z
+  .object({
+    latitude: z.number().min(-90).max(90),
+    longitude: z.number().min(-180).max(180),
+    accuracy: z.number().min(0).max(1_000_000).optional(),
+  })
+  .strict();
+
 export const flagSchema = guard(
   z
     .object({
@@ -47,6 +56,7 @@ export const flagSchema = guard(
       capturedAt: z.string().datetime({ offset: true }),
       detail: detailSchema.optional(),
       evidenceId: objectId("evidence ID").optional(),
+      location: locationSchema.optional(),
     })
     .strict(),
 );

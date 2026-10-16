@@ -1,9 +1,11 @@
 import { Router } from "express";
 import { asyncHandler } from "../../lib/async-handler.js";
 import { requireAuth } from "../../middleware/require-auth.js";
+import { recordAccess } from "../audit/access-log.service.js";
 import { requireRoles } from "../../middleware/require-roles.js";
 import {
   PROCTORING_CANDIDATE_ROLES,
+  PROCTORING_CAPTURE_READ_ROLES,
   PROCTORING_READ_ROLES,
   PROCTORING_REVIEW_ROLES,
 } from "../../models/roles.js";
@@ -17,6 +19,7 @@ import {
 } from "./proctoring.schemas.js";
 import {
   createSession,
+  getFlagCapture,
   getReport,
   getSessionDetail,
   heartbeat,
@@ -156,6 +159,36 @@ proctoringRouter.patch(
       before,
       after,
     };
+    res.status(200).json(body);
+  }),
+);
+
+/**
+ * GET /api/v1/proctoring/flags/:id/capture. X-07. Coordinates are personal data: when they are
+ * returned the read is logged (the flag and the learner) before anything is sent.
+ */
+proctoringRouter.get(
+  "/flags/:id/capture",
+  requireRoles(...PROCTORING_CAPTURE_READ_ROLES),
+  asyncHandler(async (req, res) => {
+    const { id } = idParamSchema.parse(req.params);
+    const { flag, learnerId, body } = await getFlagCapture(req.user, id);
+    if (body.location) {
+      await recordAccess(req, {
+        subjectType: "proctoringFlag",
+        subjectIds: [flag._id],
+        kind: "detail",
+        fields: ["location"],
+      });
+      if (learnerId) {
+        await recordAccess(req, {
+          subjectType: "learner",
+          subjectIds: [learnerId],
+          kind: "detail",
+          fields: ["flagLocation"],
+        });
+      }
+    }
     res.status(200).json(body);
   }),
 );

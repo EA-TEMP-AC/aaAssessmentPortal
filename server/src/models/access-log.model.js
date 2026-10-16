@@ -13,6 +13,8 @@ export const ACCESS_SUBJECT_TYPES = Object.freeze([
   "evidence",
   "question",
   "testPaper",
+  // X-07: one row per proctoring flag whose photo coordinates a read returned.
+  "proctoringFlag",
 ]);
 export const ACCESS_KINDS = Object.freeze(["list", "detail"]);
 

@@ -192,6 +192,7 @@ describe("GET /api/v1/attempts/available (B-19)", () => {
     expect(items[0]).toEqual({
       batchId: String(w.batch._id),
       batchName: `ELE/Q0001 Field Technician, ${day(-1)} to ${day(1)}`,
+      captureLocation: false,
       paperId: String(w.paper._id),
       paperCode: expect.any(String),
       paperName: "Field Technician (en)",

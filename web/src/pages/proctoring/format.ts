@@ -25,3 +25,11 @@ export function formatKb(bytes: number): string {
 export function kindLabel(kind: string): string {
   return KIND_LABELS[kind as EvidenceKind] ?? kind;
 }
+
+/** Times further apart than this (browser clock against server clock) are called out. */
+export const CLOCK_GAP_WARNING_SECONDS = 120;
+
+export function clockGapSeconds(capture: { capturedAt: string; receivedAt: string }): number {
+  const gap = Math.abs(new Date(capture.receivedAt).getTime() - new Date(capture.capturedAt).getTime()) / 1000;
+  return Number.isFinite(gap) ? Math.round(gap) : 0;
+}

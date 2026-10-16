@@ -9,7 +9,7 @@ import type { ProctorConfig } from "../exam/proctorBridge";
  *   GET  /proctoring/sessions/:id/warnings -> { items: [{ id, message, createdAt }] }
  */
 
-export type ProctoringSession = { id: string; status: string; config: ProctorConfig };
+export type ProctoringSession = { id: string; status: string; config: ProctorConfig; captureLocation: boolean };
 
 export type ProctorWarning = { id: string; message: string; createdAt: string | null };
 
@@ -45,11 +45,18 @@ export function parseProctorConfig(value: unknown): ProctorConfig {
       if (typeof seconds === "number" && Number.isFinite(seconds) && seconds >= 0) sustainedSeconds[key] = seconds;
     }
   }
+  const flagSeverity: Record<string, string> = {};
+  if (isRecord(value.flagSeverity)) {
+    for (const [key, level] of Object.entries(value.flagSeverity)) {
+      if (level === "low" || level === "medium" || level === "high") flagSeverity[key] = level;
+    }
+  }
   return {
     snapshotIntervalSeconds: positive(value.snapshotIntervalSeconds, DEFAULT_PROCTOR_CONFIG.snapshotIntervalSeconds),
     detectionIntervalMs: positive(value.detectionIntervalMs, DEFAULT_PROCTOR_CONFIG.detectionIntervalMs),
     flagCooldownSeconds: positive(value.flagCooldownSeconds, DEFAULT_PROCTOR_CONFIG.flagCooldownSeconds),
     sustainedSeconds,
+    ...(Object.keys(flagSeverity).length > 0 ? { flagSeverity } : {}),
   };
 }
 
@@ -58,7 +65,12 @@ export async function createProctoringSession(attemptId: string): Promise<Procto
   if (!isRecord(body)) throw bad("Proctoring session");
   const id = str(body.id);
   if (!id) throw bad("Proctoring session");
-  return { id, status: str(body.status) ?? "active", config: parseProctorConfig(body.config) };
+  return {
+    id,
+    status: str(body.status) ?? "active",
+    config: parseProctorConfig(body.config),
+    captureLocation: body.captureLocation === true,
+  };
 }
 
 export async function sendHeartbeat(sessionId: string): Promise<void> {

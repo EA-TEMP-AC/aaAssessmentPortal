@@ -19,6 +19,8 @@ export type Startable = { ok: true } | { ok: false; reason: string };
 export type AvailableAssessment = {
   batchId: string;
   batchName: string;
+  /** X-07: the batch records the candidate location with flag photos. */
+  captureLocation: boolean;
   paperId: string;
   paperName: string;
   language: string | null;
@@ -76,6 +78,7 @@ export function parseAvailableAssessment(value: unknown): AvailableAssessment {
   return {
     batchId,
     batchName: str(value.batchName) ?? `Batch ${batchId}`,
+    captureLocation: value.captureLocation === true,
     paperId,
     paperName: str(value.paperName) ?? str(value.paperCode) ?? paperId,
     language: str(value.language),

@@ -5,6 +5,7 @@ import { requireAuth } from "../../middleware/require-auth.js";
 import { requireRoles } from "../../middleware/require-roles.js";
 import {
   BATCH_CREATE_ROLES,
+  BATCH_CAPTURE_LOCATION_ROLES,
   BATCH_READ_ROLES,
   BATCH_TEST_PAPER_ROLES,
   LEARNER_FEEDBACK_READ_ROLES,
@@ -16,6 +17,7 @@ import {
   acceptBodySchema,
   assignBodySchema,
   batchIdParamSchema,
+  captureLocationBodySchema,
   createBatchBodySchema,
   learnerFeedbackBodySchema,
   listBatchesQuerySchema,
@@ -31,6 +33,7 @@ import { mountEvidenceBatchRoutes } from "../evidence/evidence.routes.js";
 import { mountCandidateRoutes } from "../candidates/candidate.routes.js";
 import { mountResultRoutes } from "../results/result.routes.js";
 import { assignAssessor, reassignAssessor } from "./assign.service.js";
+import { setBatchCaptureLocation } from "./batch-capture-location.service.js";
 import { setBatchTestPaper } from "./batch-test-paper.service.js";
 import { createBatch, getBatch, listBatches, transitionBatch } from "./batch.service.js";
 import { getLearnerFeedback, saveLearnerFeedback } from "./learner-feedback.service.js";
@@ -184,6 +187,26 @@ batchesRouter.put(
     const saved = await setBatchTestPaper(req.user, id, body);
     setAudit(req, {
       action: "batch.set_test_paper",
+      entity: "batch",
+      entityId: saved.batch.id,
+      abId: saved.abId,
+      batchId: saved.batch.id,
+      before: saved.before,
+      after: saved.after,
+    });
+    await res.status(200).json(saved.batch);
+  }),
+);
+
+batchesRouter.put(
+  "/:id/capture-location",
+  requireRoles(...BATCH_CAPTURE_LOCATION_ROLES),
+  asyncHandler(async (req, res) => {
+    const { id } = batchIdParamSchema.parse(req.params);
+    const body = captureLocationBodySchema.parse(req.body ?? {});
+    const saved = await setBatchCaptureLocation(id, body);
+    setAudit(req, {
+      action: "batch.set_capture_location",
       entity: "batch",
       entityId: saved.batch.id,
       abId: saved.abId,

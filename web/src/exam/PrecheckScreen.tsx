@@ -46,6 +46,8 @@ export const ID_STEP_MESSAGES = {
   modelFailed: "The face check could not run on this device. You can continue; a proctor will check your ID by hand.",
 } as const;
 
+export const LOCATION_NOTICE = "This exam records your location with flag photos.";
+
 export const FALLBACK_LABEL = "Continue; a proctor will check your ID by hand";
 
 /** Tests swap the matcher, the camera helpers and the numbers; the page uses the real ones. */
@@ -64,6 +66,8 @@ type MicState = "idle" | "requesting" | "ok" | "denied" | "unavailable";
 
 type Props = {
   heading: string;
+  /** X-07: the batch records the location with flag photos. Shows a line in the notice. */
+  captureLocation?: boolean;
   starting: boolean;
   startError: string | null;
   /** Gets the live camera stream. The exam keeps it for proctoring and stops it at the end. */
@@ -99,7 +103,7 @@ function networkText(check: NetworkCheck | null, busy: boolean): string {
   return "The exam server could not be reached. Check your connection and try again.";
 }
 
-export function PrecheckScreen({ heading, starting, startError, onStart, onCancel, frameCheck, faceChecks }: Props) {
+export function PrecheckScreen({ heading, captureLocation, starting, startError, onStart, onCancel, frameCheck, faceChecks }: Props) {
   const headingRef = useRef<HTMLHeadingElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -540,6 +544,12 @@ export function PrecheckScreen({ heading, starting, startError, onStart, onCance
             exam. No government record is checked. The comparison happens in your browser.
           </li>
           <li>Nothing is sent except flags and a few photos, including the photo of your ID card and your selfie.</li>
+          {captureLocation ? (
+            <li>
+              {LOCATION_NOTICE} Your browser asks for permission first. If you refuse, the exam carries on and the
+              photos say the location was not shared.
+            </li>
+          ) : null}
           <li>A person reviews every flag. Nothing is decided against you automatically.</li>
           <li>The exam opens in full screen. Leaving full screen or switching tabs is recorded as a flag.</li>
         </ul>

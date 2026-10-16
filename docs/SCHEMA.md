@@ -22,6 +22,7 @@ Phases tag each collection: `1` = Phase 1, `2` = Phase 2, `3` = Phase 3.
 | `assessors` | `email` | `emailHash` | equality only |
 | `proctors` | `email` | `emailHash` | equality only |
 | `learners` | `phone` | none | no |
+| `proctoringFlags` | `location` | none | no (X-07: JSON text of latitude, longitude, accuracy) |
 
 Not encrypted, on purpose or not yet: names, `externalRef`, `accommodations`, training-partner and centre contact fields, `awardingBodies.notificationEmails`, and `loginEvents` (location). See decisions 260 and 261. Raw emails and phones in `auditLogs` snapshots are masked, `emailQueue` masks `to` and clears `text` once sent or failed, and historical rows can be masked via `npm run scrub:logs` (B-16). The schema has no candidate or learner date of birth, address or email; the plugin can take such a field when one is added (decision 260).
 
@@ -395,6 +396,7 @@ Indexes: `{ code: 1 }` unique; `{ sector: 1 }`.
 | sla | { acceptDueAt, assignDueAt, resultDueAt, breached: SlaBreachKey[], lateActions?: [{ key, reason, byUserId, at }] } | Y | |
 | ratioOverride | { byUserId, reason, at } | N | |
 | resultId | ObjectId | N | |
+| captureLocation | boolean | Y | X-07. Default `false`. When `true` the candidate's browser may add its location to proctoring flag photos. Set by `aa_admin` with `PUT /batches/:id/capture-location` (audited). Turning it off does not remove coordinates already saved |
 | testPaperId | ObjectId | N | Ref: `testPapers`. B-18a (D5): the one paper candidates of the batch can start. Set by aa_admin with `PUT /batches/:id/test-paper`; the paper must be approved, complete, of the same qualification and in the batch's assessment language. Cannot be set or changed once any attempt exists on the batch. Default null (nothing can be started) |
 | isReassessment | bool | Y | |
 | reassessmentOf | ObjectId | N | immediate parent |
@@ -548,7 +550,7 @@ One row per person whose personal data a read endpoint returned. Append-only (up
 |---|---|---|
 | `actorId` | ObjectId | user who read |
 | `actorRole` | string | role at the time |
-| `subjectType` | string | `user`, `learner`, `assessor`, `proctor`, `evidence` (V-01: one row per evidence file download), `question` (S-02: one row per question whose text a read returned), `testPaper` (S-02: one row per test paper read) |
+| `subjectType` | string | `user`, `learner`, `assessor`, `proctor`, `evidence` (V-01: one row per evidence file download), `question` (S-02: one row per question whose text a read returned), `testPaper` (S-02: one row per test paper read), `proctoringFlag` (X-07: one row per flag whose photo coordinates a read returned; field `location`) |
 | `subjectId` | string | id of the person read (`users._id`, `learners._id`, ...). The roster endpoint logs `learnerId`, not the candidate row id |
 | `kind` | string | `list` or `detail` |
 | `fields` | string[] | names of the personal fields the response carried, for example `["name","phone","externalRef"]` |
@@ -997,6 +999,8 @@ Indexes: `{ attemptId: 1 }` unique; `{ batchId: 1, createdAt: -1 }`; `{ abId: 1,
 | receivedAt | Date | Y | Server clock |
 | detail | {label, count, confidence} | N | Label max 60, count 0 to 100, confidence 0 to 1. No images or personal data |
 | evidenceId | ObjectId | N | A `proctor_snapshot` evidence row of the same session |
+| locationStatus | enum | Y | X-07. `captured` or `not_shared` (default). `captured` only when the batch had `captureLocation` on and the browser sent coordinates |
+| location | string | N | X-07. `{"latitude":n,"longitude":n,"accuracy":n}` as JSON text, **encrypted at rest** (§7), null unless `locationStatus` is `captured`. Never in an audit row, access-log row or log line. Returned only by `GET /proctoring/flags/:id/capture`, to `aa_admin`, the batch `tp` and the assigned `proctor`, and each such read is access-logged |
 
 X-06: no new field. The staff response adds `sustainedSeconds`, read from `PROCTOR_SUSTAINED_SECONDS` (§2) at response time and not stored. The image size and resolution are not stored on the flag: size, kind and capture time come from the linked `evidence` row, and the page reads the resolution from the loaded picture.
 | payloadHash | string | Y | sha256 of the canonical payload; replay vs `CONFLICT_IDEMPOTENT`. Never returned |

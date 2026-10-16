@@ -81,6 +81,8 @@ export type Flag = {
   detail: { label?: string; count?: number; confidence?: number } | null;
   /** How long the condition must last before the browser raises this type; null for one-off events. */
   sustainedSeconds: number | null;
+  /** X-07: whether coordinates were kept for this flag. The coordinates come from getFlagCapture. */
+  locationStatus: "captured" | "not_shared";
   review: FlagReview | null;
 };
 
@@ -176,6 +178,7 @@ function parseFlag(value: unknown): Flag {
     detail,
     sustainedSeconds:
       typeof value.sustainedSeconds === "number" && Number.isFinite(value.sustainedSeconds) ? value.sustainedSeconds : null,
+    locationStatus: value.locationStatus === "captured" ? "captured" : "not_shared",
     review: parseReview(value.review),
   };
 }
@@ -238,4 +241,52 @@ export async function reviewProctoringFlag(id: string, decision: Decision, note?
     body: trimmed ? { decision, note: trimmed } : { decision },
   });
   return parseFlag(body);
+}
+
+/** X-07: what the server saved about a flag photo, to read next to the picture. */
+export type FlagCapture = {
+  flagId: string;
+  type: string;
+  reason: string;
+  severity: Severity;
+  /** The browser's clock; the time drawn on the photo comes from it. */
+  capturedAt: string;
+  /** The server's clock when the flag arrived. */
+  receivedAt: string;
+  evidenceId: string | null;
+  locationStatus: "captured" | "not_shared";
+  /** False for roles that may not see coordinates (assessor, awarding body reviewer, NCVET viewer). */
+  locationVisible: boolean;
+  location: { latitude: number; longitude: number; accuracy: number | null } | null;
+};
+
+export async function getFlagCapture(flagId: string, signal?: AbortSignal): Promise<FlagCapture> {
+  const body = await apiRequest<unknown>(`/proctoring/flags/${encodeURIComponent(flagId)}/capture`, { signal });
+  if (!isRecord(body)) throw bad("Flag photo details");
+  const id = str(body.flagId);
+  const type = str(body.type);
+  const capturedAt = str(body.capturedAt);
+  const receivedAt = str(body.receivedAt);
+  if (!id || !type || !capturedAt || !receivedAt || !isSeverity(body.severity)) throw bad("Flag photo details");
+  const loc = body.location;
+  const location =
+    isRecord(loc) && typeof loc.latitude === "number" && typeof loc.longitude === "number"
+      ? {
+          latitude: loc.latitude,
+          longitude: loc.longitude,
+          accuracy: typeof loc.accuracy === "number" ? loc.accuracy : null,
+        }
+      : null;
+  return {
+    flagId: id,
+    type,
+    reason: str(body.reason) ?? type,
+    severity: body.severity,
+    capturedAt,
+    receivedAt,
+    evidenceId: str(body.evidenceId),
+    locationStatus: body.locationStatus === "captured" ? "captured" : "not_shared",
+    locationVisible: body.locationVisible === true,
+    location,
+  };
 }

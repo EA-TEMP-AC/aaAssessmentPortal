@@ -292,6 +292,7 @@ Response `201` (STT; assign due is 7 working days after allocation, result due i
   "proctorId": null,
   "resultId": null,
   "testPaperId": null,
+  "captureLocation": false,
   "isReassessment": false,
   "reassessmentOf": null,
   "firstAssessmentBatchId": "66f0000000000000000000b1",
@@ -526,6 +527,10 @@ Response `200`: the batch, with `learnerFeedback` set to `{ collected, reason, n
 B-18a (D5). Role: `aa_admin` only; every other role `403`. Sets the one test paper candidates of the batch can start. Body `{ "testPaperId": "<id>" }` (the only key; `null` and other keys are `400 VALIDATION_ERROR`). Returns the batch (`200`, with `testPaperId`).
 Checks: the paper must be `approved` and complete (`409 BATCH_TEST_PAPER_NOT_APPROVED`), for the batch's qualification (`400 BATCH_TEST_PAPER_QUALIFICATION_MISMATCH`), and in the batch's assessment language, compared like the start rule (`409 BATCH_TEST_PAPER_LANGUAGE_MISMATCH`). Unknown batch or paper `404`. Setting or changing it is refused once any attempt exists on the batch, open or closed (`409 BATCH_TEST_PAPER_LOCKED`). Changing it before then replaces the earlier paper. Does not change batch status. A reassessment batch does not inherit the paper.
 Audit: `batch.set_test_paper`, entity `batch`, `before: { testPaperId }`, `after: { testPaperId }`.
+
+### PUT /batches/:id/capture-location
+X-07. Role: `aa_admin` only; every other role `403`. Body `{ "captureLocation": true|false }` (the only key; a non-boolean or any other key is `400 VALIDATION_ERROR`). Returns the batch (`200`, with `captureLocation`). Unknown batch `404`. Any batch status. `captureLocation` is on every batch response and defaults to `false`. When it is `true` the candidate's browser may add its location to flag photos (see Proctoring, flag photos). Turning it off stops new coordinates being kept; coordinates already saved stay with their flags.
+Audit: `batch.set_capture_location`, entity `batch`, `before: { captureLocation }`, `after: { captureLocation }`.
 
 ### GET /batches/:id/learner-feedback
 
@@ -1669,7 +1674,7 @@ Audit: `attempt.start`, or `attempt.start_replay`.
 ### GET /api/v1/attempts/available
 Role: `candidate` only; every other role `403 FORBIDDEN`. No query keys (`400 VALIDATION_ERROR` otherwise). Task B-19.
 Lists, for each batch where the candidate is on the active roster and the batch is `in_progress`, the one test paper set on the batch (`batches.testPaperId`, D5; it must be approved and complete). A batch with no paper set lists nothing. A paper with an attempt of the candidate that is still open is also listed when the batch is no longer `in_progress` or its dates have passed (Q702, B-18a). Returns `{ items: [...] }`, batches by assessment start date. Each item:
-`{ batchId, batchName, paperId, paperCode, paperName, language, questionCount, durationMinutes, attempt, startable }`.
+`{ batchId, batchName, captureLocation, paperId, paperCode, paperName, language, questionCount, durationMinutes, attempt, startable }`. `captureLocation` (X-07) is the batch setting; when `true` the check screen shows "This exam records your location with flag photos."
 - `batchName` is the qualification code and name with the assessment dates; `paperName` is the paper's `name`; a paper without one gets the qualification name and the language, for example `"Electrician L4 (en)"`. `paperCode` is the last 6 characters of the paper id, upper case (B-18a, Q700).
 - `language` is the paper's `rules.language`. `durationMinutes` is the paper's value, else 60.
 - `attempt` is `null` or the candidate's own attempt on that paper: `{ id, status, startedAt, deadline, remainingSeconds }`. `remainingSeconds` is the time left to `deadline` for an open attempt (0 once past it) and `null` for a closed one. An open attempt past its accept window is closed as `timed_out` by this read (Q703).
@@ -1714,9 +1719,11 @@ Role: `candidate`, for their own attempt (`attempts.userId`). Body `{ "attemptId
 ```json
 { "id": "66f0...", "attemptId": "66f0...", "batchId": "66f0...", "status": "active",
   "config": { "snapshotIntervalSeconds": 30, "detectionIntervalMs": 1000, "flagCooldownSeconds": 15,
-              "sustainedSeconds": { "face_not_present": 5, "camera_blocked": 5, "camera_frozen": 8 } } }
+              "sustainedSeconds": { "face_not_present": 5, "camera_blocked": 5, "camera_frozen": 8 },
+              "flagSeverity": { "tab_hidden": "low", "face_not_present": "medium", "phone_detected": "high" } },
+  "captureLocation": false }
 ```
-The numbers come from `server/src/config/compliance.js` (SCHEMA §2).
+The numbers come from `server/src/config/compliance.js` (SCHEMA §2). X-07: `config.flagSeverity` is `PROCTOR_FLAG_SEVERITY` (every type); the browser draws the severity on the flag photo. `captureLocation` is the batch setting (`PUT /batches/:id/capture-location`); the browser asks for the location only when it is `true`.
 Errors: `403 FORBIDDEN` (another user's attempt, any other role), `404 NOT_FOUND` (unknown attempt), `409 PROCTORING_ATTEMPT_CLOSED` (new session for a closed attempt).
 Audit: `proctoring.session_start` or `proctoring.session_replay`.
 
@@ -1737,11 +1744,28 @@ Role: `candidate`, own session.
 | `capturedAt` | yes | ISO-8601 with `Z` or an offset; device clock, stored as sent |
 | `detail` | no | Only `label` (1 to 60 letters, digits, spaces, `_`, `-`), `count` (integer 0 to 100), `confidence` (0 to 1). Never an image, a name or other personal data; any other key is `400` |
 | `evidenceId` | no | A `proctor_snapshot` evidence row of this session, else `400` |
+| `location` | no | X-07. `{ latitude (-90 to 90), longitude (-180 to 180), accuracy (metres, 0 to 1000000, optional) }`, no other key. Kept only when the batch has `captureLocation` on; otherwise it is dropped and the flag has `locationStatus: "not_shared"`. Not part of the replay check: a resend with a different `location` returns the stored flag |
 
 The **server** sets `severity` (a `severity` key in the body is `400`): low `tab_hidden`, `fullscreen_exit`, `window_blur`, `permission_revoked`, `object_detected`; medium `face_not_present`, `id_unreadable`; high `multiple_faces`, `person_detected`, `phone_detected`, `camera_blocked`, `camera_frozen`, `face_mismatch`, `id_mismatch`.
 
 `201` new, `200` replay: `{ id, sessionId, clientEventId, type, severity, capturedAt, receivedAt, evidenceId, replayed }`. The same `clientEventId` with a different `type`, `capturedAt`, `detail` or `evidenceId` is `409 CONFLICT_IDEMPOTENT`. The server does not enforce the cooldown.
-Audit: `proctoring.flag` or `proctoring.flag_replay` (session, type, severity, time, evidence id; no request body).
+Audit: `proctoring.flag` or `proctoring.flag_replay` (session, type, severity, time, evidence id; no request body). **Coordinates are never in an audit row, an access-log row or a log line** (X-07). The response does not echo the location.
+
+#### Flag photos (X-07)
+When the engine raises a flag it takes a camera photo at that moment, burns a banner into the bottom of the JPEG in the browser (flag name, the reason in one line such as "Face not visible for 2 seconds", severity, date and time in IST, attempt short code (last 6 characters of the attempt id, upper case), and "Location: lat, lon (accuracy N m)" or "Location not shared"), and uploads it as `proctor_snapshot`; the flag carries it as `evidenceId`. The photo is at most 150 KB (quality, then size, is reduced to fit); one photo per flag, so the cooldown applies. If the frame, the banner or the upload fails, the flag is still saved without `evidenceId` and the review page says "No image for this flag". The interval snapshots have no banner. Only the banner photo is kept (open question 820).
+The banner is drawn in the browser and can be forged, so the server keeps the facts itself: the flag row holds `type`, `severity` (server table), `capturedAt` (browser clock), `receivedAt` (server clock) and, when allowed, the encrypted coordinates. The reason line is built by the server from the type and `PROCTOR_SUSTAINED_SECONDS` (`server/src/modules/proctoring/flag-reason.js`), not read from the picture.
+
+### GET /api/v1/proctoring/flags/:id/capture
+X-07. What the server saved about one flag photo, to show beside the picture. Roles: `aa_admin`, `proctor`, `assessor`, `ab_reviewer`, `ncvet_viewer` and `tp`, scoped like the session (the proctor and assessor of the batch, the awarding body's reviewer, the batch's training partner); anything else or outside scope `403`, unknown flag `404`.
+```json
+{ "flagId": "66f0...", "sessionId": "66f0...", "type": "face_not_present",
+  "reason": "Face not visible for 2 seconds", "severity": "medium",
+  "capturedAt": "2026-11-20T05:00:03.000Z", "receivedAt": "2026-11-20T05:00:04.120Z",
+  "evidenceId": "66f0...", "locationStatus": "captured", "locationVisible": true,
+  "location": { "latitude": 19.076123, "longitude": 72.877456, "accuracy": 12 } }
+```
+`capturedAt` is the browser clock (the time drawn on the photo comes from it) and `receivedAt` the server clock; the review page shows both so a mismatch is visible. `locationStatus` is `captured` or `not_shared`. Coordinates are personal data: `location` is returned only to `aa_admin`, the batch's `tp` and the batch's assigned `proctor` (`locationVisible: true`); every other role gets `locationVisible: false` and `location: null`. When coordinates are returned the read is access-logged before the response is sent (a row for the flag, subject type `proctoringFlag`, field `location`, and one for the learner, field `flagLocation`); if it cannot be logged the read fails. No audit row (read only).
+
 
 Storage (X-06): the flag and the session's `flagCounts` are written in one transaction. A MongoDB that is not a replica set refuses transactions with code 20 (IllegalOperation); the server then writes the flag and the count as two plain writes and logs one warning, so the flag is not lost. The supported set-up is still the replica set in docker-compose.yml.
 
@@ -1759,7 +1783,7 @@ Roles: `aa_admin` and `ncvet_viewer` (all), `proctor` (batches whose `proctorId`
 ```
 
 ### GET /api/v1/proctoring/sessions/:id
-Same roles and scope (`403` outside scope, `404` unknown). The list item plus `serverTime`, `warnings[{ id, message, createdAt }]` and `flags[]`, oldest `capturedAt` first: `{ id, sessionId, clientEventId, type, severity, capturedAt, receivedAt, detail, sustainedSeconds, evidenceId, review }`, where `sustainedSeconds` (X-06) is how long the condition must last before the browser raises this type (`PROCTOR_SUSTAINED_SECONDS`: `face_not_present` 2, `camera_blocked` 2, `camera_frozen` 8), and `null` for one-off events such as `tab_hidden`; it is the rule, not a measured duration, and it is also on the review response. In `review` is `null` or `{ decision, note, decidedAt, decidedBy, decidedByRole }`. Load a snapshot with `GET /evidence/:evidenceId/file` (access-logged). The proctor page lists a session's photos with `GET /evidence?sessionId=<session id>&kind=proctor_snapshot&pageSize=100` (X-06) and shows those that no flag points at as the "Snapshots" strip. The same read roles and scope apply; no image bytes or links are written to any audit row.
+Same roles and scope (`403` outside scope, `404` unknown). The list item plus `serverTime`, `warnings[{ id, message, createdAt }]` and `flags[]`, oldest `capturedAt` first: `{ id, sessionId, clientEventId, type, severity, capturedAt, receivedAt, detail, sustainedSeconds, evidenceId, locationStatus, review }`, where `sustainedSeconds` (X-06) is how long the condition must last before the browser raises this type (`PROCTOR_SUSTAINED_SECONDS`: `face_not_present` 2, `camera_blocked` 2, `camera_frozen` 8), and `null` for one-off events such as `tab_hidden`; it is the rule, not a measured duration, and it is also on the review response. In `review` is `null` or `{ decision, note, decidedAt, decidedBy, decidedByRole }`. `locationStatus` (X-07) says whether coordinates were kept; the coordinates themselves are only in `GET /proctoring/flags/:id/capture`. Load a snapshot with `GET /evidence/:evidenceId/file` (access-logged). The proctor page lists a session's photos with `GET /evidence?sessionId=<session id>&kind=proctor_snapshot&pageSize=100` (X-06) and shows those that no flag points at as the "Snapshots" strip. The same read roles and scope apply; no image bytes or links are written to any audit row.
 
 ### GET /api/v1/proctoring/sessions/:id/report (P-04)
 Same roles and scope. Writes nothing.
@@ -1790,7 +1814,7 @@ Role: `candidate`, own session only (staff read warnings in the session detail).
 The server side is a separate task. These are the shapes the web client (`web/src/api/proctoringSession.ts`) is built against; that task should confirm or correct them (DECISIONS Q645). All need the `candidate` role and the candidate's own attempt.
 
 ### POST /api/v1/proctoring/sessions
-Body `{ "attemptId" }`. Returns `{ id, status, config }`, where `config` is `{ snapshotIntervalSeconds, detectionIntervalMs, flagCooldownSeconds, sustainedSeconds: { <flagType>: seconds } }`. Called once when the exam opens. On any error the exam goes on without proctoring and shows a notice.
+Body `{ "attemptId" }`. Returns `{ id, status, config, captureLocation }`, where `config` is `{ snapshotIntervalSeconds, detectionIntervalMs, flagCooldownSeconds, sustainedSeconds: { <flagType>: seconds }, flagSeverity: { <flagType>: "low"|"medium"|"high" } }` (X-07 added `flagSeverity` and `captureLocation`). Called once when the exam opens. On any error the exam goes on without proctoring and shows a notice.
 
 ### POST /api/v1/proctoring/sessions/:id/heartbeat
 No body. Any `2xx`. Sent every 15 seconds while the exam is open.

@@ -1,3 +1,4 @@
+import { bannerFor, type BannerInput } from "./banner";
 import { PROCTOR_THRESHOLDS, type ProctorThresholds } from "./config";
 import type { DetectorFactory } from "./detector";
 import {
@@ -18,6 +19,7 @@ import {
   type IdentityState,
 } from "./face";
 import { describeError, proctorDebug } from "./debug";
+import { createLocationProvider, type LocationProvider, type PhotoLocation } from "./location";
 import { createMediaPipeDetector } from "./mediapipeDetector";
 import { createRulesState, evaluateEvent, evaluateFrame, frameStats, type RulesState } from "./rules";
 import { createTransport } from "./transport";
@@ -50,6 +52,8 @@ export type EngineOptions = {
   /** Builds the brightness/freeze sampler. Default reads a 32x24 canvas. */
   samplerFactory?: () => { sample: FrameSampler; release: () => void };
   takeSnapshot?: SnapshotTaker;
+  /** X-07: where the browser is. Used only when start() is told the batch captures location. */
+  locationProvider?: LocationProvider;
   /** Builds the scaled-down frame the detector reads. Default: at most `detectionMaxWidth` wide. */
   framerFactory?: () => { make: (video: HTMLVideoElement) => Promise<DetectionFrame>; release: () => void };
   /** High-resolution clock for timing a check. Default performance.now. */
@@ -98,6 +102,8 @@ type Run = {
   /** True when the matcher is loaded and compared every cycle. */
   faceActive: boolean;
   identity: IdentityState;
+  /** X-07: null when the batch does not capture location. */
+  location: LocationProvider | null;
 };
 
 export const FACE_MODEL_MESSAGE = "The face check could not load; the other browser checks still run.";
@@ -149,10 +155,14 @@ export function createEngine(options: EngineOptions = {}): ProctorEngine {
     return `${r.attemptId.slice(0, 60)}-${prefix}${r.seq}-${randomPart()}`.slice(0, 200);
   }
 
-  async function snapshot(r: Run, reason: "interval" | ProctorFlagType): Promise<string | null> {
+  async function snapshot(
+    r: Run,
+    reason: "interval" | ProctorFlagType,
+    banner?: Promise<BannerInput>,
+  ): Promise<string | null> {
     let evidenceId: string | null = null;
     try {
-      const blob = await takeSnapshot(r.video);
+      const blob = await takeSnapshot(r.video, banner);
       if (!blob) proctorDebug.snapshotFailed("no image from the camera");
       if (blob && run === r) {
         evidenceId = await r.transport.uploadSnapshot({
@@ -179,11 +189,24 @@ export function createEngine(options: EngineOptions = {}): ProctorEngine {
     }
     const capturedAt = new Date(flag.at).toISOString();
     const clientEventId = eventId(r, "f");
-    const evidenceId = await snapshot(r, flag.type);
+    // X-07: the photo is taken at once; the banner waits for the location (cached, never tracked).
+    const where: Promise<PhotoLocation | null> = r.location
+      ? r.location.get().catch(() => null)
+      : Promise.resolve(null);
+    const banner = where.then((location) => bannerFor(flag, r.config, r.attemptId, location));
+    const evidenceId = await snapshot(r, flag.type, banner);
+    const location = await where;
     if (run !== r) return;
     const body: FlagBody = { clientEventId, type: flag.type, capturedAt };
     if (flag.detail) body.detail = flag.detail;
     if (evidenceId) body.evidenceId = evidenceId;
+    if (location) {
+      body.location = {
+        latitude: location.latitude,
+        longitude: location.longitude,
+        ...(location.accuracy === null ? {} : { accuracy: location.accuracy }),
+      };
+    }
     options.onFlag?.(flag, body);
     await r.transport.sendFlag(r.sessionId, body);
   }
@@ -338,6 +361,7 @@ export function createEngine(options: EngineOptions = {}): ProctorEngine {
       faceMatcher: o.faceMatcher ?? null,
       faceActive: false,
       identity: INITIAL_IDENTITY_STATE,
+      location: o.captureLocation ? (options.locationProvider ?? createLocationProvider()) : null,
     };
     run = r;
     setStatus(r, "starting");

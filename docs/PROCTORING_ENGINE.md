@@ -113,3 +113,18 @@ The flag POST saves the flag and bumps the session count in a MongoDB transactio
 - **Flag notice.** `start()` takes an optional `onFlag({ type })`, called when the rules raise a flag. The exam page shows a centred, non-blocking card (`role="alertdialog"`, focus on OK) with one calm sentence per type (`web/src/exam/flagNotices.ts`), one at a time, merging repeats of a type inside `flagCooldownSeconds`. Nothing is stored or sent for it.
 - **Chip and preview.** "Camera on", "Checking" or "Camera problem" (with the engine's reason), and a mirrored 160 x 120 view of the candidate's own camera. The view is not recorded.
 - No flag rule, severity or result changed.
+
+## Flag photo with a banner (X-07)
+
+Every flag the engine raises takes one photo at that moment (the interval snapshot stays plain). The frame is copied first, then a black strip is added under it with white text, drawn on a canvas in the browser (`web/src/proctoring/banner.ts`):
+
+1. flag name and severity ("No face in view | Medium severity")
+2. the reason in one line ("Face not visible for 2 seconds"; built from `sustainedSeconds` in the session config)
+3. date and time in IST, and the attempt short code (last 6 characters of the attempt id)
+4. "Location: lat, lon (accuracy N m)", or "Location not shared"
+
+The JPEG is at most 150 KB (`flagPhotoMaxBytes`): quality goes 0.7, 0.55, 0.4, 0.3, then the picture is made 25% smaller and tried again, up to 3 times. If it cannot fit, or there is no canvas, the flag is sent without a photo. One photo per flag, so the cooldown limits photos too.
+
+Location (`web/src/proctoring/location.ts`) is used only when the batch has `captureLocation` on (the session response says so; the check screen shows "This exam records your location with flag photos." and the exam start asks the browser once). The position is requested with `getCurrentPosition` when a photo needs it, kept for 60 seconds and reused; `watchPosition` is never used. A refusal, a timeout (5 seconds) or a browser without geolocation gives "Location not shared"; nothing else changes. A refusal is also remembered for 60 seconds so the browser is not asked again at once.
+
+The banner can be forged, so the flag body also carries `location` (when allowed) and the server keeps type, severity, both clocks and the encrypted coordinates itself. The review page shows the photo and the server's details side by side, with the server time next to the browser time that is drawn on the photo.
