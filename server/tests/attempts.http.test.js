@@ -138,6 +138,7 @@ async function world({ paper = {}, batch = {} } = {}) {
       resultDueAt: new Date("2026-11-25T18:29:59.999Z"),
     },
     allocatedAt: new Date("2026-10-08T08:00:00.000Z"),
+    testPaperId: testPaper._id,
     ...batch,
   });
   const learnerId = oid();
@@ -689,6 +690,61 @@ describe("Attempt engine API (server/src/modules/attempts)", () => {
         markedBy: w.assessor.userId,
       });
       expect(short.markedAt).toBeTruthy();
+    });
+
+    describe("lock once the result is submitted (D6)", () => {
+      const lockResult = (status, batchStatus = "result_submitted") =>
+        Promise.all([
+          Batch.updateOne({ _id: w.batch._id }, { status: batchStatus }),
+          Result.create({ batchId: w.batch._id, status, rows: [] }),
+        ]);
+
+      it.each(["submitted", "validated", "published"])(
+        "refuses marks from the assessor and aa_admin while the result is %s",
+        async (status) => {
+          const id = await closed();
+          await lockResult(status);
+          for (const who of [w.assessor, w.admin]) {
+            const res = await putMarks(who, id, [{ questionId: qid(w, "viva"), marks: 3 }]);
+            expect(res.status).toBe(409);
+            expect(res.body.error.code).toBe("ATTEMPT_MARKS_LOCKED");
+            expect(res.body.error.details).toEqual({ resultStatus: status });
+          }
+          const stored = await Attempt.findById(id).lean();
+          const viva = stored.questions.find((q) => String(q.questionId) === qid(w, "viva"));
+          expect(viva.awardedMarks).toBeNull();
+          expect(await AuditLog.countDocuments({ action: "attempt.manual_marks" })).toBe(0);
+        },
+      );
+
+      it("allows marks while the result is still a draft or does not exist", async () => {
+        const id = await closed();
+        expect(
+          (await putMarks(w.assessor, id, [{ questionId: qid(w, "viva"), marks: 1 }])).status,
+        ).toBe(200);
+        await Result.create({ batchId: w.batch._id, status: "draft", rows: [] });
+        expect(
+          (await putMarks(w.assessor, id, [{ questionId: qid(w, "viva"), marks: 2 }])).status,
+        ).toBe(200);
+      });
+
+      it("opens again after the reviewer returns the result for correction with a reason", async () => {
+        const id = await closed();
+        await lockResult("submitted");
+        const locked = await putMarks(w.assessor, id, [{ questionId: qid(w, "viva"), marks: 3 }]);
+        expect(locked.status).toBe(409);
+
+        const back = await request(app)
+          .post(`/api/v1/batches/${w.batch._id}/return-for-correction`)
+          .set(bearer(w.reviewer.token))
+          .send({ reason: "Viva mark was entered wrongly" });
+        expect(back.status, JSON.stringify(back.body)).toBe(200);
+        expect(await AuditLog.countDocuments({ action: "batch.return-for-correction" })).toBe(1);
+
+        const res = await putMarks(w.assessor, id, [{ questionId: qid(w, "viva"), marks: 3 }]);
+        expect(res.status, JSON.stringify(res.body)).toBe(200);
+        expect(await AuditLog.countDocuments({ action: "attempt.manual_marks" })).toBe(1);
+      });
     });
 
     it("lets aa_admin mark, and a later mark replaces the earlier one", async () => {

@@ -28,9 +28,12 @@ export const RECOGNITION_READ_ROLES = Object.freeze(["aa_admin", "mis", "ncvet_v
 
 /**
  * Users CRUD and password reset. docs/SCHEMA.md §5.
- * mis may not escalate to aa_admin (enforced in the users service).
+ * mis is limited to MIS_MANAGED_USER_ROLES (enforced in the users service).
  */
 export const USER_ADMIN_ROLES = Object.freeze(["aa_admin", "mis"]);
+
+/** Decision D1 (2026-10-16): the only roles `mis` may create or change users for. */
+export const MIS_MANAGED_USER_ROLES = Object.freeze(["tp", "assessor", "proctor", "candidate"]);
 
 /** Master-data writes. docs/SCHEMA.md §5: aa_admin and mis only. */
 export const MASTER_DATA_WRITE_ROLES = Object.freeze(["aa_admin", "mis"]);
@@ -259,8 +262,14 @@ export const EVIDENCE_VERIFY_ROLES = Object.freeze(["aa_admin"]);
 /** POST /tests/generate. E-01: aa_admin and sme build draft test papers. */
 export const TEST_GENERATE_ROLES = Object.freeze(["aa_admin", "sme"]);
 
-/** POST /tests/:id/approve. E-01 (AB approval step, task A-04): ab_reviewer or aa_admin. */
-export const TEST_APPROVE_ROLES = Object.freeze(["aa_admin", "ab_reviewer"]);
+/** POST /tests/:id/submit. B-18a (D4): the people who build drafts send them for approval. */
+export const TEST_SUBMIT_ROLES = TEST_GENERATE_ROLES;
+
+/** POST /tests/:id/approve. B-18a (D4, Guidelines 4.2d): the awarding body reviewer only. */
+export const TEST_APPROVE_ROLES = Object.freeze(["ab_reviewer"]);
+
+/** PUT /batches/:id/test-paper. B-18a (D5): aa_admin picks the one paper of a batch. */
+export const BATCH_TEST_PAPER_ROLES = Object.freeze(["aa_admin"]);
 
 /** GET /tests, GET /tests/:id, regenerate-check. E-01: candidate, tp and the rest get nothing. */
 export const TEST_READ_ROLES = Object.freeze(["aa_admin", "sme", "ab_reviewer"]);

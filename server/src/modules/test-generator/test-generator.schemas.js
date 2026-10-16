@@ -22,6 +22,7 @@ export const generateSchema = guard(
     .object({
       qualificationId: z.string().trim().min(1).max(64),
       language: z.string().trim().min(1).max(32),
+      name: z.string().trim().min(1).max(80).optional(),
       quotas: z.array(quotaSchema).min(1).max(200),
       totalMarks: z.number().positive().max(100000).optional(),
       durationMinutes: z.number().int().min(1).max(600).optional(),

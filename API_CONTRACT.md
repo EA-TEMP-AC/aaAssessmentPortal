@@ -140,7 +140,7 @@ Optional `{ "refreshToken": "..." }`. `204`.
 
 ### POST /users
 
-Roles: `aa_admin` | `mis` (no create `aa_admin` for mis).
+Roles: `aa_admin` | `mis`. `mis` may create, change, reset and resend only for users whose role is `tp`, `assessor`, `proctor` or `candidate` (D1, B-18a). A `mis` request that names any other role, or targets a user who has one (`aa_admin`, `sme`, `ab_reviewer`, `ncvet_viewer`, `mis`), is `403 FORBIDDEN` and stores and audits nothing. `aa_admin` may use every role. A successful create is audited (`user.create`, actor role in the row).
 
 Request:
 ```json
@@ -156,6 +156,8 @@ Request:
 Admin-set password → `mustChangePassword: true`. Response `201` without `passwordHash`.
 
 ### GET /users, GET /users/:id, PATCH /users/:id
+
+`PATCH` by `mis` follows the same limit: both the user's current role and any new `role` in the body must be one of the four.
 
 ### POST /users/:id/password-reset
 
@@ -289,6 +291,7 @@ Response `201` (STT; assign due is 7 working days after allocation, result due i
   "assessorId": null,
   "proctorId": null,
   "resultId": null,
+  "testPaperId": null,
   "isReassessment": false,
   "reassessmentOf": null,
   "firstAssessmentBatchId": "66f0000000000000000000b1",
@@ -518,6 +521,11 @@ Owned by **B-10**. Roles: `aa_admin` | `mis`. Everyone else is `403`. The batch 
 Unknown keys, a missing `reason`, a `reason` with `collected: true`, or a `collectedOn` with `collected: false` are `400 VALIDATION_ERROR` with `details` naming the field. An unknown batch is `404`; a batch outside the caller's scope is `403`.
 
 Response `200`: the batch, with `learnerFeedback` set to `{ collected, reason, note, collectedOn, recordedBy, recordedAt }` (`reason`, `note`, `collectedOn` are `null` when absent; `recordedBy` is the caller, `recordedAt` the write time). **Audit:** `batch.learner_feedback` on the batch, with `before` and `after` each `{ learnerFeedback }`. Annexure IX(a) Governance & Manpower sub-parameter 4 (docs/ERF.md row 26).
+
+### PUT /batches/:id/test-paper
+B-18a (D5). Role: `aa_admin` only; every other role `403`. Sets the one test paper candidates of the batch can start. Body `{ "testPaperId": "<id>" }` (the only key; `null` and other keys are `400 VALIDATION_ERROR`). Returns the batch (`200`, with `testPaperId`).
+Checks: the paper must be `approved` and complete (`409 BATCH_TEST_PAPER_NOT_APPROVED`), for the batch's qualification (`400 BATCH_TEST_PAPER_QUALIFICATION_MISMATCH`), and in the batch's assessment language, compared like the start rule (`409 BATCH_TEST_PAPER_LANGUAGE_MISMATCH`). Unknown batch or paper `404`. Setting or changing it is refused once any attempt exists on the batch, open or closed (`409 BATCH_TEST_PAPER_LOCKED`). Changing it before then replaces the earlier paper. Does not change batch status. A reassessment batch does not inherit the paper.
+Audit: `batch.set_test_paper`, entity `batch`, `before: { testPaperId }`, `after: { testPaperId }`.
 
 ### GET /batches/:id/learner-feedback
 
@@ -1452,14 +1460,14 @@ Roles: `aa_admin`, `sme`. Unknown keys are rejected.
   "allowPartial": false
 }
 ```
-`type` is optional (any type). A NOS may not have both an any-type quota and a typed quota, and no two quotas may share NOS and type. `totalMarks`, `seed` and `allowPartial` are optional. With no seed the server draws one and stores it.
+`name` is optional (1 to 80 characters after trimming, else `400 VALIDATION_ERROR`). With no name the server stores the qualification name and the language, for example `"Electrician L4 (en)"`, cut to 80 characters (B-18a). `type` is optional (any type). A NOS may not have both an any-type quota and a typed quota, and no two quotas may share NOS and type. `totalMarks`, `seed` and `allowPartial` are optional. With no seed the server draws one and stores it.
 Only approved, latest-version, non-retired questions in the language are used; no question appears twice.
-`201` returns the draft paper (`_id`, `status`, `seed`, `rules`, `items[]`, `totalMarks`, `shortages`, `complete`, `poolHash`).
+`201` returns the draft paper (`_id`, `name`, `status`, `seed`, `rules`, `items[]`, `totalMarks`, `shortages`, `complete`, `poolHash`).
 `422 TEST_BANK_SHORTAGE` when a quota cannot be filled: `error.details.shortages` lists `{nosId, type, requested, available}`. `422 TEST_MARKS_TARGET_NOT_MET` when the marks differ from the target (`details.totalMarks`, `details.targetMarks`). Nothing is stored. With `allowPartial: true` the draft is stored with `complete: false` and the shortages listed. Also `400 NOS_NOT_FOUND`, `DUPLICATE_QUOTA`, `OVERLAPPING_QUOTAS`, `404 QUALIFICATION_NOT_FOUND`.
 Audit: `test.generate`.
 
 ### GET /api/v1/tests
-Roles: `aa_admin`, `sme`, `ab_reviewer`. Query: `qualificationId` (id or code), `status` (`draft`|`approved`), `page`, `pageSize`. Returns `{items, total, page, pageSize}` without `items[]` of each paper.
+Roles: `aa_admin`, `sme`, `ab_reviewer`. Query: `qualificationId` (id or code), `status` (`draft`|`submitted`|`approved`), `page`, `pageSize`. Returns `{items, total, page, pageSize}` without `items[]` of each paper.
 
 ### GET /api/v1/tests/:id
 Same roles. `?withQuestions=true` adds `stem`, `options` and `correctAnswer` to each item, at most 50 items a page (S-02): `itemPage` (default 1) picks the page and the response adds `itemPage`, `itemPageSize` (50) and `itemTotal`. Without `withQuestions` the paper is returned in full, as ids only. Counts against the daily content-read cap (see Security audit tracker and content controls). `404 NOT_FOUND`.
@@ -1480,8 +1488,11 @@ The paper then also has `weightProfile: {profileId, version}`, `weightMix` and `
 ```
 `differenceCount` is achieved minus target. `matched` is true only when every class hits its target and nothing is unclassified. A mismatch does not refuse the paper (Q402). Errors: `404 WEIGHT_PROFILE_NOT_FOUND` (unknown id, version, or no approved version), `409 WEIGHT_PROFILE_NOT_APPROVED`, `400 WEIGHT_PROFILE_QUALIFICATION_MISMATCH`. `regenerate-check` replays with the stored profile version. The `test.generate` audit row includes `weightProfile`.
 
+### POST /api/v1/tests/:id/submit
+B-18a (D4). Roles: `aa_admin`, `sme`. No body. Draft to `submitted` ("submitted for approval"); sets `submittedBy` and `submittedAt`. `409 TEST_ALREADY_SUBMITTED`, `409 TEST_ALREADY_APPROVED`, `409 TEST_PAPER_INCOMPLETE` (shortage or missed marks target), `409 TEST_PAPER_STALE` (a question was retired, unapproved or superseded since generation; `details.stale`), `404 NOT_FOUND`. Everyone else `403`. Audit: `test.submit` with before and after.
+
 ### POST /api/v1/tests/:id/approve
-Roles: `aa_admin`, `ab_reviewer`. Draft to approved. `409 TEST_ALREADY_APPROVED`, `409 TEST_PAPER_INCOMPLETE` (shortage or missed marks target), `409 TEST_PAPER_STALE` (a question was retired, unapproved or superseded since generation; `details.stale`). Audit: `test.approve` with before and after.
+B-18a (D4, Guidelines 4.2d). Role: `ab_reviewer` only; `aa_admin`, `sme` and every other role are `403`. Submitted to approved; sets `approvedBy` and `approvedAt`. A draft is `409 TEST_NOT_SUBMITTED`. Also `409 TEST_ALREADY_APPROVED`, `409 TEST_PAPER_INCOMPLETE`, `409 TEST_PAPER_STALE` (checked again at approval). Only an approved, complete paper can be set on a batch or delivered. There is no link from a qualification to an awarding body (D2), so any `ab_reviewer` can approve any paper (Q860). Audit: `test.approve` with before and after.
 
 ### POST /api/v1/tests/:id/regenerate-check
 Roles: `aa_admin`, `sme`, `ab_reviewer`. Re-runs the selection with the stored seed and rules on the current bank. Returns `reproducible` (same questions, versions and order), `poolUnchanged` (bank pool is identical to generation time), `missing` and `extra` (`id:version`), and `stale` (stored questions no longer approved and current). If `poolUnchanged` is true and `reproducible` is false, the generator is broken. Audit: `test.regenerate_check`.
@@ -1652,17 +1663,17 @@ All under `/api/v1/attempts`. An attempt is one candidate's go at one approved t
 ### POST /api/v1/attempts/start
 Role: `candidate` (on the active roster of the batch). Body `{ "batchId", "testPaperId" }`.
 `201` new attempt, `200` when the candidate already has one for that paper (same id, same timer, same order). Returns `{ id, testPaperId, batchId, status, durationMinutes, startedAt, deadlineAt, closedAt, closeReason, serverTime, remainingSeconds, totalMarks, questions[] }`; each question is `{ questionId, order, type, marks, stem, options[{key,text}], answer }`. No answer key, no NOS, no marks awarded.
-Errors: `403 FORBIDDEN` (not on the active roster), `404 NOT_FOUND` (unknown batch; paper unknown, draft, incomplete or for another qualification), `409 ATTEMPT_BATCH_NOT_IN_PROGRESS`, `409 ATTEMPT_OUTSIDE_ASSESSMENT_WINDOW` (today in IST is before `assessmentStartDate` or after `assessmentEndDate`; `details` has both dates), `409 ATTEMPT_CANDIDATE_ABSENT` (attendance row with `present: false`), `409 ATTEMPT_LANGUAGE_MISMATCH` (`paper.rules.language` differs from the batch `assessmentLanguage`, compared trimmed and without case), `409 ATTEMPT_PAPER_UNAVAILABLE`. These apply to new attempts only; an existing attempt is still returned.
+Errors: `403 FORBIDDEN` (not on the active roster), `404 NOT_FOUND` (unknown batch; paper unknown, not approved, incomplete, for another qualification, or not the paper set on the batch), `409 ATTEMPT_NO_TEST_PAPER` (D5: the batch has no `testPaperId`), `409 ATTEMPT_BATCH_NOT_IN_PROGRESS`, `409 ATTEMPT_OUTSIDE_ASSESSMENT_WINDOW` (today in IST is before `assessmentStartDate` or after `assessmentEndDate`; `details` has both dates), `409 ATTEMPT_CANDIDATE_ABSENT` (attendance row with `present: false`), `409 ATTEMPT_LANGUAGE_MISMATCH` (`paper.rules.language` differs from the batch `assessmentLanguage`, compared trimmed and without case), `409 ATTEMPT_PAPER_UNAVAILABLE`. These apply to new attempts only; an existing attempt is still returned.
 Audit: `attempt.start`, or `attempt.start_replay`.
 
 ### GET /api/v1/attempts/available
 Role: `candidate` only; every other role `403 FORBIDDEN`. No query keys (`400 VALIDATION_ERROR` otherwise). Task B-19.
-Lists, for each batch where the candidate is on the active roster and the batch is `in_progress`, every `approved`, complete test paper of the batch's qualification. Returns `{ items: [...] }`, batches by assessment start date, papers oldest first. Each item:
+Lists, for each batch where the candidate is on the active roster and the batch is `in_progress`, the one test paper set on the batch (`batches.testPaperId`, D5; it must be approved and complete). A batch with no paper set lists nothing. A paper with an attempt of the candidate that is still open is also listed when the batch is no longer `in_progress` or its dates have passed (Q702, B-18a). Returns `{ items: [...] }`, batches by assessment start date. Each item:
 `{ batchId, batchName, paperId, paperCode, paperName, language, questionCount, durationMinutes, attempt, startable }`.
-- `batchName` is the qualification code and name with the assessment dates; `paperName` is "Paper " plus `paperCode` (last 6 characters of the paper id, upper case). Q700.
+- `batchName` is the qualification code and name with the assessment dates; `paperName` is the paper's `name`; a paper without one gets the qualification name and the language, for example `"Electrician L4 (en)"`. `paperCode` is the last 6 characters of the paper id, upper case (B-18a, Q700).
 - `language` is the paper's `rules.language`. `durationMinutes` is the paper's value, else 60.
-- `attempt` is `null` or the candidate's own attempt on that paper: `{ id, status, startedAt, deadline }`. An open attempt past its accept window is closed as `timed_out` by this read (Q703).
-- `startable` is `{ ok: true }` or `{ ok: false, reason }`. The rules are the ones `POST /attempts/start` uses (one shared function): `reason` is the error code start would return (`ATTEMPT_OUTSIDE_ASSESSMENT_WINDOW`, `ATTEMPT_LANGUAGE_MISMATCH`, `ATTEMPT_CANDIDATE_ABSENT`, `ATTEMPT_PAPER_UNAVAILABLE`). An `in_progress` attempt is `ok: true` (start resumes it). A `submitted` or `timed_out` attempt is `ok: false` with `ATTEMPT_CLOSED` (start replays it closed, Q701).
+- `attempt` is `null` or the candidate's own attempt on that paper: `{ id, status, startedAt, deadline, remainingSeconds }`. `remainingSeconds` is the time left to `deadline` for an open attempt (0 once past it) and `null` for a closed one. An open attempt past its accept window is closed as `timed_out` by this read (Q703).
+- `startable` is `{ ok: true }` or `{ ok: false, reason }`. The rules are the ones `POST /attempts/start` uses (one shared function): `reason` is the error code start would return (`ATTEMPT_OUTSIDE_ASSESSMENT_WINDOW`, `ATTEMPT_LANGUAGE_MISMATCH`, `ATTEMPT_CANDIDATE_ABSENT`, `ATTEMPT_PAPER_UNAVAILABLE`). An `in_progress` attempt before its `deadline` is `ok: true` (start resumes it, whatever the batch status or dates); past the deadline, inside the grace window, it is `ok: false` with `ATTEMPT_TIME_UP`. A batch with no paper set gives `ATTEMPT_NO_TEST_PAPER` on start. A `submitted` or `timed_out` attempt is `ok: false` with `ATTEMPT_CLOSED` (start replays it closed, Q701).
 Never returns question ids, question text, options, answer keys, marks or scores, and never another candidate's attempts. Writes nothing except a lazy timeout.
 
 ### GET /api/v1/attempts/:id
@@ -1678,8 +1689,8 @@ Role: `candidate`, own attempt. No body. Closes and scores the attempt: MCQ by t
 Audit: `attempt.submit`, `attempt.submit_replay`, or `attempt.submit_late` (which also writes `attempt.timeout`).
 
 ### PUT /api/v1/attempts/:id/manual-marks
-Roles: `aa_admin`, `assessor` of the batch. Body `{ "marks": [{ "questionId", "marks" }] }` (1 to 200 rows, no repeats, 0 or more, at most two decimals). Only on a closed attempt, and only for questions the server did not score. A later mark replaces an earlier one. Returns the staff view.
-Errors: `400 ATTEMPT_MARKS_EXCEED_CEILING` (`details.exceeded[{questionId,maxMarks,marks}]`), `400 ATTEMPT_QUESTION_AUTO_SCORED`, `400 VALIDATION_ERROR` (unknown question), `409 ATTEMPT_NOT_CLOSED`. A refused request changes nothing.
+Roles: `aa_admin`, `assessor` of the batch. Body `{ "marks": [{ "questionId", "marks" }] }` (1 to 200 rows, no repeats, 0 or more, at most two decimals). Only on a closed attempt, and only for questions the server did not score. A later mark replaces an earlier one. Returns the staff view. Locked once the batch result is submitted (D6, B-18a): while the result of the batch is `submitted`, `validated` or `published` every call is `409 ATTEMPT_MARKS_LOCKED` (`details.resultStatus`). To change a mark later, the awarding body reviewer returns the result for correction with a reason (`POST /batches/:id/return-for-correction`, audited, result back to `draft`); marks can then be changed again until the result is submitted again. A published result cannot be returned, so its marks stay locked.
+Errors: `400 ATTEMPT_MARKS_EXCEED_CEILING` (`details.exceeded[{questionId,maxMarks,marks}]`), `400 ATTEMPT_QUESTION_AUTO_SCORED`, `400 VALIDATION_ERROR` (unknown question), `409 ATTEMPT_NOT_CLOSED`, `409 ATTEMPT_MARKS_LOCKED`. A refused request changes nothing.
 Audit: `attempt.manual_marks` with before and after (question ids, marks, totals).
 
 ### GET /api/v1/attempts

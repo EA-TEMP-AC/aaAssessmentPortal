@@ -125,6 +125,10 @@ describe("Test generator API (server/src/modules/test-generator)", () => {
 
   const generate = (session, body) =>
     request(app).post("/api/v1/tests/generate").set(bearer(session.token)).send(body);
+  const submit = (session, id) =>
+    request(app).post(`/api/v1/tests/${id}/submit`).set(bearer(session.token));
+  const approve = (session, id) =>
+    request(app).post(`/api/v1/tests/${id}/approve`).set(bearer(session.token));
 
   beforeAll(async () => {
     await startMongo();
@@ -334,7 +338,7 @@ describe("Test generator API (server/src/modules/test-generator)", () => {
       expect(await TestPaper.countDocuments()).toBe(0);
     });
 
-    it("with allowPartial stores a flagged draft that cannot be approved", async () => {
+    it("with allowPartial stores a flagged draft that cannot be submitted or approved", async () => {
       await fillBank(qual);
       const res = await generate(admin, {
         qualificationId: String(qual._id),
@@ -347,11 +351,14 @@ describe("Test generator API (server/src/modules/test-generator)", () => {
       expect(res.body.shortages).toHaveLength(1);
       expect(res.body.items).toHaveLength(2);
 
-      const approve = await request(app)
-        .post(`/api/v1/tests/${res.body._id}/approve`)
-        .set(bearer(reviewer.token));
-      expect(approve.status).toBe(409);
-      expect(approve.body.error.code).toBe("TEST_PAPER_INCOMPLETE");
+      const sent = await submit(admin, res.body._id);
+      expect(sent.status).toBe(409);
+      expect(sent.body.error.code).toBe("TEST_PAPER_INCOMPLETE");
+      // Even if it were forced to "submitted", the approval checks completeness again.
+      await TestPaper.updateOne({ _id: res.body._id }, { status: "submitted" });
+      const approved = await approve(reviewer, res.body._id);
+      expect(approved.status).toBe(409);
+      expect(approved.body.error.code).toBe("TEST_PAPER_INCOMPLETE");
     });
 
     it("reports a missed marks target", async () => {
@@ -370,37 +377,110 @@ describe("Test generator API (server/src/modules/test-generator)", () => {
     });
   });
 
-  describe("approval", () => {
-    it("lets ab_reviewer and aa_admin approve a draft once; sme cannot", async () => {
+  describe("paper name (B-18a)", () => {
+    it("defaults to the qualification name and the language", async () => {
       await fillBank(qual);
-      const gen = await generate(sme, rulesBody(qual, { seed: 3 }));
-      const url = `/api/v1/tests/${gen.body._id}/approve`;
-
-      expect((await request(app).post(url).set(bearer(sme.token))).status).toBe(403);
-      const ok = await request(app).post(url).set(bearer(reviewer.token));
-      expect(ok.status).toBe(200);
-      expect(ok.body).toMatchObject({ status: "approved", approvedBy: reviewer.userId });
-      const again = await request(app).post(url).set(bearer(admin.token));
-      expect(again.status).toBe(409);
-      expect(again.body.error.code).toBe("TEST_ALREADY_APPROVED");
-
-      const second = await generate(admin, rulesBody(qual, { seed: 4 }));
-      const adm = await request(app)
-        .post(`/api/v1/tests/${second.body._id}/approve`)
-        .set(bearer(admin.token));
-      expect(adm.status).toBe(200);
+      const res = await generate(admin, rulesBody(qual, { seed: 1 }));
+      expect(res.status).toBe(201);
+      expect(res.body.name).toBe("Generator Test Qualification (en)");
     });
 
-    it("refuses to approve a paper whose question was retired since generation", async () => {
+    it("keeps a name that is given, and audits it", async () => {
       await fillBank(qual);
-      const gen = await generate(admin, rulesBody(qual, { seed: 3 }));
-      await Question.updateOne({ _id: gen.body.items[0].questionId }, { status: "retired" });
-      const res = await request(app)
-        .post(`/api/v1/tests/${gen.body._id}/approve`)
-        .set(bearer(reviewer.token));
+      const res = await generate(sme, rulesBody(qual, { seed: 1, name: "  Round 2 paper  " }));
+      expect(res.status).toBe(201);
+      expect(res.body.name).toBe("Round 2 paper");
+      const list = await request(app).get("/api/v1/tests").set(bearer(reviewer.token));
+      expect(list.body.items[0].name).toBe("Round 2 paper");
+      const row = await AuditLog.findOne({ action: "test.generate" }).lean();
+      expect(row.after.name).toBe("Round 2 paper");
+    });
+
+    it("accepts 80 characters and refuses 81 or an empty name", async () => {
+      await fillBank(qual);
+      const ok = await generate(admin, rulesBody(qual, { seed: 1, name: "x".repeat(80) }));
+      expect(ok.status).toBe(201);
+      for (const name of ["x".repeat(81), "   ", 5]) {
+        const res = await generate(admin, rulesBody(qual, { seed: 1, name }));
+        expect(res.status).toBe(400);
+        expect(res.body.error.code).toBe("VALIDATION_ERROR");
+      }
+    });
+
+    it("cuts a long default name to 80 characters", async () => {
+      await Qualification.updateOne({ _id: qual._id }, { name: "Q".repeat(120) });
+      await fillBank(qual);
+      const res = await generate(admin, rulesBody(qual, { seed: 1 }));
+      expect(res.body.name).toHaveLength(80);
+    });
+  });
+
+  describe("approval", () => {
+    it("goes draft, submitted, approved; only ab_reviewer approves (D4)", async () => {
+      await fillBank(qual);
+      const gen = await generate(sme, rulesBody(qual, { seed: 3 }));
+      const id = gen.body._id;
+
+      // A draft cannot be approved, by anyone.
+      const early = await approve(reviewer, id);
+      expect(early.status).toBe(409);
+      expect(early.body.error.code).toBe("TEST_NOT_SUBMITTED");
+
+      // The creator sends it; a second send is refused.
+      const sent = await submit(sme, id);
+      expect(sent.status).toBe(200);
+      expect(sent.body).toMatchObject({ status: "submitted", submittedBy: sme.userId });
+      expect(sent.body.submittedAt).toBeTruthy();
+      const twice = await submit(admin, id);
+      expect(twice.status).toBe(409);
+      expect(twice.body.error.code).toBe("TEST_ALREADY_SUBMITTED");
+
+      // Neither the creator nor aa_admin nor any other role can approve.
+      for (const who of [sme, admin, mis, tp, candidate]) {
+        expect((await approve(who, id)).status).toBe(403);
+      }
+      expect((await TestPaper.findById(id)).status).toBe("submitted");
+
+      const ok = await approve(reviewer, id);
+      expect(ok.status).toBe(200);
+      expect(ok.body).toMatchObject({ status: "approved", approvedBy: reviewer.userId });
+      const again = await approve(reviewer, id);
+      expect(again.status).toBe(409);
+      expect(again.body.error.code).toBe("TEST_ALREADY_APPROVED");
+      const lateSubmit = await submit(admin, id);
+      expect(lateSubmit.status).toBe(409);
+      expect(lateSubmit.body.error.code).toBe("TEST_ALREADY_APPROVED");
+    });
+
+    it("lets only aa_admin and sme submit a draft", async () => {
+      await fillBank(qual);
+      const gen = await generate(admin, rulesBody(qual, { seed: 5 }));
+      for (const who of [reviewer, mis, tp, candidate]) {
+        expect((await submit(who, gen.body._id)).status).toBe(403);
+      }
+      expect((await submit(admin, gen.body._id)).status).toBe(200);
+      expect((await request(app).post(`/api/v1/tests/${gen.body._id}/submit`)).status).toBe(401);
+    });
+
+    it("refuses to submit a paper whose question was retired since generation", async () => {
+      await fillBank(qual);
+      const first = await generate(admin, rulesBody(qual, { seed: 3 }));
+      await Question.updateOne({ _id: first.body.items[0].questionId }, { status: "retired" });
+      const res = await submit(admin, first.body._id);
       expect(res.status).toBe(409);
       expect(res.body.error.code).toBe("TEST_PAPER_STALE");
-      expect((await TestPaper.findById(gen.body._id)).status).toBe("draft");
+      expect((await TestPaper.findById(first.body._id)).status).toBe("draft");
+    });
+
+    it("refuses to approve a submitted paper whose question was retired since", async () => {
+      await fillBank(qual);
+      const gen = await generate(admin, rulesBody(qual, { seed: 3 }));
+      expect((await submit(admin, gen.body._id)).status).toBe(200);
+      await Question.updateOne({ _id: gen.body.items[0].questionId }, { status: "retired" });
+      const res = await approve(reviewer, gen.body._id);
+      expect(res.status).toBe(409);
+      expect(res.body.error.code).toBe("TEST_PAPER_STALE");
+      expect((await TestPaper.findById(gen.body._id)).status).toBe("submitted");
     });
 
     it("returns 404 for unknown and 400 for malformed ids", async () => {
@@ -412,9 +492,10 @@ describe("Test generator API (server/src/modules/test-generator)", () => {
         (await request(app).get("/api/v1/tests/not-an-id").set(bearer(admin.token))).status,
       ).toBe(400);
       expect(
-        (await request(app).post(`/api/v1/tests/${unknown}/approve`).set(bearer(admin.token)))
+        (await request(app).post(`/api/v1/tests/${unknown}/approve`).set(bearer(reviewer.token)))
           .status,
       ).toBe(404);
+      expect((await submit(admin, unknown)).status).toBe(404);
     });
   });
 
@@ -423,7 +504,8 @@ describe("Test generator API (server/src/modules/test-generator)", () => {
       await fillBank(qual);
       const a = await generate(admin, rulesBody(qual, { seed: 1 }));
       await generate(admin, rulesBody(qual, { seed: 2 }));
-      await request(app).post(`/api/v1/tests/${a.body._id}/approve`).set(bearer(reviewer.token));
+      await submit(admin, a.body._id);
+      await approve(reviewer, a.body._id);
 
       const all = await request(app).get("/api/v1/tests").set(bearer(reviewer.token));
       expect(all.status).toBe(200);
@@ -472,6 +554,7 @@ describe("Test generator API (server/src/modules/test-generator)", () => {
           (await request(app).get(`/api/v1/tests/${id}?withQuestions=true`).set(h)).status,
         ).toBe(403);
         expect((await request(app).post(`/api/v1/tests/${id}/approve`).set(h)).status).toBe(403);
+        expect((await request(app).post(`/api/v1/tests/${id}/submit`).set(h)).status).toBe(403);
         expect(
           (await request(app).post(`/api/v1/tests/${id}/regenerate-check`).set(h)).status,
         ).toBe(403);
@@ -488,18 +571,22 @@ describe("Test generator API (server/src/modules/test-generator)", () => {
       await request(app)
         .post(`/api/v1/tests/${gen.body._id}/regenerate-check`)
         .set(bearer(reviewer.token));
-      await request(app).post(`/api/v1/tests/${gen.body._id}/approve`).set(bearer(reviewer.token));
+      await submit(sme, gen.body._id);
+      await approve(reviewer, gen.body._id);
 
       const rows = await AuditLog.find({ entity: "testPaper" }).sort({ createdAt: 1 }).lean();
       expect(rows.map((r) => r.action)).toEqual([
         "test.generate",
         "test.regenerate_check",
+        "test.submit",
         "test.approve",
       ]);
       expect(rows[0].after).toMatchObject({ seed: 8, status: "draft" });
       expect(rows[0].after.items).toHaveLength(7);
       expect(rows[2].before.status).toBe("draft");
-      expect(rows[2].after.status).toBe("approved");
+      expect(rows[2].after.status).toBe("submitted");
+      expect(rows[3].before.status).toBe("submitted");
+      expect(rows[3].after.status).toBe("approved");
       const text = JSON.stringify(rows);
       expect(text).not.toContain("SECRET-");
       expect(text).not.toContain("correctAnswer");

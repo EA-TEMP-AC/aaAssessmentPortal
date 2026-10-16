@@ -7,6 +7,7 @@ import {
 } from "../../lib/errors.js";
 import { generateTemporaryPassword, hashPassword } from "../../lib/password.js";
 import { safeErrorCode } from "../../lib/safe-error.js";
+import { MIS_MANAGED_USER_ROLES } from "../../models/roles.js";
 import { User } from "../../models/user.model.js";
 import { revokeAllRefreshTokens } from "../auth/auth.service.js";
 import { enqueueEmailSafely } from "../email/email-queue.service.js";
@@ -31,10 +32,10 @@ export function presentUser(user) {
   };
 }
 
-/** docs/SCHEMA.md §5: mis has users access except escalate to aa_admin. */
+/** Decision D1: mis works only with tp, assessor, proctor and candidate users. */
 function assertCanAssign(actor, role) {
-  if (actor.role === "mis" && role === "aa_admin") {
-    throw forbidden("Cannot assign or modify the aa_admin role");
+  if (actor.role === "mis" && !MIS_MANAGED_USER_ROLES.includes(role)) {
+    throw forbidden(`Cannot assign or modify the ${role} role`);
   }
 }
 

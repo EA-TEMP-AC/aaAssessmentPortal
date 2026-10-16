@@ -6,6 +6,7 @@ import { requireRoles } from "../../middleware/require-roles.js";
 import {
   BATCH_CREATE_ROLES,
   BATCH_READ_ROLES,
+  BATCH_TEST_PAPER_ROLES,
   LEARNER_FEEDBACK_READ_ROLES,
   LEARNER_FEEDBACK_WRITE_ROLES,
   REASSESSMENT_CREATE_ROLES,
@@ -22,6 +23,7 @@ import {
   reassessmentBodySchema,
   reassignBodySchema,
   rejectBodySchema,
+  testPaperBodySchema,
 } from "./batch.schemas.js";
 import { mountBatchChildReadRoutes } from "../attendance/attendance.routes.js";
 import { mountAssessorPaymentRoutes } from "../assessor-payments/assessor-payment.routes.js";
@@ -29,6 +31,7 @@ import { mountEvidenceBatchRoutes } from "../evidence/evidence.routes.js";
 import { mountCandidateRoutes } from "../candidates/candidate.routes.js";
 import { mountResultRoutes } from "../results/result.routes.js";
 import { assignAssessor, reassignAssessor } from "./assign.service.js";
+import { setBatchTestPaper } from "./batch-test-paper.service.js";
 import { createBatch, getBatch, listBatches, transitionBatch } from "./batch.service.js";
 import { getLearnerFeedback, saveLearnerFeedback } from "./learner-feedback.service.js";
 import { createReassessment } from "./reassessment.service.js";
@@ -167,6 +170,26 @@ batchesRouter.put(
       batchId: saved.batch.id,
       before: { learnerFeedback: saved.before },
       after: { learnerFeedback: saved.after },
+    });
+    await res.status(200).json(saved.batch);
+  }),
+);
+
+batchesRouter.put(
+  "/:id/test-paper",
+  requireRoles(...BATCH_TEST_PAPER_ROLES),
+  asyncHandler(async (req, res) => {
+    const { id } = batchIdParamSchema.parse(req.params);
+    const body = testPaperBodySchema.parse(req.body ?? {});
+    const saved = await setBatchTestPaper(req.user, id, body);
+    setAudit(req, {
+      action: "batch.set_test_paper",
+      entity: "batch",
+      entityId: saved.batch.id,
+      abId: saved.abId,
+      batchId: saved.batch.id,
+      before: saved.before,
+      after: saved.after,
     });
     await res.status(200).json(saved.batch);
   }),

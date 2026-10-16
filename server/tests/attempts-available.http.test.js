@@ -117,7 +117,7 @@ async function world() {
     name: "Field Technician",
   });
   const paper = await makePaper(qualificationId, { durationMinutes: 45 });
-  const batch = await makeBatch(qualificationId);
+  const batch = await makeBatch(qualificationId, { testPaperId: paper._id });
   const learnerId = oid();
   const roster = await Candidate.create({
     batchId: batch._id,
@@ -128,7 +128,7 @@ async function world() {
 
   const otherQualificationId = oid();
   const otherPaper = await makePaper(otherQualificationId);
-  const otherBatch = await makeBatch(otherQualificationId);
+  const otherBatch = await makeBatch(otherQualificationId, { testPaperId: otherPaper._id });
   const otherLearnerId = oid();
   await Candidate.create({
     batchId: otherBatch._id,
@@ -194,13 +194,20 @@ describe("GET /api/v1/attempts/available (B-19)", () => {
       batchName: `ELE/Q0001 Field Technician, ${day(-1)} to ${day(1)}`,
       paperId: String(w.paper._id),
       paperCode: expect.any(String),
-      paperName: expect.any(String),
+      paperName: "Field Technician (en)",
       language: "en",
       questionCount: 3,
       durationMinutes: 45,
       attempt: null,
       startable: { ok: true },
     });
+  });
+
+  it("shows the stored paper name instead of a code", async () => {
+    await TestPaper.updateOne({ _id: w.paper._id }, { name: "Field Technician, round 2" });
+    const [item] = await itemsOf(w.candidate);
+    expect(item.paperName).toBe("Field Technician, round 2");
+    expect(item.paperName).not.toMatch(/^Paper /);
   });
 
   it("uses the default duration when the paper has none", async () => {
@@ -225,10 +232,36 @@ describe("GET /api/v1/attempts/available (B-19)", () => {
       expect(await itemsOf(w.candidate)).toEqual([]);
     });
 
-    it("skips draft and incomplete papers", async () => {
-      await makePaper(w.qualificationId, { status: "draft" });
-      await makePaper(w.qualificationId, { complete: false });
-      expect(await itemsOf(w.candidate)).toHaveLength(1);
+    it("skips a paper that is not approved and complete", async () => {
+      await TestPaper.updateOne({ _id: w.paper._id }, { status: "draft" });
+      expect(await itemsOf(w.candidate)).toEqual([]);
+      await TestPaper.updateOne({ _id: w.paper._id }, { status: "approved", complete: false });
+      expect(await itemsOf(w.candidate)).toEqual([]);
+    });
+
+    it("lists only the paper set on the batch (D5), not other papers of the qualification", async () => {
+      const second = await makePaper(w.qualificationId);
+      let items = await itemsOf(w.candidate);
+      expect(items.map((i) => i.paperId)).toEqual([String(w.paper._id)]);
+      await Batch.updateOne({ _id: w.batch._id }, { testPaperId: second._id });
+      items = await itemsOf(w.candidate);
+      expect(items.map((i) => i.paperId)).toEqual([String(second._id)]);
+    });
+
+    it("lists nothing for a batch with no paper set, and start says why", async () => {
+      await Batch.updateOne({ _id: w.batch._id }, { $unset: { testPaperId: "" } });
+      expect(await itemsOf(w.candidate)).toEqual([]);
+      const res = await start(w.candidate, w.batch._id, w.paper._id);
+      expect(res.status).toBe(409);
+      expect(res.body.error.code).toBe("ATTEMPT_NO_TEST_PAPER");
+    });
+
+    it("refuses to start another approved paper of the same qualification", async () => {
+      const second = await makePaper(w.qualificationId);
+      const res = await start(w.candidate, w.batch._id, second._id);
+      expect(res.status).toBe(404);
+      expect(res.body.error.code).toBe("NOT_FOUND");
+      expect(await Attempt.countDocuments()).toBe(0);
     });
 
     it("lists nothing for a candidate with no linked learner", async () => {
@@ -281,8 +314,54 @@ describe("GET /api/v1/attempts/available (B-19)", () => {
         status: "in_progress",
         startedAt: started.body.startedAt,
         deadline: started.body.deadlineAt,
+        remainingSeconds: expect.any(Number),
       });
+      expect(item.attempt.remainingSeconds).toBeGreaterThan(44 * 60);
+      expect(item.attempt.remainingSeconds).toBeLessThanOrEqual(45 * 60);
       expect(item.startable).toEqual({ ok: true });
+    });
+
+    it("an open attempt stays listed with Resume after the batch window and status move on (Q702)", async () => {
+      await start(w.candidate, w.batch._id, w.paper._id);
+      await Batch.updateOne(
+        { _id: w.batch._id },
+        {
+          status: "assessment_completed",
+          assessmentStartDate: day(-5),
+          assessmentEndDate: day(-1),
+        },
+      );
+      const [item] = await itemsOf(w.candidate);
+      expect(item.paperId).toBe(String(w.paper._id));
+      expect(item.attempt.status).toBe("in_progress");
+      expect(item.attempt.remainingSeconds).toBeGreaterThan(0);
+      expect(item.startable).toEqual({ ok: true });
+      // Start itself replays the open attempt, so Resume works.
+      const again = await start(w.candidate, w.batch._id, w.paper._id);
+      expect(again.status).toBe(200);
+      expect(again.body.status).toBe("in_progress");
+    });
+
+    it("an open attempt past its deadline shows no time left and cannot resume", async () => {
+      const started = await start(w.candidate, w.batch._id, w.paper._id);
+      await Attempt.updateOne(
+        { _id: started.body.id },
+        { deadlineAt: new Date(Date.now() - 5_000), acceptUntil: new Date(Date.now() + 25_000) },
+      );
+      const [item] = await itemsOf(w.candidate);
+      expect(item.attempt.status).toBe("in_progress");
+      expect(item.attempt.remainingSeconds).toBe(0);
+      expect(item.startable).toEqual({ ok: false, reason: "ATTEMPT_TIME_UP" });
+    });
+
+    it("a closed attempt is not listed once the batch is no longer in progress", async () => {
+      const started = await start(w.candidate, w.batch._id, w.paper._id);
+      await request(app)
+        .post(`/api/v1/attempts/${started.body.id}/submit`)
+        .set(bearer(w.candidate.token))
+        .send({});
+      await Batch.updateOne({ _id: w.batch._id }, { status: "assessment_completed" });
+      expect(await itemsOf(w.candidate)).toEqual([]);
     });
 
     it("submitted: cannot start again", async () => {

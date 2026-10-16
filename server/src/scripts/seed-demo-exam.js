@@ -13,7 +13,8 @@ import { User } from "../models/user.model.js";
 /**
  * Dev and demo only. Run after `npm run seed`: `npm run seed:demo-exam -w server`.
  * Adds 12 sample questions and one approved test paper for the seeded qualification, and makes the
- * seeded batch open for the candidate (in progress, dates around today, English). Safe to run again:
+ * seeded batch open for the candidate (in progress, dates around today, English). The paper is named
+ * and set as the one paper of that batch (D5). Safe to run again:
  * it resets the demo paper so the exam can be taken again. Refuses to run in production.
  */
 
@@ -101,6 +102,7 @@ export async function seedDemoExam({ nodeEnv = env.NODE_ENV } = {}) {
   await TestPaper.create({
     _id: PAPER_ID,
     qualificationId: qualification._id,
+    name: "Demo exam (English)",
     status: "approved",
     seed: 1,
     rules: { language: "English", totalMarks: 10, quotas: [] },
@@ -124,6 +126,7 @@ export async function seedDemoExam({ nodeEnv = env.NODE_ENV } = {}) {
         assessmentStartDate: istDate(-1),
         assessmentEndDate: istDate(30),
         assessmentLanguage: "English",
+        testPaperId: PAPER_ID,
       },
     },
   );

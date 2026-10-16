@@ -5,7 +5,7 @@ import { compliance } from "../src/config/compliance.js";
 import { AuditLog } from "../src/models/audit-log.model.js";
 import { EmailQueue } from "../src/models/email-queue.model.js";
 import { RefreshToken } from "../src/models/refresh-token.model.js";
-import { USER_ADMIN_ROLES, USER_ROLES } from "../src/models/roles.js";
+import { MIS_MANAGED_USER_ROLES, USER_ADMIN_ROLES, USER_ROLES } from "../src/models/roles.js";
 import { User } from "../src/models/user.model.js";
 import { resetLoginRateLimit } from "../src/modules/auth/login-rate-limit.js";
 import { processNextEmail } from "../src/modules/email/email-queue.service.js";
@@ -223,6 +223,99 @@ describe("users", () => {
       .send({ newPassword: "Temporary-Pass-9" });
     expect(resetAdmin.status).toBe(403);
     expectNoSecrets(resetAdmin.body, ["Temporary-Pass-9"]);
+  });
+
+  describe("mis is limited to tp, assessor, proctor and candidate (D1)", () => {
+    const outside = USER_ROLES.filter((role) => !MIS_MANAGED_USER_ROLES.includes(role));
+    const create = (token, role) =>
+      request(app)
+        .post("/api/v1/users")
+        .set(bearer(token))
+        .send({
+          email: `new-${role}@aa.example`,
+          name: `New ${role}`,
+          role,
+          password: "Temporary-Pass-1",
+        });
+
+    it("lists exactly the four roles", () => {
+      expect([...MIS_MANAGED_USER_ROLES].sort()).toEqual([
+        "assessor",
+        "candidate",
+        "proctor",
+        "tp",
+      ]);
+      expect(outside.sort()).toEqual(["aa_admin", "ab_reviewer", "mis", "ncvet_viewer", "sme"]);
+    });
+
+    it.each(["tp", "assessor", "proctor", "candidate"])(
+      "lets mis create a %s user, audited",
+      async (role) => {
+        const mis = await sessionFor("mis");
+        const res = await create(mis.token, role);
+        expect(res.status, JSON.stringify(res.body)).toBe(201);
+        expect(res.body.role).toBe(role);
+        const audit = await AuditLog.findOne({ action: "user.create" }).lean();
+        expect(audit.actorRole).toBe("mis");
+        expect(audit.after.role).toBe(role);
+        expectNoSecrets(audit, ["Temporary-Pass-1"]);
+      },
+    );
+
+    it.each(["aa_admin", "sme", "ab_reviewer", "ncvet_viewer", "mis"])(
+      "refuses mis creating a %s user, with nothing stored or audited",
+      async (role) => {
+        const mis = await sessionFor("mis");
+        const res = await create(mis.token, role);
+        expect(res.status).toBe(403);
+        expect(res.body.error.code).toBe("FORBIDDEN");
+        expect(await User.countDocuments({ email: `new-${role}@aa.example` })).toBe(0);
+        expect(await AuditLog.countDocuments({ action: "user.create" })).toBe(0);
+      },
+    );
+
+    it.each(["aa_admin", "sme", "ab_reviewer", "ncvet_viewer", "mis"])(
+      "refuses mis changing a user to the %s role, and changing a %s user",
+      async (role) => {
+        const mis = await sessionFor("mis");
+        const candidate = await sessionFor("candidate");
+        const other = await sessionFor(role, { email: `other-${role}@aa.example` });
+        const promote = await request(app)
+          .patch(`/api/v1/users/${candidate.userId}`)
+          .set(bearer(mis.token))
+          .send({ role });
+        expect(promote.status).toBe(403);
+        expect((await User.findById(candidate.userId).lean()).role).toBe("candidate");
+
+        const edit = await request(app)
+          .patch(`/api/v1/users/${other.userId}`)
+          .set(bearer(mis.token))
+          .send({ name: "Changed" });
+        expect(edit.status).toBe(403);
+        const reset = await request(app)
+          .post(`/api/v1/users/${other.userId}/password-reset`)
+          .set(bearer(mis.token))
+          .send({ newPassword: "Temporary-Pass-9" });
+        expect(reset.status).toBe(403);
+      },
+    );
+
+    it("lets mis move a user between the four roles, and aa_admin create any role", async () => {
+      const mis = await sessionFor("mis");
+      const assessor = await sessionFor("assessor");
+      const moved = await request(app)
+        .patch(`/api/v1/users/${assessor.userId}`)
+        .set(bearer(mis.token))
+        .send({ role: "proctor" });
+      expect(moved.status).toBe(200);
+      expect(moved.body.role).toBe("proctor");
+
+      const admin = await sessionFor("aa_admin");
+      for (const role of outside) {
+        const res = await create(admin.token, role);
+        expect(res.status, role).toBe(201);
+      }
+    });
   });
 
   it("rejects duplicate emails, invalid bodies, and unknown ids", async () => {

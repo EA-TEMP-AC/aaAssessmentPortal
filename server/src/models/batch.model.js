@@ -100,6 +100,8 @@ const batchSchema = new mongoose.Schema(
     sla: { type: slaSchema, required: true },
     ratioOverride: { type: ratioOverrideSchema, default: null },
     resultId: { type: mongoose.Schema.Types.ObjectId, default: null },
+    // D5: the one test paper candidates of this batch can start. Set by aa_admin.
+    testPaperId: { type: mongoose.Schema.Types.ObjectId, default: null, ref: "TestPaper" },
     isReassessment: { type: Boolean, required: true, default: false },
     reassessmentOf: { type: mongoose.Schema.Types.ObjectId },
     firstAssessmentBatchId: { type: mongoose.Schema.Types.ObjectId, default: null },

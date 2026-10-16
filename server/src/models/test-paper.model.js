@@ -5,7 +5,7 @@ import { QUESTION_TYPES } from "./question.model.js";
  * Generated test paper. docs/SCHEMA.md §3.20. Task E-01.
  * Holds the seed, the rules and the chosen question ids and versions, never question text.
  */
-export const TEST_PAPER_STATUSES = Object.freeze(["draft", "approved"]);
+export const TEST_PAPER_STATUSES = Object.freeze(["draft", "submitted", "approved"]);
 
 const itemSchema = new mongoose.Schema(
   {
@@ -50,6 +50,9 @@ const testPaperSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    // B-18a: shown to candidates and reviewers. Older papers have none; readers fall back to
+    // the qualification name and language.
+    name: { type: String, trim: true, minlength: 1, maxlength: 80 },
     status: { type: String, required: true, enum: TEST_PAPER_STATUSES, default: "draft" },
     seed: { type: Number, required: true, min: 0, max: 4294967295 },
     rules: {
@@ -71,6 +74,8 @@ const testPaperSchema = new mongoose.Schema(
     marksTargetMet: { type: Boolean, default: true },
     complete: { type: Boolean, required: true, default: true },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    submittedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    submittedAt: { type: Date, default: null },
     approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     approvedAt: { type: Date, default: null },
   },

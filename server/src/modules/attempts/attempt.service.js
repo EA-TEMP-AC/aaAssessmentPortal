@@ -12,9 +12,11 @@ import { Batch } from "../../models/batch.model.js";
 import { Candidate } from "../../models/candidate.model.js";
 import { Qualification } from "../../models/qualification.model.js";
 import { Question } from "../../models/question.model.js";
+import { Result } from "../../models/result.model.js";
 import { TestPaper } from "../../models/test-paper.model.js";
 import { MAX_QUESTIONS_PER_PAGE } from "../../config/content-controls.js";
 import { istCalendarDate } from "../../lib/working-days.js";
+import { defaultPaperName } from "../test-generator/paper-name.js";
 import { createRng, shuffle } from "../test-generator/seeded-random.js";
 import {
   AUTO_SCORED_TYPES,
@@ -235,9 +237,19 @@ export function startBlocker({ batch, paper, absent, deliverable, today }) {
       message: "The candidate is marked absent for this batch",
     };
   }
-  // A paper that is unknown, a draft, or for another qualification looks the same: not found.
+  // D5: a batch has one paper. Without one nothing can start.
+  if (!batch.testPaperId) {
+    return {
+      status: 409,
+      code: "ATTEMPT_NO_TEST_PAPER",
+      message: "No test paper has been set for this batch",
+    };
+  }
+  // A paper that is unknown, a draft, for another qualification, or not the paper of this batch
+  // looks the same: not found.
   if (
     !paper ||
+    idStr(paper._id) !== idStr(batch.testPaperId) ||
     paper.status !== "approved" ||
     paper.complete !== true ||
     idStr(paper.qualificationId) !== idStr(batch.qualificationId)
@@ -262,11 +274,17 @@ export function startBlocker({ batch, paper, absent, deliverable, today }) {
 }
 
 /**
- * What the start button may do for one paper. An open attempt resumes (start replays it); a
- * closed one cannot be started again (start replays it closed, so the reason is ATTEMPT_CLOSED).
+ * What the start button may do for one paper. An open attempt resumes (start replays it) until its
+ * deadline; a closed one cannot be started again (start replays it closed, so the reason is
+ * ATTEMPT_CLOSED).
  */
-export function startableFor(attempt, blocker) {
-  if (attempt?.status === "in_progress") return { ok: true };
+export function startableFor(attempt, blocker, now = new Date()) {
+  if (attempt?.status === "in_progress") {
+    if (attempt.deadlineAt && new Date(attempt.deadlineAt) <= now) {
+      return { ok: false, reason: "ATTEMPT_TIME_UP" };
+    }
+    return { ok: true };
+  }
   if (attempt) return { ok: false, reason: "ATTEMPT_CLOSED" };
   return blocker ? { ok: false, reason: blocker.code } : { ok: true };
 }
@@ -274,9 +292,11 @@ export function startableFor(attempt, blocker) {
 const shortCode = (id) => String(id).slice(-6).toUpperCase();
 
 /**
- * GET /attempts/available. Every approved, complete paper of the qualification of each
- * in-progress batch where this candidate is on the active roster. Ids, labels, counts and
- * the candidate's own attempt state only: never question ids, text, options, keys or marks.
+ * GET /attempts/available. The one test paper (D5) of each in-progress batch where this
+ * candidate is on the active roster, plus any paper with an attempt of theirs still open, even
+ * when the batch is no longer in progress (Q702). Ids, labels, counts and the own attempt state
+ * of the candidate only: never question ids, text, options, keys or marks. A batch with no paper
+ * set lists nothing.
  */
 export async function listAvailable(user) {
   if (user.linkedProfileId == null) return { items: [] };
@@ -285,46 +305,15 @@ export async function listAvailable(user) {
     .lean();
   if (rosters.length === 0) return { items: [] };
   const rosterByBatch = new Map(rosters.map((r) => [idStr(r.batchId), r]));
-  const batches = await Batch.find({
-    _id: { $in: rosters.map((r) => r.batchId) },
-    status: "in_progress",
-  })
-    .select("status qualificationId assessmentStartDate assessmentEndDate assessmentLanguage")
-    .sort({ assessmentStartDate: 1, _id: 1 })
-    .lean();
-  if (batches.length === 0) return { items: [] };
-
-  const qualificationIds = [...new Set(batches.map((b) => idStr(b.qualificationId)))];
-  const rosterIds = batches.map((b) => rosterByBatch.get(idStr(b._id))._id);
-  const [papers, qualifications, absences, attempts] = await Promise.all([
-    TestPaper.find({
-      qualificationId: { $in: qualificationIds },
-      status: "approved",
-      complete: true,
-    })
-      .select("qualificationId status complete rules.language durationMinutes items.questionId")
-      .sort({ createdAt: 1, _id: 1 })
-      .lean(),
-    Qualification.find({ _id: { $in: qualificationIds } })
-      .select("code name")
-      .lean(),
-    AttendanceRecord.find({ candidateId: { $in: rosterIds }, present: false })
-      .select("candidateId")
-      .lean(),
-    Attempt.find({ candidateId: { $in: rosterIds } })
-      .select("testPaperId candidateId status startedAt deadlineAt acceptUntil")
-      .lean(),
-  ]);
-
-  const allIds = papers.flatMap((p) => p.items.map((i) => i.questionId));
-  const present = new Set(
-    (await Question.find({ _id: { $in: allIds } }).distinct("_id")).map(String),
-  );
-  const qualById = new Map(qualifications.map((q) => [idStr(q._id), q]));
-  const absentRosters = new Set(absences.map((a) => idStr(a.candidateId)));
+  const rosterIds = rosters.map((r) => r._id);
   const now = new Date();
+
+  const rows = await Attempt.find({ candidateId: { $in: rosterIds } })
+    .select("testPaperId candidateId batchId status startedAt deadlineAt acceptUntil")
+    .lean();
   const attemptByKey = new Map();
-  for (const row of attempts) {
+  const openByBatch = new Map();
+  for (const row of rows) {
     let attempt = row;
     // Lazy timeout, as on any other read: an open attempt past its accept window closes here.
     if (attempt.status === "in_progress" && isPastAcceptWindow(attempt, now)) {
@@ -332,19 +321,70 @@ export async function listAvailable(user) {
       if (full) attempt = (await expireIfDue(full, now, "read")).attempt;
     }
     attemptByKey.set(`${idStr(attempt.candidateId)}:${idStr(attempt.testPaperId)}`, attempt);
+    if (attempt.status === "in_progress") {
+      const key = idStr(attempt.batchId);
+      if (!openByBatch.has(key)) openByBatch.set(key, []);
+      openByBatch.get(key).push(idStr(attempt.testPaperId));
+    }
   }
+
+  const batches = await Batch.find({
+    $or: [
+      { _id: { $in: rosters.map((r) => r.batchId) }, status: "in_progress" },
+      { _id: { $in: [...openByBatch.keys()] } },
+    ],
+  })
+    .select(
+      "status qualificationId assessmentStartDate assessmentEndDate assessmentLanguage testPaperId",
+    )
+    .sort({ assessmentStartDate: 1, _id: 1 })
+    .lean();
+  if (batches.length === 0) return { items: [] };
+
+  const paperIdsOf = (batch) =>
+    [...new Set([idStr(batch.testPaperId), ...(openByBatch.get(idStr(batch._id)) ?? [])])].filter(
+      Boolean,
+    );
+  const wantedPaperIds = [...new Set(batches.flatMap(paperIdsOf))];
+  const qualificationIds = [...new Set(batches.map((b) => idStr(b.qualificationId)))];
+  const [papers, qualifications, absences] = await Promise.all([
+    TestPaper.find({ _id: { $in: wantedPaperIds } })
+      .select(
+        "qualificationId name status complete rules.language durationMinutes items.questionId",
+      )
+      .lean(),
+    Qualification.find({ _id: { $in: qualificationIds } })
+      .select("code name")
+      .lean(),
+    AttendanceRecord.find({ candidateId: { $in: rosterIds }, present: false })
+      .select("candidateId")
+      .lean(),
+  ]);
+
+  const allIds = papers.flatMap((p) => p.items.map((i) => i.questionId));
+  const present = new Set(
+    (await Question.find({ _id: { $in: allIds } }).distinct("_id")).map(String),
+  );
+  const paperById = new Map(papers.map((p) => [idStr(p._id), p]));
+  const qualById = new Map(qualifications.map((q) => [idStr(q._id), q]));
+  const absentRosters = new Set(absences.map((a) => idStr(a.candidateId)));
 
   const today = istCalendarDate(now);
   const items = [];
   for (const batch of batches) {
     const roster = rosterByBatch.get(idStr(batch._id));
+    if (!roster) continue;
     const qual = qualById.get(idStr(batch.qualificationId));
     const batchName = `${qual ? `${qual.code} ${qual.name}` : "Batch"}, ${
       batch.assessmentStartDate
     } to ${batch.assessmentEndDate}`;
-    for (const paper of papers) {
-      if (idStr(paper.qualificationId) !== idStr(batch.qualificationId)) continue;
-      const attempt = attemptByKey.get(`${idStr(roster._id)}:${idStr(paper._id)}`) ?? null;
+    for (const paperId of paperIdsOf(batch)) {
+      const paper = paperById.get(paperId);
+      if (!paper) continue;
+      const attempt = attemptByKey.get(`${idStr(roster._id)}:${paperId}`) ?? null;
+      const open = attempt?.status === "in_progress";
+      // Without an open attempt only an approved, complete paper is listed.
+      if (!open && (paper.status !== "approved" || paper.complete !== true)) continue;
       const blocker = startBlocker({
         batch,
         paper,
@@ -357,7 +397,7 @@ export async function listAvailable(user) {
         batchName,
         paperId: idStr(paper._id),
         paperCode: shortCode(paper._id),
-        paperName: `Paper ${shortCode(paper._id)}`,
+        paperName: paper.name || defaultPaperName(qual?.name, paper.rules?.language),
         language: paper.rules?.language ?? null,
         questionCount: paper.items.length,
         durationMinutes: paper.durationMinutes ?? compliance.ATTEMPT_DEFAULT_DURATION_MINUTES,
@@ -367,9 +407,12 @@ export async function listAvailable(user) {
               status: attempt.status,
               startedAt: iso(attempt.startedAt),
               deadline: iso(attempt.deadlineAt),
+              remainingSeconds: open
+                ? Math.max(0, Math.floor((new Date(attempt.deadlineAt) - now) / 1000))
+                : null,
             }
           : null,
-        startable: startableFor(attempt, blocker),
+        startable: startableFor(attempt, blocker, now),
       });
     }
   }
@@ -773,6 +816,18 @@ export async function applyManualMarks(user, id, marks) {
         "ATTEMPT_MARKS_EXCEED_CEILING",
         "Marks are above the question's marks",
         { exceeded },
+      );
+    }
+
+    // D6: once the batch result is submitted the marks are fixed. Changing them goes through
+    // return-for-correction (with a reason), which puts the result back to draft.
+    const result = await Result.findOne({ batchId: attempt.batchId }).select("status").lean();
+    if (result && result.status !== "draft") {
+      throw new AppError(
+        409,
+        "ATTEMPT_MARKS_LOCKED",
+        "The batch result is submitted; marks can change only after it is returned for correction",
+        { resultStatus: result.status },
       );
     }
 

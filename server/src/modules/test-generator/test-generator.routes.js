@@ -2,7 +2,12 @@ import { Router } from "express";
 import { asyncHandler } from "../../lib/async-handler.js";
 import { requireAuth } from "../../middleware/require-auth.js";
 import { requireRoles } from "../../middleware/require-roles.js";
-import { TEST_APPROVE_ROLES, TEST_GENERATE_ROLES, TEST_READ_ROLES } from "../../models/roles.js";
+import {
+  TEST_APPROVE_ROLES,
+  TEST_GENERATE_ROLES,
+  TEST_READ_ROLES,
+  TEST_SUBMIT_ROLES,
+} from "../../models/roles.js";
 import { guardContentRead } from "../content-controls/content-guard.js";
 import {
   generateSchema,
@@ -16,6 +21,7 @@ import {
   getPaper,
   listPapers,
   regenerateCheck,
+  submitPaper,
 } from "./test-generator.service.js";
 
 export const testGeneratorRouter = Router();
@@ -27,6 +33,7 @@ function auditView(paper) {
   const p = typeof paper.toObject === "function" ? paper.toObject() : paper;
   return {
     qualificationId: p.qualificationId,
+    name: p.name,
     status: p.status,
     seed: p.seed,
     rules: p.rules,
@@ -62,6 +69,24 @@ testGeneratorRouter.get(
   requireRoles(...TEST_READ_ROLES),
   asyncHandler(async (req, res) => {
     res.status(200).json(await listPapers(listQuerySchema.parse(req.query)));
+  }),
+);
+
+/** POST /api/v1/tests/:id/submit */
+testGeneratorRouter.post(
+  "/:id/submit",
+  requireRoles(...TEST_SUBMIT_ROLES),
+  asyncHandler(async (req, res) => {
+    const { id } = idParamSchema.parse(req.params);
+    const { paper, before } = await submitPaper(req.user, id);
+    req.audit = {
+      action: "test.submit",
+      entity: "testPaper",
+      entityId: paper._id,
+      before: auditView(before),
+      after: auditView(paper),
+    };
+    res.status(200).json(paper);
   }),
 );
 

@@ -395,6 +395,7 @@ Indexes: `{ code: 1 }` unique; `{ sector: 1 }`.
 | sla | { acceptDueAt, assignDueAt, resultDueAt, breached: SlaBreachKey[], lateActions?: [{ key, reason, byUserId, at }] } | Y | |
 | ratioOverride | { byUserId, reason, at } | N | |
 | resultId | ObjectId | N | |
+| testPaperId | ObjectId | N | Ref: `testPapers`. B-18a (D5): the one paper candidates of the batch can start. Set by aa_admin with `PUT /batches/:id/test-paper`; the paper must be approved, complete, of the same qualification and in the batch's assessment language. Cannot be set or changed once any attempt exists on the batch. Default null (nothing can be started) |
 | isReassessment | bool | Y | |
 | reassessmentOf | ObjectId | N | immediate parent |
 | firstAssessmentBatchId | ObjectId | N | root batch; the 1-year window uses that batch’s result `publishedAt`; = self if not a reassessment |
@@ -754,7 +755,8 @@ One generated test paper. Holds the seed, the rules and the chosen question ids 
 | Field | Type | Req | Notes |
 |---|---|---|---|
 | qualificationId | ObjectId | Y | Ref: `qualifications` |
-| status | enum | Y | `draft`, `approved`. Default `draft` |
+| name | String | N | B-18a. 1 to 80 characters. Shown to candidates and reviewers. Default at generation: qualification name plus language. Older papers have none; readers build the same default |
+| status | enum | Y | `draft`, `submitted`, `approved`. Default `draft`. B-18a (D4): `draft` to `submitted` by aa_admin or sme, `submitted` to `approved` by ab_reviewer only |
 | seed | Number | Y | Unsigned 32-bit integer. Given by the caller or drawn by the server |
 | rules.language | String | Y | Lower case |
 | rules.totalMarks | Number | N | Marks target, null when none |
@@ -765,8 +767,8 @@ One generated test paper. Holds the seed, the rules and the chosen question ids 
 | shortages[] | {nosId, type, requested, available} | Y | Empty when the bank was big enough |
 | marksTargetMet | Boolean | Y | |
 | complete | Boolean | Y | No shortage and marks target met. Only complete papers can be approved |
-| createdBy, approvedBy | ObjectId | Y / N | Ref: `users` |
-| approvedAt | Date | N | |
+| createdBy, submittedBy, approvedBy | ObjectId | Y / N / N | Ref: `users` |
+| submittedAt, approvedAt | Date | N | |
 
 Indexes: `{ qualificationId: 1, status: 1, createdAt: -1 }`.
 
@@ -819,7 +821,7 @@ One candidate's attempt at one approved test paper. Holds the stored question or
 Indexes: unique `{ testPaperId: 1, candidateId: 1 }` (one attempt per paper), `{ batchId, status }`, `{ abId, startedAt }`, `{ status, acceptUntil }`.
 `testPapers` (§3.20) gains optional `durationMinutes` (1 to 600, default null).
 
-Start rules (Q-06): a new attempt needs today (IST) within the batch's `assessmentStartDate`..`assessmentEndDate`, no `attendanceRecords` row with `present: false` for the candidate, and `testPapers.rules.language` equal (trimmed, case-insensitive) to the batch `assessmentLanguage`. A timeout sets `closedAt` to the earlier of now and `deadlineAt`. Expired attempts are closed by the attempt sweep job (every 5 minutes, and once at startup).
+Start rules (Q-06, B-18a): a new attempt needs the batch to have a `testPaperId` and the requested paper to be that one (D5), today (IST) within the batch's `assessmentStartDate`..`assessmentEndDate`, no `attendanceRecords` row with `present: false` for the candidate, and `testPapers.rules.language` equal (trimmed, case-insensitive) to the batch `assessmentLanguage`. Manual marks are locked while the batch's `results` row is `submitted`, `validated` or `published` (D6); `return-for-correction` sets it back to `draft`. A timeout sets `closedAt` to the earlier of now and `deadlineAt`. Expired attempts are closed by the attempt sweep job (every 5 minutes, and once at startup).
 
 ### 3.25 `sectorConfigs` (phase 2) — Task Q-05
 
@@ -1042,7 +1044,7 @@ Schema and contract only. **B-10** writes `learnerFeedback` once the batch is `a
 | Action | aa_admin | mis | sme | assessor | proctor | candidate | tp | ab_reviewer | ncvet_viewer | Scope |
 |---|---|---|---|---|---|---|---|---|---|---|
 | Auth login/logout/refresh | A | A | A | A | A | A | A | A | A | self + device |
-| Users CRUD / password reset | A | A* | D | D | D | D | D | D | D | * no escalate to aa_admin |
+| Users CRUD / password reset | A | A* | D | D | D | D | D | D | D | * D1: mis only for users with role tp, assessor, proctor or candidate |
 | Learners / master data CRUD | A | A | D | D | D | D | D | R | R | |
 | Batch create | A | D | D | D | D | D | D | A | D | ab own abId |
 | Batch list/get + child GETs | A | R | D | R | R | R | R | R | R | row scope |

@@ -6,6 +6,7 @@ import { Qualification } from "../../models/qualification.model.js";
 import { Question } from "../../models/question.model.js";
 import { TestPaper } from "../../models/test-paper.model.js";
 import { WeightProfile } from "../../models/weight-profile.model.js";
+import { defaultPaperName } from "./paper-name.js";
 import { createRng, shuffle } from "./seeded-random.js";
 import {
   UNCLASSIFIED,
@@ -291,6 +292,7 @@ export async function generatePaper(user, input) {
   return TestPaper.create({
     ...weighted,
     qualificationId: qual._id,
+    name: input.name ?? defaultPaperName(qual.name, language),
     status: "draft",
     seed,
     rules: { language, totalMarks: target, quotas },
@@ -382,11 +384,8 @@ async function findStaleItems(paper) {
   return stale;
 }
 
-export async function approvePaper(user, id) {
-  const paper = await loadPaper(id);
-  if (paper.status === "approved") {
-    throw new AppError(409, "TEST_ALREADY_APPROVED", "Test paper is already approved");
-  }
+/** A paper that is incomplete or holds a question that is no longer approved cannot move on. */
+async function assertSendable(paper) {
   if (!paper.complete) {
     throw new AppError(
       409,
@@ -404,6 +403,40 @@ export async function approvePaper(user, id) {
       { stale },
     );
   }
+}
+
+/** D4: the creator sends a complete draft to the awarding body. draft -> submitted. */
+export async function submitPaper(user, id) {
+  const paper = await loadPaper(id);
+  if (paper.status === "approved") {
+    throw new AppError(409, "TEST_ALREADY_APPROVED", "Test paper is already approved");
+  }
+  if (paper.status === "submitted") {
+    throw new AppError(409, "TEST_ALREADY_SUBMITTED", "Test paper is already submitted");
+  }
+  await assertSendable(paper);
+  const before = paper.toObject();
+  paper.status = "submitted";
+  paper.submittedBy = user._id;
+  paper.submittedAt = new Date();
+  await paper.save();
+  return { paper, before };
+}
+
+/** D4: the awarding body reviewer approves a submitted paper. submitted -> approved. */
+export async function approvePaper(user, id) {
+  const paper = await loadPaper(id);
+  if (paper.status === "approved") {
+    throw new AppError(409, "TEST_ALREADY_APPROVED", "Test paper is already approved");
+  }
+  if (paper.status !== "submitted") {
+    throw new AppError(
+      409,
+      "TEST_NOT_SUBMITTED",
+      "The test paper must be submitted for approval first",
+    );
+  }
+  await assertSendable(paper);
   const before = paper.toObject();
   paper.status = "approved";
   paper.approvedBy = user._id;

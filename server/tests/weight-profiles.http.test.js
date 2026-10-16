@@ -599,6 +599,7 @@ describe("Weight profiles API (server/src/modules/weight-profiles)", () => {
       const p = await createProfile();
       await approve(reviewer, p._id);
       const gen = await generate(sme, genBody({ weightProfileId: p._id }));
+      await post(sme, `/api/v1/tests/${gen.body._id}/submit`, {});
       const res = await post(reviewer, `/api/v1/tests/${gen.body._id}/approve`, {});
       expect(res.status).toBe(200);
     });

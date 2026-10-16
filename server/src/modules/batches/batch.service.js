@@ -123,6 +123,7 @@ export function presentBatch(doc, { now = new Date(), recompute = true } = {}) {
     assessorId: idOf(doc.assessorId),
     proctorId: idOf(doc.proctorId),
     resultId: idOf(doc.resultId),
+    testPaperId: idOf(doc.testPaperId),
     rejectReason: doc.rejectReason ?? null,
     cancelReason: doc.cancelReason ?? null,
     isReassessment: doc.isReassessment,
