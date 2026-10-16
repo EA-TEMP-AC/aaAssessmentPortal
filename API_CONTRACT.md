@@ -1760,3 +1760,17 @@ Audit: `proctoring.review_dismiss`, `proctoring.review_warn` or `proctoring.revi
 
 ### GET /api/v1/proctoring/sessions/:id/warnings
 Role: `candidate`, own session only (staff read warnings in the session detail). `200 [ { "id", "message", "createdAt" } ]`, oldest first.
+## Proctoring sessions (planned; the candidate exam page, task F-05, calls these)
+
+The server side is a separate task. These are the shapes the web client (`web/src/api/proctoringSession.ts`) is built against; that task should confirm or correct them (DECISIONS Q645). All need the `candidate` role and the candidate's own attempt.
+
+### POST /api/v1/proctoring/sessions
+Body `{ "attemptId" }`. Returns `{ id, status, config }`, where `config` is `{ snapshotIntervalSeconds, detectionIntervalMs, flagCooldownSeconds, sustainedSeconds: { <flagType>: seconds } }`. Called once when the exam opens. On any error the exam goes on without proctoring and shows a notice.
+
+### POST /api/v1/proctoring/sessions/:id/heartbeat
+No body. Any `2xx`. Sent every 15 seconds while the exam is open.
+
+### GET /api/v1/proctoring/sessions/:id/warnings
+Returns `{ items: [{ id, message, createdAt }] }`. Polled every 15 seconds; each new `id` is shown once to the candidate, who must acknowledge it (the acknowledgement is not sent yet).
+
+Flag types the engine raises (`web/src/exam/proctorBridge.ts`): `tab_hidden`, `fullscreen_exit`, `window_blur`, `permission_revoked`, `object_detected`, `face_not_present`, `multiple_faces`, `person_detected`, `phone_detected`, `camera_blocked`, `camera_frozen`. No video is uploaded; only flags and occasional snapshots.

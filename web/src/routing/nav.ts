@@ -5,6 +5,7 @@ import {
   AUDIT_ROLES,
   BATCH_ROLES,
   EVIDENCE_ROLES,
+  EXAM_ROLES,
   MASTER_DATA_ROLES,
   PROCTORING_ROLES,
   PUBLIC_SITE_ROLES,
@@ -105,6 +106,13 @@ export const NAV_ITEMS: readonly NavItem[] = [
     to: "/results",
     description: "Result entry and review will be added in a later task.",
     roles: RESULTS_ROLES,
+  },
+  {
+    id: "exam",
+    label: "Exam",
+    to: "/exam",
+    description: "Take your online exam with a camera check before you start.",
+    roles: EXAM_ROLES,
   },
   {
     id: "evidence",

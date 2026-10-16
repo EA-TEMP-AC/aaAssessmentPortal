@@ -86,6 +86,9 @@ export const RESULTS_ROLES: readonly Role[] = [
   "ncvet_viewer",
 ];
 
+/** API_CONTRACT attempt engine (E-03): only candidates take exams (F-05). */
+export const EXAM_ROLES: readonly Role[] = ["candidate"];
+
 /** SCHEMA §5 audit read. */
 export const AUDIT_ROLES: readonly Role[] = ["aa_admin", "mis", "ab_reviewer", "ncvet_viewer"];
 
