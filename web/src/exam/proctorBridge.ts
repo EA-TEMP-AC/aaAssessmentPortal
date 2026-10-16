@@ -40,6 +40,8 @@ export interface ProctorEngine {
     batchId: string;
     config: ProctorConfig;
     onStatus: (s: ProctorStatus) => void;
+    /** X-05: called when the rules raise a flag, so the page can tell the candidate. */
+    onFlag?: (flag: { type: ProctorFlagType }) => void;
     /** P-09: holds the selfie reference; the engine compares the live face with it. */
     faceMatcher?: FaceMatcher;
   }): Promise<void>;

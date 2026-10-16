@@ -62,6 +62,7 @@ function setup(extra: EngineOptions = {}, frames: Detection[][] = [[face]]) {
     samplerFactory: () => sampler,
     takeSnapshot: async () => new Blob(["jpeg"], { type: "image/jpeg" }),
     isFrameReady: () => true,
+    framerFactory: () => ({ make: async (v: HTMLVideoElement) => v, release: vi.fn() }),
     ...extra,
   });
   const statuses: ProctorStatus[] = [];
@@ -413,6 +414,107 @@ describe("face matcher (P-09)", () => {
     await vi.advanceTimersByTimeAsync(3000);
     expect(s.flags).toEqual([]);
     expect(s.statuses.map((x) => x.state)).toEqual(["starting", "running"]);
+    s.engine.stop();
+  });
+});
+
+describe("speed (X-05)", () => {
+  function visibility(state: "visible" | "hidden") {
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => state });
+  }
+  afterEach(() => visibility("visible"));
+
+  it("gives the detector the scaled-down frame and closes it afterwards", async () => {
+    const bitmap = { close: vi.fn() } as unknown as ImageBitmap;
+    const seen: unknown[] = [];
+    const detector = {
+      detect: async (frame: unknown) => {
+        seen.push(frame);
+        return [face];
+      },
+    };
+    const release = vi.fn();
+    const s = setup({
+      detectorFactory: async () => detector,
+      framerFactory: () => ({ make: async () => bitmap, release }),
+    });
+    await startEngine(s);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(seen).toHaveLength(2);
+    expect(seen.every((f) => f === bitmap)).toBe(true);
+    expect(bitmap.close).toHaveBeenCalledTimes(2);
+    s.engine.stop();
+    expect(release).toHaveBeenCalled();
+  });
+
+  it("does not run detection while the tab is hidden and carries on when it is back", async () => {
+    const s = setup();
+    await startEngine(s);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(s.detector.calls).toBe(2);
+    visibility("hidden");
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(s.detector.calls).toBe(2);
+    visibility("visible");
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(s.detector.calls).toBe(4);
+    s.engine.stop();
+  });
+
+  it("uses the shorter of the server interval and 500 ms for face detection", async () => {
+    const s = setup();
+    await s.engine.start({
+      stream: fakeStream().stream,
+      sessionId: "sess-1",
+      attemptId: "att-1",
+      batchId: "batch-1",
+      config: { ...config, detectionIntervalMs: 1000 },
+      onStatus: () => {},
+    });
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(s.detector.calls).toBe(4);
+    s.engine.stop();
+  });
+
+  it("reports how long each check took, and not the skipped ones", async () => {
+    let clock = 0;
+    let release: () => void = () => {};
+    const slow = {
+      detect: () =>
+        new Promise<Detection[]>((resolve) => {
+          release = () => resolve([face]);
+        }),
+    };
+    const ms: number[] = [];
+    const s = setup({
+      detectorFactory: async () => slow,
+      perfNow: () => clock,
+      onTick: (v) => ms.push(v),
+    });
+    await startEngine(s);
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(ms).toEqual([]);
+    clock = 120;
+    release();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(ms).toEqual([120]);
+    s.engine.stop();
+  });
+
+  it("tells the page when a flag is raised", async () => {
+    const s = setup({}, [[]]);
+    const raised: string[] = [];
+    await s.engine.start({
+      stream: fakeStream().stream,
+      sessionId: "sess-1",
+      attemptId: "att-1",
+      batchId: "batch-1",
+      config,
+      onStatus: () => {},
+      onFlag: (flag) => raised.push(flag.type),
+    });
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(raised).toEqual(["face_not_present"]);
     s.engine.stop();
   });
 });

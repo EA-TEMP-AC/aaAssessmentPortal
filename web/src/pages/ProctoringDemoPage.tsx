@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { DEMO_CONFIG } from "../proctoring/config";
+import { DEMO_CONFIG, PROCTOR_THRESHOLDS } from "../proctoring/config";
 import { createEngine } from "../proctoring/engine";
 import type { Detection, FlagBody, ProctorEngine, ProctorStatus, ProctorTransport } from "../proctoring/types";
 
@@ -40,6 +40,7 @@ export function ProctoringDemoPage() {
   const [stats, setStats] = useState<Stats>({ brightness: null, identical: null });
   const [flags, setFlags] = useState<ShownFlag[]>([]);
   const [snapshots, setSnapshots] = useState(0);
+  const [ticks, setTicks] = useState({ count: 0, totalMs: 0 });
   const engineRef = useRef<ProctorEngine | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const previewRef = useRef<HTMLVideoElement | null>(null);
@@ -73,6 +74,7 @@ export function ProctoringDemoPage() {
       }
       setFlags([]);
       setSnapshots(0);
+      setTicks({ count: 0, totalMs: 0 });
       const transport = localTransport(
         (body) =>
           setFlags((list) => [{ ...body, shownAt: new Date().toISOString() }, ...list].slice(0, MAX_SHOWN_FLAGS)),
@@ -80,6 +82,7 @@ export function ProctoringDemoPage() {
       );
       const engine = createEngine({
         transport,
+        onTick: (ms) => setTicks((t) => ({ count: t.count + 1, totalMs: t.totalMs + ms })),
         onDetections: (d, s) => {
           setDetections(d);
           setStats(s);
@@ -172,6 +175,12 @@ export function ProctoringDemoPage() {
                 ? "nothing"
                 : detections.map((d) => `${d.label} ${Math.round(d.confidence * 100)}%`).join(", ")}
           </dd>
+          <dt>Average time per check</dt>
+          <dd>
+            {ticks.count === 0
+              ? "no checks yet"
+              : `${(ticks.totalMs / ticks.count).toFixed(1)} ms over ${ticks.count} ${ticks.count === 1 ? "check" : "checks"}`}
+          </dd>
           <dt>Snapshots taken</dt>
           <dd>{snapshots}</dd>
         </dl>
@@ -194,7 +203,7 @@ export function ProctoringDemoPage() {
         )}
       </div>
       <p className="field-hint">
-        Config: detection every {DEMO_CONFIG.detectionIntervalMs} ms, snapshot every{" "}
+        Config: faces every {Math.min(DEMO_CONFIG.detectionIntervalMs, PROCTOR_THRESHOLDS.faceDetectionIntervalMs)} ms, objects every {PROCTOR_THRESHOLDS.objectDetectionIntervalMs / 1000} s, snapshot every{" "}
         {DEMO_CONFIG.snapshotIntervalSeconds} s, cooldown {DEMO_CONFIG.flagCooldownSeconds} s per flag type.
       </p>
     </>

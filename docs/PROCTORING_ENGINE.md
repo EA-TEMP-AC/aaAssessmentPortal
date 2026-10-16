@@ -105,3 +105,11 @@ In a development build, add `?debug=1` to the exam address to see one line under
 ## Why a real session recorded no flags (X-06)
 
 The flag POST saves the flag and bumps the session count in a MongoDB transaction. The development server was reaching a MongoDB that is not a replica set (a Windows service on 127.0.0.1:27017, while the Docker `rs0` replica set answered only on `::1`). That MongoDB refuses transactions with code 20 (IllegalOperation), so every flag POST failed with a 500 and the log showed `unhandled error 20`. The transport treats a 500 as "try again later", keeps the flag in its in-memory queue, and fails again, so the exam page looked fine and the session stayed at 0 flags and no images (the snapshot upload does not use a transaction, so interval snapshots could be saved, but they were never linked to a flag). The server now falls back to two plain writes when it sees code 20. The proper set-up is still one MongoDB on 27017, the replica set from docker-compose.yml; stop the Windows MongoDB service or change its port.
+## Speed and candidate feedback (X-05)
+
+- **Cadence.** Faces are checked every 500 ms (or the server's `detectionIntervalMs` if shorter); the object model runs every 2 s and its last result is reused in between (`web/src/proctoring/cadence.ts`). Frames are scaled to at most 320 px wide before detection (`createDetectionFramer`). The `Detector` interface is unchanged.
+- **Skipping.** A tick that finds the previous one still running does nothing. No tick runs while the tab is hidden.
+- **Timing.** `onTick(ms)` reports how long each check took; `/proctoring-demo` shows the average. Skipped ticks are not counted.
+- **Flag notice.** `start()` takes an optional `onFlag({ type })`, called when the rules raise a flag. The exam page shows a centred, non-blocking card (`role="alertdialog"`, focus on OK) with one calm sentence per type (`web/src/exam/flagNotices.ts`), one at a time, merging repeats of a type inside `flagCooldownSeconds`. Nothing is stored or sent for it.
+- **Chip and preview.** "Camera on", "Checking" or "Camera problem" (with the engine's reason), and a mirrored 160 x 120 view of the candidate's own camera. The view is not recorded.
+- No flag rule, severity or result changed.
