@@ -40,8 +40,10 @@ export const uploadFieldsSchema = z
       if (data.candidateId !== undefined) {
         issue("candidateId", "candidateId is set from the session for a proctor_snapshot");
       }
-    } else if (data.sessionId !== undefined) {
-      issue("sessionId", "sessionId is only allowed with kind 'proctor_snapshot'");
+    } else if (data.sessionId !== undefined && data.kind !== "id_proof") {
+      // P-09: id_proof may carry a sessionId (the candidate's own ID card photo). The service
+      // requires it for a candidate and refuses it for staff.
+      issue("sessionId", "sessionId is only allowed with kind 'proctor_snapshot' or 'id_proof'");
     }
     const hasCoords = data.latitude !== undefined || data.longitude !== undefined;
     if (data.locationStatus === "unavailable") {

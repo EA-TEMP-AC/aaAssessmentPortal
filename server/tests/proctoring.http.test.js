@@ -5,6 +5,7 @@ import mongoose from "mongoose";
 import request from "supertest";
 import { createApp } from "../src/app.js";
 import { compliance } from "../src/config/compliance.js";
+import { AccessLog } from "../src/models/access-log.model.js";
 import { Attempt } from "../src/models/attempt.model.js";
 import { AuditLog } from "../src/models/audit-log.model.js";
 import { Batch } from "../src/models/batch.model.js";
@@ -324,14 +325,21 @@ describe("Proctoring API (server/src/modules/proctoring)", () => {
         phone_detected: "high",
         camera_blocked: "high",
         camera_frozen: "high",
+        face_mismatch: "high",
+        id_mismatch: "high",
+        id_unreadable: "medium",
       };
+      // The test table, the model enum and the server table must list the same types.
       expect(Object.keys(expected).sort()).toEqual([...PROCTORING_FLAG_TYPES].sort());
+      expect(Object.keys(compliance.PROCTOR_FLAG_SEVERITY).sort()).toEqual(
+        [...PROCTORING_FLAG_TYPES].sort(),
+      );
       for (const type of PROCTORING_FLAG_TYPES) {
         const body = await flagged(w.asha, s.id, { type });
         expect(body.severity, type).toBe(expected[type]);
       }
       const row = await ProctoringSession.findById(s.id).lean();
-      expect(row.flagCounts).toEqual({ low: 5, medium: 1, high: 5 });
+      expect(row.flagCounts).toEqual({ low: 5, medium: 2, high: 7 });
 
       expectError(
         await sendFlag(w.asha, s.id, { type: "phone_detected", severity: "low" }),
@@ -485,6 +493,134 @@ describe("Proctoring API (server/src/modules/proctoring)", () => {
         400,
         "VALIDATION_ERROR",
       );
+    });
+  });
+
+  describe("id_proof evidence (P-09, DECISIONS D3)", () => {
+    const bigJpeg = () =>
+      Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(6 * 1024 * 1024, 7)]);
+    const pdf = () => Buffer.from("%PDF-1.4\n1 0 obj\n<<>>\nendobj\n");
+    const idProof = (who, batchId, fields = {}, file) =>
+      uploadSnapshot(who, batchId, { kind: "id_proof", ...fields }, file);
+    const get = (who, path) => request(app).get(path).set(bearer(who.token));
+
+    it("a candidate uploads a JPEG or PNG id_proof for their own session", async () => {
+      const w = await world();
+      const s = await started(w.asha);
+      const jpg = await idProof(w.asha, w.batch._id, { sessionId: s.id });
+      expect(jpg.status, JSON.stringify(jpg.body)).toBe(201);
+      expect(jpg.body).toMatchObject({
+        kind: "id_proof",
+        sessionId: s.id,
+        candidateId: String(w.asha.roster._id),
+        uploaderRole: "candidate",
+        contentType: "image/jpeg",
+      });
+      const img = await idProof(
+        w.asha,
+        w.batch._id,
+        { sessionId: s.id },
+        { file: png(), type: "image/png" },
+      );
+      expect(img.status, JSON.stringify(img.body)).toBe(201);
+      expect(img.body.contentType).toBe("image/png");
+    });
+
+    it("refuses a PDF, a file over 5 MB, a missing or foreign session and any other kind", async () => {
+      const w = await world();
+      const asha = await started(w.asha);
+      const bina = await started(w.bina);
+      expectError(
+        await idProof(
+          w.asha,
+          w.batch._id,
+          { sessionId: asha.id },
+          { file: pdf(), type: "application/pdf" },
+        ),
+        400,
+        "VALIDATION_ERROR",
+      );
+      expectError(
+        await idProof(w.asha, w.batch._id, { sessionId: asha.id }, { file: bigJpeg() }),
+        413,
+        "FILE_TOO_LARGE",
+      );
+      expectError(await idProof(w.asha, w.batch._id, {}), 400, "VALIDATION_ERROR");
+      expectError(await idProof(w.asha, w.batch._id, { sessionId: bina.id }), 403, "FORBIDDEN");
+      expectError(
+        await idProof(w.asha, w.batch._id, {
+          sessionId: asha.id,
+          candidateId: String(w.bina.roster._id),
+        }),
+        400,
+        "VALIDATION_ERROR",
+      );
+      for (const kind of ["photo", "attendance", "equipment", "other", "video"]) {
+        expectError(
+          await uploadSnapshot(w.asha, w.batch._id, { kind, sessionId: undefined }),
+          403,
+          "FORBIDDEN",
+        );
+      }
+      // Staff may not attach a session to an id_proof.
+      expectError(
+        await idProof(w.admin, w.batch._id, { sessionId: asha.id }),
+        400,
+        "VALIDATION_ERROR",
+      );
+      expect(await Evidence.countDocuments()).toBe(0);
+    });
+
+    it("only aa_admin and the uploader read an id_proof; every read is logged", async () => {
+      const w = await world();
+      const s = await started(w.asha);
+      const up = await idProof(w.asha, w.batch._id, { sessionId: s.id });
+      expect(up.status).toBe(201);
+      const id = up.body.id;
+
+      expect((await get(w.admin, `/api/v1/evidence/${id}`)).status).toBe(200);
+      expect((await get(w.admin, `/api/v1/evidence/${id}/file`)).status).toBe(200);
+      const listed = await get(w.admin, "/api/v1/evidence?kind=id_proof");
+      expect(listed.body.items.map((i) => i.id)).toEqual([id]);
+      const logged = await AccessLog.find({ subjectType: "evidence", subjectId: id }).lean();
+      expect(logged.map((r) => r.actorRole)).toEqual(["aa_admin", "aa_admin", "aa_admin"]);
+      expect(logged.map((r) => r.route).sort()).toEqual([
+        "GET /api/v1/evidence",
+        "GET /api/v1/evidence/:id",
+        "GET /api/v1/evidence/:id/file",
+      ]);
+      for (const who of [w.proctor, w.assessor, w.reviewer, w.mis, w.ncvet, w.asha]) {
+        expectError(await get(who, `/api/v1/evidence/${id}`), 403, "FORBIDDEN");
+        expectError(await get(who, `/api/v1/evidence/${id}/file`), 403, "FORBIDDEN");
+        expectError(
+          await request(app).post(`/api/v1/evidence/${id}/verify`).set(bearer(who.token)),
+          403,
+          "FORBIDDEN",
+        );
+      }
+      for (const who of [w.proctor, w.assessor, w.reviewer, w.mis, w.ncvet]) {
+        const all = await get(who, "/api/v1/evidence");
+        expect(all.status).toBe(200);
+        expect(all.body.items.map((i) => i.kind)).not.toContain("id_proof");
+        expect((await get(who, "/api/v1/evidence?kind=id_proof")).body.total).toBe(0);
+      }
+      expect(await AccessLog.countDocuments({ subjectType: "evidence", subjectId: id })).toBe(3);
+
+      // A proctor_snapshot of the same session stays readable by the batch's proctor.
+      const snap = await uploadSnapshot(w.asha, w.batch._id, { sessionId: s.id });
+      expect((await get(w.proctor, `/api/v1/evidence/${snap.body.id}`)).status).toBe(200);
+    });
+
+    it("a staff uploader reads their own id_proof; only admin verifies", async () => {
+      const w = await world();
+      const up = await idProof(w.assessor, w.batch._id, {});
+      expect(up.status, JSON.stringify(up.body)).toBe(201);
+      expect((await get(w.assessor, `/api/v1/evidence/${up.body.id}/file`)).status).toBe(200);
+      expect((await get(w.proctor, `/api/v1/evidence/${up.body.id}`)).status).toBe(403);
+      const verify = await request(app)
+        .post(`/api/v1/evidence/${up.body.id}/verify`)
+        .set(bearer(w.admin.token));
+      expect(verify.status).toBe(200);
     });
   });
 

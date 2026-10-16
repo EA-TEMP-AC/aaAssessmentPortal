@@ -1366,8 +1366,8 @@ Parts:
 |---|---|---|
 | `file` | yes | One file. Real type read from the bytes: `image/jpeg`, `image/png`, `application/pdf`, `video/mp4`. Anything else `415 UNSUPPORTED_FILE_TYPE`. If the part declares one of the four types and the bytes say another, `415 FILE_TYPE_MISMATCH`. The file name is ignored and never stored. Images and PDFs up to 25 MB, video up to 200 MB, else `413 FILE_TOO_LARGE`. An empty file is `400` |
 | `clientEventId` | yes | Idempotency key, 1 to 200 characters |
-| `kind` | yes | `photo`, `id_proof`, `attendance`, `equipment`, `other`, `video`. `video` needs an MP4 and an MP4 needs `video`; the other kinds take JPEG, PNG or PDF, except `photo`, which takes JPEG or PNG (`400` otherwise). `proctor_snapshot` (P-01) takes JPEG only, needs `sessionId`, and only a candidate may send it (see Proctoring below) |
-| `sessionId` | with `proctor_snapshot` only | The candidate's own proctoring session on this batch. Any other kind with `sessionId` is `400` |
+| `kind` | yes | `photo`, `id_proof`, `attendance`, `equipment`, `other`, `video`. `video` needs an MP4 and an MP4 needs `video`; the other kinds take JPEG, PNG or PDF, except `photo`, which takes JPEG or PNG (`400` otherwise). `proctor_snapshot` (P-01) takes JPEG only, needs `sessionId`, and only a candidate may send it (see Proctoring below). **P-09:** a candidate may also send `id_proof` (their ID card photo): JPEG or PNG, at most 5 MB, `sessionId` required, same session checks as `proctor_snapshot`; a candidate sending any other kind is `403` |
+| `sessionId` | with `proctor_snapshot`; with a candidate's `id_proof` | The candidate's own proctoring session on this batch. Any other kind with `sessionId` is `400`; staff sending `sessionId` with `id_proof` is `400` |
 | `capturedAt` | yes | ISO 8601 with offset, from the device clock. Kept as sent |
 | `candidateId` | no | A candidate row (roster id) of this batch, else `400` |
 | `deviceId` | no | |
@@ -1405,7 +1405,9 @@ Read roles above. All filters optional; an unknown filter or bad value is `400`.
 
 ### GET /evidence/:id
 
-`200` the row. Metadata reads are not written to the access log (DECISIONS 325).
+`200` the row. Metadata reads are not written to the access log (DECISIONS 325), **except** `id_proof` rows (P-09, decision D3): reading one by detail or in a list writes an access-log row (`subjectType: "evidence"`, `fields: ["id_proof"]`) before the response is sent.
+
+**`id_proof` read rule (P-09, D3).** Whatever the role table above says, a row of kind `id_proof` is returned by the list, detail, file and verify routes only to `aa_admin` and to the user who uploaded it. `proctor`, `assessor`, `ab_reviewer`, `mis` and `ncvet_viewer` get it neither in the list (it is left out, so `total` does not count it) nor by id (`403`). `POST /evidence/:id/verify` is `aa_admin` only as before.
 
 ### GET /evidence/:id/file
 
@@ -1720,12 +1722,12 @@ Role: `candidate`, own session.
 | Field | Required | Rule |
 |---|---|---|
 | `clientEventId` | yes | 1 to 200 characters; idempotency key within the session |
-| `type` | yes | `tab_hidden`, `fullscreen_exit`, `window_blur`, `permission_revoked`, `object_detected`, `face_not_present`, `multiple_faces`, `person_detected`, `phone_detected`, `camera_blocked`, `camera_frozen` |
+| `type` | yes | `tab_hidden`, `fullscreen_exit`, `window_blur`, `permission_revoked`, `object_detected`, `face_not_present`, `multiple_faces`, `person_detected`, `phone_detected`, `camera_blocked`, `camera_frozen`, `face_mismatch`, `id_mismatch`, `id_unreadable` |
 | `capturedAt` | yes | ISO-8601 with `Z` or an offset; device clock, stored as sent |
 | `detail` | no | Only `label` (1 to 60 letters, digits, spaces, `_`, `-`), `count` (integer 0 to 100), `confidence` (0 to 1). Never an image, a name or other personal data; any other key is `400` |
 | `evidenceId` | no | A `proctor_snapshot` evidence row of this session, else `400` |
 
-The **server** sets `severity` (a `severity` key in the body is `400`): low `tab_hidden`, `fullscreen_exit`, `window_blur`, `permission_revoked`, `object_detected`; medium `face_not_present`; high `multiple_faces`, `person_detected`, `phone_detected`, `camera_blocked`, `camera_frozen`.
+The **server** sets `severity` (a `severity` key in the body is `400`): low `tab_hidden`, `fullscreen_exit`, `window_blur`, `permission_revoked`, `object_detected`; medium `face_not_present`, `id_unreadable`; high `multiple_faces`, `person_detected`, `phone_detected`, `camera_blocked`, `camera_frozen`, `face_mismatch`, `id_mismatch`.
 
 `201` new, `200` replay: `{ id, sessionId, clientEventId, type, severity, capturedAt, receivedAt, evidenceId, replayed }`. The same `clientEventId` with a different `type`, `capturedAt`, `detail` or `evidenceId` is `409 CONFLICT_IDEMPOTENT`. The server does not enforce the cooldown.
 Audit: `proctoring.flag` or `proctoring.flag_replay` (session, type, severity, time, evidence id; no request body).
@@ -1783,4 +1785,4 @@ No body. Any `2xx`. Sent every 15 seconds while the exam is open.
 ### GET /api/v1/proctoring/sessions/:id/warnings
 Returns `{ items: [{ id, message, createdAt }] }`. Polled every 15 seconds; each new `id` is shown once to the candidate, who must acknowledge it (the acknowledgement is not sent yet).
 
-Flag types the engine raises (`web/src/exam/proctorBridge.ts`): `tab_hidden`, `fullscreen_exit`, `window_blur`, `permission_revoked`, `object_detected`, `face_not_present`, `multiple_faces`, `person_detected`, `phone_detected`, `camera_blocked`, `camera_frozen`. No video is uploaded; only flags and occasional snapshots.
+Flag types the engine raises (`web/src/exam/proctorBridge.ts`): `tab_hidden`, `fullscreen_exit`, `window_blur`, `permission_revoked`, `object_detected`, `face_not_present`, `multiple_faces`, `person_detected`, `phone_detected`, `camera_blocked`, `camera_frozen`, `face_mismatch`, `id_mismatch`, `id_unreadable` (P-09). No video is uploaded; only flags and occasional snapshots, plus, at Start, the ID card photo (`id_proof`) and the selfie (`proctor_snapshot`). Face flags only ask a person to look; they never block or fail a candidate. The `detail` of a face flag is `{ label: "distance_<hundredths>", count: <samples> }` (docs/PROCTORING_ENGINE.md); no descriptor or image data is ever sent.

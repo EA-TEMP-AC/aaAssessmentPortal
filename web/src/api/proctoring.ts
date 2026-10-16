@@ -32,6 +32,9 @@ export const FLAG_TYPE_LABELS: Record<string, string> = {
   phone_detected: "Phone detected",
   camera_blocked: "Camera blocked",
   camera_frozen: "Camera frozen",
+  face_mismatch: "Face differs from the selfie",
+  id_mismatch: "ID card photo differs from the selfie",
+  id_unreadable: "ID card photo not readable",
 };
 
 export const DECISION_LABELS: Record<Decision, string> = {

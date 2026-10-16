@@ -4,6 +4,7 @@ import { submitAttempt, type Attempt, type AttemptQuestion } from "../api/attemp
 import { useAutosave, type ClosedReason } from "./useAutosave";
 import { formatRemaining, spokenRemaining, useExamClock, WARN_SECONDS } from "./useExamClock";
 import { useProctoring } from "./useProctoring";
+import type { FaceStart } from "./faceEvidence";
 import { fullscreenSupported, requestExamFullscreen } from "./fullscreen";
 
 export type ExamOutcome = "submitted" | "timed_out" | "closed";
@@ -11,6 +12,8 @@ export type ExamOutcome = "submitted" | "timed_out" | "closed";
 type Props = {
   attempt: Attempt;
   stream: MediaStream | null;
+  /** P-09: ID card photo, selfie and matcher from the camera check. */
+  face?: FaceStart | null;
   onFinished: (outcome: ExamOutcome) => void;
   autosaveDebounceMs?: number;
 };
@@ -82,7 +85,7 @@ function QuestionBody({
   );
 }
 
-export function ExamScreen({ attempt, stream, onFinished, autosaveDebounceMs }: Props) {
+export function ExamScreen({ attempt, stream, face, onFinished, autosaveDebounceMs }: Props) {
   const questions = attempt.questions;
   const [answers, setAnswers] = useState<Record<string, string>>(() =>
     Object.fromEntries(questions.map((q) => [q.questionId, q.answer ?? ""])),
@@ -102,7 +105,7 @@ export function ExamScreen({ attempt, stream, onFinished, autosaveDebounceMs }: 
   const firstRender = useRef(true);
 
   const remaining = useExamClock(attempt.deadlineAt, attempt.serverTime);
-  const proctoring = useProctoring({ attemptId: attempt.id, batchId: attempt.batchId, stream });
+  const proctoring = useProctoring({ attemptId: attempt.id, batchId: attempt.batchId, stream, face });
   const { stop: stopProctoring } = proctoring;
 
   const finish = useCallback(

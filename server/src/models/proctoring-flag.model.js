@@ -20,6 +20,7 @@ export const PROCTORING_FLAG_TYPES = Object.freeze([
   "camera_frozen",
   "face_mismatch",
   "id_mismatch",
+  "id_unreadable",
 ]);
 export const PROCTORING_SEVERITIES = Object.freeze(["low", "medium", "high"]);
 export const PROCTORING_DECISIONS = Object.freeze(["dismiss", "warn", "invalidate_recommended"]);

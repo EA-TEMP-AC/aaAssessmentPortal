@@ -32,6 +32,7 @@ import {
   openEvidenceFile,
   presentEvidence,
   recordDownload,
+  recordIdProofReads,
   verifyEvidence,
 } from "./evidence.service.js";
 
@@ -138,7 +139,9 @@ evidenceRouter.get(
   requireRoles(...EVIDENCE_READ_ROLES),
   asyncHandler(async (req, res) => {
     const query = listEvidenceQuerySchema.parse(req.query);
-    await res.status(200).json(await listEvidence(req.user, query));
+    const page = await listEvidence(req.user, query);
+    await recordIdProofReads(req, page.items);
+    await res.status(200).json(page);
   }),
 );
 
@@ -147,7 +150,9 @@ evidenceRouter.get(
   requireRoles(...EVIDENCE_READ_ROLES),
   asyncHandler(async (req, res) => {
     const { id } = evidenceIdParamSchema.parse(req.params);
-    await res.status(200).json(presentEvidence(await loadReadableEvidence(req.user, id)));
+    const doc = await loadReadableEvidence(req.user, id);
+    await recordIdProofReads(req, [doc]);
+    await res.status(200).json(presentEvidence(doc));
   }),
 );
 

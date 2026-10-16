@@ -17,6 +17,9 @@ describe("engine contract", () => {
         "phone_detected",
         "camera_blocked",
         "camera_frozen",
+        "face_mismatch",
+        "id_mismatch",
+        "id_unreadable",
       ].sort(),
     );
     expectTypeOf<(typeof PROCTOR_FLAG_TYPES)[number]>().toEqualTypeOf<ProctorFlagType>();

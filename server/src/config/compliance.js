@@ -141,5 +141,6 @@ export const compliance = Object.freeze({
     camera_frozen: "high",
     face_mismatch: "high",
     id_mismatch: "high",
+    id_unreadable: "medium",
   }),
 });

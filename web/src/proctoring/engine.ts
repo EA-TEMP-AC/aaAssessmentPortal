@@ -1,6 +1,15 @@
 import { PROCTOR_THRESHOLDS, type ProctorThresholds } from "./config";
 import type { DetectorFactory } from "./detector";
 import { createFrameSampler, createSnapshotTaker, type FrameSampler, type SnapshotTaker } from "./frame";
+import {
+  faceConfig,
+  evaluateIdentity,
+  INITIAL_IDENTITY_STATE,
+  type FaceConfig,
+  type FaceFlag,
+  type FaceMatcher,
+  type IdentityState,
+} from "./face";
 import { createMediaPipeDetector } from "./mediapipeDetector";
 import { createRulesState, evaluateEvent, evaluateFrame, frameStats, type RulesState } from "./rules";
 import { createTransport } from "./transport";
@@ -35,8 +44,13 @@ export type EngineOptions = {
   takeSnapshot?: SnapshotTaker;
   /** Whether the video has a frame the model can read. Default: readyState >= 2. */
   isFrameReady?: (video: HTMLVideoElement) => boolean;
+  /** Face check numbers (mismatch samples, hold time, cooldown). Default: face/config.ts. */
+  faceConfig?: FaceConfig;
   /** For the demo page: what the model saw this cycle (null when degraded). */
-  onDetections?: (detections: Detection[] | null, stats: { brightness: number | null; identical: boolean | null }) => void;
+  onDetections?: (
+    detections: Detection[] | null,
+    stats: { brightness: number | null; identical: boolean | null },
+  ) => void;
   /** For the demo page: every flag the rules raised, with the body sent. */
   onFlag?: (flag: RaisedFlag, body: FlagBody) => void;
   /** For the demo page: every snapshot taken. */
@@ -63,7 +77,25 @@ type Run = {
   status: ProctorStatus["state"];
   degradedReason: string | null;
   transport: ProctorTransport;
+  /** The caller's matcher. Always cleared on stop, even when it is not used for comparing. */
+  faceMatcher: FaceMatcher | null;
+  /** True when the matcher is loaded and compared every cycle. */
+  faceActive: boolean;
+  identity: IdentityState;
 };
+
+export const FACE_MODEL_MESSAGE = "The face check could not load; the other browser checks still run.";
+
+/**
+ * Server detail shape is { label, count, confidence } (letters, digits, space, _ and - in label).
+ * label carries the distance in hundredths ("distance_71"), count the mismatched samples, and
+ * confidence is left out: a distance is not a confidence. See docs/PROCTORING_ENGINE.md.
+ */
+export function faceFlagDetail(flag: FaceFlag): FlagDetail {
+  const { samples, distance } = flag.detail;
+  const label = typeof distance === "number" ? `distance_${Math.round(distance * 100)}` : flag.type;
+  return { label, count: samples } as FlagDetail;
+}
 
 function randomPart(): string {
   const c = globalThis.crypto;
@@ -78,6 +110,7 @@ export function createEngine(options: EngineOptions = {}): ProctorEngine {
   const samplerFactory = options.samplerFactory ?? (() => createFrameSampler(thresholds));
   const takeSnapshot = options.takeSnapshot ?? createSnapshotTaker(thresholds);
   const isFrameReady = options.isFrameReady ?? ((video: HTMLVideoElement) => video.readyState >= 2);
+  const faceCfg = options.faceConfig ?? faceConfig();
 
   let run: Run | null = null;
 
@@ -85,6 +118,12 @@ export function createEngine(options: EngineOptions = {}): ProctorEngine {
     if (r.status === state && state !== "degraded") return;
     r.status = state;
     r.onStatus(message ? { state, message } : { state });
+  }
+
+  /** Where the engine stands when nothing else is wrong: running, or degraded if the face model failed. */
+  function settle(r: Run) {
+    if (r.faceMatcher && !r.faceActive) setStatus(r, "degraded", FACE_MODEL_MESSAGE);
+    else setStatus(r, "running");
   }
 
   function eventId(r: Run, prefix: string): string {
@@ -131,6 +170,28 @@ export function createEngine(options: EngineOptions = {}): ProctorEngine {
     if (result.flag) void send(r, result.flag);
   }
 
+  /** Compares the live face with the selfie. A flag needs the rules; one frame never raises it. */
+  async function checkIdentity(r: Run) {
+    const matcher = r.faceMatcher;
+    if (!matcher || !r.faceActive || !isFrameReady(r.video)) return;
+    let sample;
+    try {
+      sample = await matcher.compare(r.video);
+    } catch {
+      return;
+    }
+    if (run !== r) return;
+    const step = evaluateIdentity(sample, r.identity, faceCfg, now());
+    r.identity = step.state;
+    if (step.flag) {
+      void send(r, {
+        type: step.flag.type,
+        at: step.flag.at,
+        detail: faceFlagDetail(step.flag),
+      });
+    }
+  }
+
   async function tick(r: Run) {
     if (r.busy || run !== r) return;
     r.busy = true;
@@ -145,7 +206,7 @@ export function createEngine(options: EngineOptions = {}): ProctorEngine {
           detections = await r.detector.detect(r.video);
           if (r.degradedReason === "detect") {
             r.degradedReason = null;
-            setStatus(r, "running");
+            settle(r);
           }
         } catch {
           detections = null;
@@ -160,6 +221,7 @@ export function createEngine(options: EngineOptions = {}): ProctorEngine {
       const result = evaluateFrame(r.rules, { detections, ...stats }, now(), r.config, thresholds);
       r.rules = result.state;
       for (const flag of result.flags) void send(r, flag);
+      await checkIdentity(r);
     } finally {
       r.busy = false;
     }
@@ -189,6 +251,12 @@ export function createEngine(options: EngineOptions = {}): ProctorEngine {
     }
     r.video.srcObject = null;
     r.video.remove();
+    // The selfie reference lives only in memory, and only for the exam.
+    try {
+      r.faceMatcher?.clear();
+    } catch {
+      // Nothing more can be done with a matcher that fails to clear.
+    }
     // A transport the caller passed in is theirs to dispose.
     if (!options.transport) r.transport.dispose();
     setStatus(r, "stopped");
@@ -229,6 +297,9 @@ export function createEngine(options: EngineOptions = {}): ProctorEngine {
       status: "stopped",
       degradedReason: null,
       transport: options.transport ?? createTransport(),
+      faceMatcher: o.faceMatcher ?? null,
+      faceActive: false,
+      identity: INITIAL_IDENTITY_STATE,
     };
     run = r;
     setStatus(r, "starting");
@@ -244,7 +315,11 @@ export function createEngine(options: EngineOptions = {}): ProctorEngine {
       r.wasFullscreen = isFull;
     });
     const cameraLost = (reason: string) => {
-      raiseEvent(r, "permission_revoked", { label: reason, count: 1, confidence: 1 });
+      raiseEvent(r, "permission_revoked", {
+        label: reason,
+        count: 1,
+        confidence: 1,
+      });
       if (run === r) {
         r.degradedReason = "camera";
         setStatus(r, "degraded", "The camera stopped sending video.");
@@ -256,7 +331,8 @@ export function createEngine(options: EngineOptions = {}): ProctorEngine {
       listen(r, track, "unmute", () => {
         if (run === r && r.degradedReason === "camera") {
           r.degradedReason = null;
-          setStatus(r, r.detector ? "running" : "degraded", r.detector ? undefined : "Detection model not loaded.");
+          if (r.detector) settle(r);
+          else setStatus(r, "degraded", "Detection model not loaded.");
         }
       });
     }
@@ -280,6 +356,19 @@ export function createEngine(options: EngineOptions = {}): ProctorEngine {
       if (run !== r) return;
       r.degradedReason = "model";
       setStatus(r, "degraded", "Detection model could not be loaded; browser checks still run.");
+    }
+
+    // The face model is separate: if it fails, only the face comparison is lost.
+    if (r.faceMatcher) {
+      try {
+        await r.faceMatcher.load();
+        if (run !== r) return;
+        r.faceActive = true;
+      } catch {
+        if (run !== r) return;
+        r.faceActive = false;
+        if (r.degradedReason === null) setStatus(r, "degraded", FACE_MODEL_MESSAGE);
+      }
     }
 
     if (r.tracks.length === 0 || r.tracks.some((t) => t.readyState === "ended")) cameraLost("no live track");

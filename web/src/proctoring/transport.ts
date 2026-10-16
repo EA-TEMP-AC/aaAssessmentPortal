@@ -109,7 +109,7 @@ export function createTransport(options: TransportOptions = {}): ApiTransport {
       if (disposed) return null;
       const form = new FormData();
       form.append("clientEventId", input.clientEventId);
-      form.append("kind", "proctor_snapshot");
+      form.append("kind", input.kind ?? "proctor_snapshot");
       form.append("capturedAt", input.capturedAt);
       form.append("sessionId", input.sessionId);
       form.append("file", input.blob, "snapshot.jpg");
