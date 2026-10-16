@@ -233,6 +233,7 @@ function EvidenceDetail({
   return (
     <div
       ref={panelRef}
+      id={`evidence-detail-panel-${row.id}`}
       role="region"
       aria-labelledby={headingId}
       tabIndex={-1}
@@ -640,6 +641,7 @@ export function EvidencePage() {
                           type="button"
                           className="button-quiet"
                           aria-expanded={item.id === selectedId}
+                          aria-controls={item.id === selectedId ? `evidence-detail-panel-${item.id}` : undefined}
                           aria-label={`Details for ${kindLabel(item.kind)} uploaded ${formatTime(item.uploadedAt)}`}
                           onClick={(event) => {
                             openerRef.current = event.currentTarget;

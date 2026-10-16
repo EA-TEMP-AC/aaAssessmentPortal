@@ -129,4 +129,10 @@ export function safeHref(ref: string | null | undefined): string | null {
   }
 }
 
+/** Images load only over https, so a page served securely never pulls in plain http content. */
+export function safeImageSrc(ref: string | null | undefined): string | null {
+  const href = safeHref(ref);
+  return href && href.startsWith("https:") ? href : null;
+}
+
 export const UTILITY_BILL_CATEGORIES = new Set(["telephone_bill", "internet_bill", "electricity_bill"]);

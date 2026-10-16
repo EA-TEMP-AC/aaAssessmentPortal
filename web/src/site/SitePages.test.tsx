@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { expect, it, vi } from "vitest";
 import { jsonResponse } from "../test/fixtures";
@@ -214,4 +214,45 @@ it("utility bills show Proof on file and never a link", async () => {
   );
   expect(screen.getAllByRole("link", { name: /^Open / })).toHaveLength(1);
   expect(document.body.innerHTML).not.toContain("leak.example");
+});
+
+it("keeps the previous page and the pager while the next page loads, then focuses the heading", async () => {
+  let release: (() => void) | undefined;
+  installFetch((url) => {
+    const current = Number(url.searchParams.get("page") ?? "1");
+    const body = {
+      page: current,
+      pageSize: 20,
+      total: 25,
+      items: [{ id: `p${current}`, name: `Person ${current}`, designation: "Staff" }],
+    };
+    if (current === 2) {
+      return new Promise<Response>((resolve) => {
+        release = () => resolve(jsonResponse(200, body));
+      }) as unknown as Response;
+    }
+    return jsonResponse(200, body);
+  });
+  renderApp("/site/team");
+  expect(await screen.findByRole("heading", { name: "Person 1" })).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "Next page" }));
+
+  expect(screen.getByRole("heading", { name: "Person 1" })).toBeInTheDocument();
+  expect(screen.getByRole("navigation", { name: "team pages" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Next page" })).toBeDisabled();
+
+  release?.();
+  expect(await screen.findByRole("heading", { name: "Person 2" })).toBeInTheDocument();
+  await waitFor(() => expect(screen.getByRole("heading", { level: 1, name: "Our team" })).toHaveFocus());
+});
+
+it("shows photos only for https addresses", async () => {
+  serve("team-members", [
+    { id: "1", name: "Secure Sam", designation: "Lead", photoRef: "https://img.example/a.jpg" },
+    { id: "2", name: "Plain Pat", designation: "Lead", photoRef: "http://img.example/b.jpg" },
+  ]);
+  const { container } = renderApp("/site/team");
+  await screen.findByRole("heading", { name: "Secure Sam" });
+  const sources = Array.from(container.querySelectorAll("img")).map((img) => img.getAttribute("src"));
+  expect(sources).toEqual(["https://img.example/a.jpg"]);
 });

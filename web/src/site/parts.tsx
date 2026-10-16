@@ -1,7 +1,7 @@
-import type { ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useRef, type ReactNode } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
-import { fetchPublic, safeHref, type PublicPage, type PublicSlug } from "./publicApi";
+import { fetchPublic, safeHref, safeImageSrc, type PublicPage, type PublicSlug } from "./publicApi";
 import { initials, PUBLIC_STALE_MS, publicErrorMessage } from "./util";
 
 export function LoadingNote({ label }: { label: string }) {
@@ -43,9 +43,9 @@ export function RefLink({ value, label }: { value: string | null | undefined; la
   );
 }
 
-/** Photo only when the reference is a web address; otherwise initials. Never read by assistive tech twice. */
+/** Photo only when the reference is an https address; otherwise initials. Never read by assistive tech twice. */
 export function Avatar({ name, photoRef }: { name: string; photoRef?: string | null }) {
-  const href = safeHref(photoRef);
+  const href = safeImageSrc(photoRef);
   if (href) {
     return <img className="site-avatar" src={href} alt="" loading="lazy" referrerPolicy="no-referrer" />;
   }
@@ -76,7 +76,21 @@ export function PagedList<T>({ slug, label, params = {}, empty, children }: Page
     queryFn: () => fetchPublic<T>(slug, { ...params, page }),
     staleTime: PUBLIC_STALE_MS,
     refetchOnWindowFocus: false,
+    placeholderData: keepPreviousData,
   });
+  const focusAfterChange = useRef(false);
+  const loadingNext = query.isPlaceholderData;
+
+  // After the user changes page, move focus to the page heading once the new page is in.
+  useEffect(() => {
+    if (!focusAfterChange.current || loadingNext || !query.data) return;
+    focusAfterChange.current = false;
+    const heading = document.querySelector<HTMLElement>("main h1");
+    if (heading) {
+      heading.tabIndex = -1;
+      heading.focus();
+    }
+  }, [loadingNext, query.data]);
 
   if (query.isPending) return <LoadingNote label={label} />;
   if (query.isError) return <ErrorNote error={query.error} onRetry={() => void query.refetch()} />;
@@ -86,6 +100,7 @@ export function PagedList<T>({ slug, label, params = {}, empty, children }: Page
   if (items.length === 0 && page === 1) return <EmptyNote>{empty}</EmptyNote>;
 
   const go = (next: number) => {
+    focusAfterChange.current = true;
     const copy = new URLSearchParams(search);
     if (next <= 1) copy.delete("page");
     else copy.set("page", String(next));
@@ -93,21 +108,21 @@ export function PagedList<T>({ slug, label, params = {}, empty, children }: Page
   };
 
   return (
-    <>
+    <div aria-busy={loadingNext || undefined}>
       {items.length === 0 ? <EmptyNote>No more entries on this page.</EmptyNote> : children(items)}
       {pages > 1 || page > 1 ? (
         <nav className="site-pager" aria-label={`${label} pages`}>
-          <button type="button" onClick={() => go(page - 1)} disabled={page <= 1}>
+          <button type="button" onClick={() => go(page - 1)} disabled={page <= 1 || loadingNext}>
             Previous page
           </button>
           <span aria-live="polite">
-            Page {page} of {pages}
+            {loadingNext ? `Loading page ${page}…` : `Page ${page} of ${pages}`}
           </span>
-          <button type="button" onClick={() => go(page + 1)} disabled={page >= pages}>
+          <button type="button" onClick={() => go(page + 1)} disabled={page >= pages || loadingNext}>
             Next page
           </button>
         </nav>
       ) : null}
-    </>
+    </div>
   );
 }

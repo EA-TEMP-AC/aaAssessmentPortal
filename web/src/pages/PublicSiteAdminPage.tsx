@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 import {
   archivePublicSiteItem,
@@ -44,6 +44,7 @@ export function PublicSiteAdminPage() {
   const [page, setPage] = useState(1);
   const [editing, setEditing] = useState<{ item: PublicSiteItem | null } | null>(null);
   const [archiving, setArchiving] = useState<PublicSiteItem | null>(null);
+  const [publishing, setPublishing] = useState<PublicSiteItem | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [notice, setNotice] = useState<Banner | null>(null);
   const [failure, setFailure] = useState<Failure | null>(null);
@@ -72,9 +73,11 @@ export function PublicSiteAdminPage() {
     setFailure(null);
   }
 
-  const list = useQuery({
+  const list = useQuery<Awaited<ReturnType<typeof listPublicSite>>>({
     queryKey: ["admin", "public-site", section.slug, { showArchived, status, page }],
-    placeholderData: keepPreviousData,
+    // Keep the old rows while paging or filtering, but never across a change of section.
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[2] === section.slug ? previous : undefined,
     queryFn: ({ signal }) =>
       listPublicSite(
         section.slug,
@@ -87,6 +90,13 @@ export function PublicSiteAdminPage() {
         signal,
       ),
   });
+
+  // A page that comes back empty (its last item was archived or unpublished) steps back one page.
+  useEffect(() => {
+    if (page > 1 && !list.isFetching && !list.isError && list.data && list.data.items.length === 0) {
+      setPage(page - 1);
+    }
+  }, [page, list.isFetching, list.isError, list.data]);
 
   async function refresh() {
     await queryClient.invalidateQueries({ queryKey: ["admin", "public-site"] });
@@ -105,6 +115,7 @@ export function PublicSiteAdminPage() {
   }
 
   async function setPublished(item: PublicSiteItem, published: boolean) {
+    setPublishing(null);
     const name = itemName(section, item);
     setBusyId(item.id);
     setNotice(null);
@@ -169,7 +180,14 @@ export function PublicSiteAdminPage() {
               Unpublish {name}
             </button>
           ) : (
-            <button type="button" disabled={busy} onClick={() => void setPublished(item, true)}>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={(event) => {
+                opener.current = event.currentTarget;
+                setPublishing(item);
+              }}
+            >
               Publish {name}
             </button>
           )
@@ -366,6 +384,35 @@ export function PublicSiteAdminPage() {
             });
           }}
         />
+      ) : null}
+
+      {publishing ? (
+        <Dialog
+          title={`Publish ${itemName(section, publishing)}?`}
+          initialFocus="cancel"
+          onCancel={() => {
+            setPublishing(null);
+            restoreFocus();
+          }}
+        >
+          <p>This puts the item on the public website, where anyone can see it. You can unpublish it later.</p>
+          <div className="dialog-actions">
+            <button type="button" onClick={() => void setPublished(publishing, true)}>
+              Publish
+            </button>
+            <button
+              type="button"
+              className="button-quiet"
+              data-dialog-cancel
+              onClick={() => {
+                setPublishing(null);
+                restoreFocus();
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </Dialog>
       ) : null}
 
       {archiving ? (

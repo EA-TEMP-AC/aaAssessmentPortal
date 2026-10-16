@@ -22,7 +22,7 @@ Phase 1 endpoints have examples. Phase 2+ stubs without full examples.
 | `FORBIDDEN` | 403 | Role or row-scope denied |
 | `NOT_FOUND` | 404 | Unknown id |
 | `VALIDATION_ERROR` | 400 | Body/query invalid |
-| `RATE_LIMITED` | 429 | Login/API rate limit (`LOGIN_RATE_LIMIT_*`) |
+| `RATE_LIMITED` | 429 | Login/API rate limit (`LOGIN_RATE_LIMIT_*`). Behind a proxy set env `TRUST_PROXY` (default off; a hop count such as `1`, or `true`) so limits and logs use the real client IP |
 | `DUPLICATE_RESOURCE` | 409 | Unique constraint |
 | `INVALID_TRANSITION` | 409 | Illegal/raced status change |
 | `SLA_ACCEPT_EXPIRED` | 409 | Late accept/reject **without** `lateReason` |
@@ -1084,11 +1084,11 @@ Content for the AA public website (NCVET TR s22). Nine sections, one slug each:
 | `sample-papers` | Sample assessment papers | `title`, `qualificationId`, `fileRef` | `title`, `fileRef`, `qualification: { code, name, sector }` |
 | `industry-linkages` | Industry linkages | `name`, `description?`, `websiteUrl?` (http or https), `logoRef?` | same |
 | `grievance` | Grievance procedure and contact | `title`, `body?`, `contactName?`, `contactEmail?`, `contactPhone?`, `fileRef?` | same |
-| `posh` | POSH policy and committee | `kind` (`policy` or `committee_member`), `title`, `body?`, `memberName?` (required for a committee member), `memberRole?`, `fileRef?` | same |
+| `posh` | POSH policy and committee | `kind` (`policy` or `committee_member`), `title`, `body?`, `memberName?` (required for a committee member; `400` for a policy), `memberRole?` (committee member only; `400` for a policy), `fileRef?` | same |
 | `office-documents` | Registered office documents | `category` (`ownership`, `lease`, `telephone_bill`, `internet_bill`, `electricity_bill`, `other`), `title`, `note?`, `fileRef` | same |
 | `events` | Monthly calendar of events | `title`, `description?`, `date`, `endDate?`, `location?` (`YYYY-MM-DD`) | same |
 
-Every item has `published` (default `false`) and `sortOrder` (integer 0 to 100000, default 0, lowest first). `photoRef`, `logoRef` and `fileRef` are plain text references (up to 500 characters) to a file or photo hosted elsewhere. This API stores no file and does not fetch one. Hosting is undecided (DECISIONS.md).
+Every item has `published` (default `false`) and `sortOrder` (integer 0 to 100000, default 0, lowest first). `photoRef`, `logoRef` and `fileRef` are references (up to 500 characters) to a file or photo hosted elsewhere. Only `http` or `https` addresses are accepted; anything else is `400 VALIDATION_ERROR`. The public web pages show photos and logos only for `https` addresses. This API stores no file and does not fetch one. Hosting is undecided (DECISIONS.md).
 
 ### Admin: /admin/public-site/:slug
 
@@ -1110,9 +1110,9 @@ Every write is audited: action `public_site.<slug>.create|update|delete`, entity
 
 No login. Read only (no other method exists). Returns only items with `published: true`, in `sortOrder` order (events: by `date`, then `sortOrder`), with only the public fields in the table above. Admin fields (`published`, `sortOrder`, `createdBy`, timestamps, `registryId`, `qualificationId`) are never returned.
 
-Query: `page`, `pageSize` (default 20, max 100); `people?kind=`, `posh?kind=`, `office-documents?category=`, `events?month=YYYY-MM` (events whose dates touch the month). Any other parameter is `400`.
+Query: `page`, `pageSize` (default 20, max 100); `people?kind=`, `posh?kind=`, `office-documents?category=`, `events?month=YYYY-MM` (events whose dates touch the month). Any other parameter is `400`. The public `page` is at most 100 (`400` above it). The `people` list reuses its set of active registry ids for 60 seconds, so a change in the registry can take up to a minute to show.
 
-Response `200`: `{ "page": 1, "pageSize": 20, "total": 2, "items": [ ... ] }` with `Cache-Control: public, max-age=300`. An unknown slug is `404`. Rate limit: `PUBLIC_RATE_LIMIT_MAX` requests (120) per `PUBLIC_RATE_LIMIT_WINDOW_MS` (60 seconds) per client IP, then `429 RATE_LIMITED` with `Retry-After`.
+Response `200`: `{ "page": 1, "pageSize": 20, "total": 2, "items": [ ... ] }` with `Cache-Control: public, max-age=300`. An unknown slug is `404`. Rate limit: `PUBLIC_RATE_LIMIT_MAX` requests (120) per `PUBLIC_RATE_LIMIT_WINDOW_MS` (60 seconds) per client IP, then `429 RATE_LIMITED` with `Retry-After`. Behind a reverse proxy set `TRUST_PROXY` (below) so the limit uses the real client IP.
 ---
 
 ## Question bank (Phase 2, Q-01)
@@ -1399,6 +1399,8 @@ Same roles and scope as the row. Writes an access-log row for **every** download
 
 - S3 driver: `200` JSON `{ "url", "expiresAt", "contentType", "size", "sha256" }`. The link is short-lived (`EVIDENCE_SIGNED_URL_SECONDS`, default 120) and the response is `Cache-Control: no-store`.
 - Local driver: `200` with the file bytes, `Content-Type` from the stored type, `Content-Disposition: attachment; filename="evidence-<id>.<ext>"`, `X-Content-Type-Options: nosniff`, `Cache-Control: private, no-store`.
+
+Query: `inline=true|false` (optional, default `false`; any other value or parameter is `400`). With S3 and `inline=true`, the link is issued with `Content-Disposition: inline` instead of `attachment`, so a browser can show an image or PDF in the page. It applies only to `image/*` and `application/pdf` files; any other type still gets `attachment`. The Download button does not send it. The local driver always sends `attachment`.
 
 If the stored object is missing, `404 NOT_FOUND`.
 
