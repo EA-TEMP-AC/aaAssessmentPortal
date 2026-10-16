@@ -13,6 +13,7 @@
     "format": "prettier --write src tests",
     "test": "vitest run",
     "seed": "node src/scripts/seed.js",
+    "seed:demo-exam": "node src/scripts/seed-demo-exam.js",
     "migrate:encrypt": "node src/scripts/encrypt-existing-data.js",
     "retention:dry-run": "node src/scripts/retention-dry-run.js",
     "scrub:logs": "node src/scripts/scrub-logs.js"
