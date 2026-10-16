@@ -13,6 +13,7 @@ import { ChangePasswordPage } from "./pages/ChangePasswordPage";
 import { EvidencePage } from "./pages/EvidencePage";
 import { ProctoringPage } from "./pages/ProctoringPage";
 import { ExamPage } from "./pages/ExamPage";
+import { FaceMatchDemoPage } from "./pages/FaceMatchDemoPage";
 import { MasterDataPage } from "./pages/MasterDataPage";
 import { PublicSiteAdminPage } from "./pages/PublicSiteAdminPage";
 import { RecognitionPage } from "./pages/RecognitionPage";
@@ -56,6 +57,11 @@ export function AppRoutes() {
         <Route element={<RequireAuth />}>
           <Route path="/change-password" element={<PasswordGatePage />} />
           <Route element={<AppLayout />}>
+            {import.meta.env.DEV ? (
+              <Route element={<RequireRole roles={["aa_admin"]} />}>
+                <Route path="/face-match-demo" element={<FaceMatchDemoPage />} />
+              </Route>
+            ) : null}
             <Route path="/home" element={<RoleHomePage />} />
             <Route path="/account/password" element={<ChangePasswordPage />} />
             {import.meta.env.DEV ? (
