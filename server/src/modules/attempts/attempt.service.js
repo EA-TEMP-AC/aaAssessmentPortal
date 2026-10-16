@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import { compliance } from "../../config/compliance.js";
 import { env } from "../../config/env.js";
 import { AppError, forbidden, notFound, validationError } from "../../lib/errors.js";
+import { sameLanguage } from "../../lib/language.js";
 import { withTransaction } from "../../lib/mongo-session.js";
 import { Attempt } from "../../models/attempt.model.js";
 import { AuditLog } from "../../models/audit-log.model.js";
@@ -254,7 +255,7 @@ export async function startAttempt(user, { batchId, testPaperId }) {
   ) {
     throw notFound();
   }
-  if (normaliseAnswer(paper.rules?.language) !== normaliseAnswer(batch.assessmentLanguage)) {
+  if (!sameLanguage(paper.rules?.language, batch.assessmentLanguage)) {
     throw new AppError(
       409,
       "ATTEMPT_LANGUAGE_MISMATCH",
