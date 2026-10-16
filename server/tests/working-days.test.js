@@ -81,6 +81,9 @@ describe("compliance constants", () => {
         phone_detected: "high",
         camera_blocked: "high",
         camera_frozen: "high",
+        face_mismatch: "high",
+        id_mismatch: "high",
+        id_unreadable: "medium",
       },
     });
     expect(Object.isFrozen(compliance)).toBe(true);
