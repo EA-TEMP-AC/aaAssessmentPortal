@@ -1,4 +1,5 @@
 import { apiRequest, ApiError } from "./client";
+import { listEvidence, type EvidenceRow } from "./evidence";
 
 /** API_CONTRACT "Proctoring (tasks P-01, P-04, P-08)". Staff screens only. */
 
@@ -78,6 +79,8 @@ export type Flag = {
   capturedAt: string;
   evidenceId: string | null;
   detail: { label?: string; count?: number; confidence?: number } | null;
+  /** How long the condition must last before the browser raises this type; null for one-off events. */
+  sustainedSeconds: number | null;
   review: FlagReview | null;
 };
 
@@ -171,6 +174,8 @@ function parseFlag(value: unknown): Flag {
     capturedAt,
     evidenceId: str(value.evidenceId),
     detail,
+    sustainedSeconds:
+      typeof value.sustainedSeconds === "number" && Number.isFinite(value.sustainedSeconds) ? value.sustainedSeconds : null,
     review: parseReview(value.review),
   };
 }
@@ -210,6 +215,20 @@ export async function getProctoringSession(id: string, signal?: AbortSignal): Pr
       ? body.warnings.map(parseWarning).filter((w): w is Warning => w !== null)
       : [],
   };
+}
+
+/**
+ * Every snapshot of a session (X-06), newest first. Reads the evidence list page by page; the
+ * server caps a page at 100. Stops after 10 pages so a very long session cannot loop for long.
+ */
+export async function listSessionSnapshots(sessionId: string, signal?: AbortSignal): Promise<EvidenceRow[]> {
+  const rows: EvidenceRow[] = [];
+  for (let page = 1; page <= 10; page += 1) {
+    const result = await listEvidence({ sessionId, kind: "proctor_snapshot", page, pageSize: 100 }, signal);
+    rows.push(...result.items);
+    if (rows.length >= result.total || result.items.length === 0) break;
+  }
+  return rows;
 }
 
 export async function reviewProctoringFlag(id: string, decision: Decision, note?: string): Promise<Flag> {

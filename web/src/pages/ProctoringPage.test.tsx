@@ -1,4 +1,4 @@
-import { act, screen, waitFor, within } from "@testing-library/react";
+﻿import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { setSession } from "../api/session";
@@ -41,6 +41,7 @@ function flag(overrides: Record<string, unknown> = {}) {
     capturedAt: "2026-11-20T05:00:00.000Z",
     receivedAt: "2026-11-20T05:00:01.000Z",
     detail: { label: "cell phone", confidence: 0.82 },
+    sustainedSeconds: null,
     evidenceId: "ev1",
     review: null,
     ...overrides,
@@ -60,6 +61,55 @@ function detail(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function evidenceRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "ev1",
+    clientEventId: "snap-1",
+    batchId: "batch-1",
+    abId: "ab-1",
+    candidateId: "c1",
+    sessionId: "s1",
+    kind: "proctor_snapshot",
+    contentType: "image/jpeg",
+    size: 43_008,
+    sha256: "a".repeat(64),
+    uploaderId: "u9",
+    uploaderRole: "candidate",
+    capturedAt: "2026-11-20T04:59:58.000Z",
+    uploadedAt: "2026-11-20T04:59:59.000Z",
+    locationStatus: "not_provided",
+    latitude: null,
+    longitude: null,
+    accuracy: null,
+    locationUnavailableReason: null,
+    hasLocation: false,
+    deviceId: null,
+    verification: null,
+    verifyCount: 0,
+    ...overrides,
+  };
+}
+
+/** ev1 belongs to the phone flag; ev2 and ev3 have no flag (ev3 is the newer one). */
+const EVIDENCE = [
+  evidenceRow({ id: "ev3", capturedAt: "2026-11-20T05:00:30.000Z", size: 2048 }),
+  evidenceRow({ id: "ev1" }),
+  evidenceRow({ id: "ev2", capturedAt: "2026-11-20T04:55:00.000Z", size: 20_480 }),
+];
+
+/** The evidence list and file calls, for tests that write their own handler. */
+function evidenceApi(u: URL): Response | undefined {
+  if (u.pathname.endsWith("/evidence")) return jsonResponse(200, evidencePage(EVIDENCE));
+  if (u.pathname.endsWith("/file")) {
+    return new Response(new Uint8Array([0xff, 0xd8, 0xff]), { status: 200, headers: { "Content-Type": "image/jpeg" } });
+  }
+  return undefined;
+}
+
+function evidencePage(items: unknown[]) {
+  return { page: 1, pageSize: 100, total: items.length, items };
+}
+
 function page(items: unknown[]) {
   return { page: 1, pageSize: 50, total: items.length, serverTime: "2026-11-20T05:01:00.000Z", items };
 }
@@ -77,15 +127,17 @@ function stub(handler: Handler) {
 }
 
 /** Default API: one session with two flags; review echoes the decision. */
-function api(extra: Handler = () => jsonResponse(404)) {
+function api(extra: (u: URL, init?: RequestInit) => Response | Promise<Response> | undefined = () => undefined) {
   return stub((u, init) => {
+    const extraResponse = extra(u, init);
+    if (extraResponse) return extraResponse;
     if (u.pathname.endsWith("/proctoring/sessions")) return jsonResponse(200, page([item()]));
     if (u.pathname.endsWith("/proctoring/sessions/s1")) return jsonResponse(200, detail());
     if (u.pathname.endsWith("/review") && init?.method === "PATCH") {
       const body = JSON.parse(String(init.body)) as { decision: string; note?: string };
       return jsonResponse(200, flag({ review: { decision: body.decision, note: body.note ?? null, decidedAt: "2026-11-20T05:02:00.000Z", decidedBy: "u1", decidedByRole: "proctor" } }));
     }
-    return extra(u, init);
+    return evidenceApi(u) ?? jsonResponse(404);
   });
 }
 
@@ -211,48 +263,163 @@ it("shows the flag timeline with time, type and severity in words", async () => 
   expect(entries[0]).toHaveTextContent("confidence 82%");
   expect(entries[1]).toHaveTextContent("Tab hidden");
   expect(entries[1]).toHaveTextContent("Severity: Low");
-  expect(entries[1]).toHaveTextContent("No snapshot.");
+  expect(entries[1]).toHaveTextContent("No image for this flag");
   // ab_reviewer is read only.
   expect(within(panel).queryByRole("button", { name: "Dismiss" })).not.toBeInTheDocument();
   expect(within(panel).getAllByText("Not reviewed yet.")).toHaveLength(2);
 });
 
-it("loads a snapshot through the evidence file API and never prints a signed link", async () => {
+it("loads each flag photo through the evidence file API and never prints a signed link", async () => {
   const user = userEvent.setup();
   const mock = api((u) => {
     if (u.pathname.endsWith("/evidence/ev1/file")) {
       return jsonResponse(200, { url: SIGNED, expiresAt: "2026-11-20T05:03:00.000Z", contentType: "image/jpeg" });
     }
-    return jsonResponse(404);
+    return undefined;
   });
   setSession(sessionFor("proctor"));
   renderApp("/proctoring");
   const panel = await openSession(user);
 
-  expect(calls(mock, "/evidence/ev1/file")).toHaveLength(0);
-  await user.click(await within(panel).findByRole("button", { name: "Show snapshot" }));
-  const img = await within(panel).findByRole("img", { name: /Snapshot for phone detected/ });
-  expect(img).toHaveAttribute("src", SIGNED);
+  const thumb = await within(panel).findByRole("button", { name: /Enlarge photo: Phone detected at/ });
+  expect(thumb.querySelector("img")).toHaveAttribute("src", SIGNED);
   expect(calls(mock, "/evidence/ev1/file")).toHaveLength(1);
   expect(document.body.textContent).not.toContain("secret-signature");
-
-  await user.click(within(panel).getByRole("button", { name: "Hide snapshot" }));
-  expect(within(panel).queryByRole("img")).not.toBeInTheDocument();
 });
 
-it("shows a snapshot from bytes as a blob image", async () => {
+it("shows the photo details next to the thumbnail, the sustained time and the browser details", async () => {
   const user = userEvent.setup();
-  api((u) => {
-    if (u.pathname.endsWith("/evidence/ev1/file")) {
-      return new Response(new Uint8Array([0xff, 0xd8, 0xff]), { status: 200, headers: { "Content-Type": "image/jpeg" } });
-    }
-    return jsonResponse(404);
-  });
-  setSession(sessionFor("aa_admin"));
+  api((u) =>
+    u.pathname.endsWith("/proctoring/sessions/s1")
+      ? jsonResponse(
+          200,
+          detail({
+            flags: [flag({ type: "camera_blocked", sustainedSeconds: 2, detail: { label: "dark frame", count: 1, confidence: 1 } })],
+          }),
+        )
+      : undefined,
+  );
+  const width = vi.spyOn(HTMLImageElement.prototype, "naturalWidth", "get").mockReturnValue(640);
+  const height = vi.spyOn(HTMLImageElement.prototype, "naturalHeight", "get").mockReturnValue(480);
+  setSession(sessionFor("ab_reviewer"));
   renderApp("/proctoring");
   const panel = await openSession(user);
-  await user.click(await within(panel).findByRole("button", { name: "Show snapshot" }));
-  expect(await within(panel).findByRole("img", { name: /Snapshot/ })).toHaveAttribute("src", "blob:snapshot");
+  const entry = within(await within(panel).findByRole("list", { name: "Flag timeline" })).getAllByRole("listitem")[0];
+
+  expect(entry).toHaveTextContent("Camera blocked");
+  expect(entry).toHaveTextContent("Raised after the condition lasted at least 2 seconds.");
+  expect(entry).toHaveTextContent("Sent by the browser: label dark frame, count 1, confidence 100%");
+  const thumb = await within(entry).findByRole("button", { name: /Enlarge photo: Camera blocked at/ });
+  fireEvent.load(thumb.querySelector("img") as HTMLImageElement);
+  expect(within(entry).getByText("Captured")).toBeInTheDocument();
+  expect(entry).toHaveTextContent("10:29:58");
+  expect(entry).toHaveTextContent("IST");
+  expect(entry).toHaveTextContent("42 KB");
+  await waitFor(() => expect(entry).toHaveTextContent("640 × 480 px"));
+  expect(entry).toHaveTextContent("Proctor snapshot");
+  width.mockRestore();
+  height.mockRestore();
+});
+
+it("opens a larger photo in a dialog with alt text, closes on Escape and returns focus", async () => {
+  const user = userEvent.setup();
+  api();
+  setSession(sessionFor("proctor"));
+  renderApp("/proctoring");
+  const panel = await openSession(user);
+  const thumb = await within(panel).findByRole("button", { name: /Enlarge photo: Phone detected at/ });
+
+  await user.click(thumb);
+  const dialog = await screen.findByRole("dialog", { name: /Phone detected at/ });
+  expect(within(dialog).getByRole("img", { name: /Camera photo: Phone detected at/ })).toHaveAttribute("src", "blob:snapshot");
+  expect(within(dialog).getByText("Proctor snapshot")).toBeInTheDocument();
+  expect(within(dialog).getByRole("button", { name: "Close" })).toHaveFocus();
+
+  await user.keyboard("{Escape}");
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(thumb).toHaveFocus();
+
+  await user.click(thumb);
+  await user.click(await screen.findByRole("button", { name: "Close" }));
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+});
+
+it("says so when a flag has no image", async () => {
+  const user = userEvent.setup();
+  api();
+  setSession(sessionFor("proctor"));
+  renderApp("/proctoring");
+  const panel = await openSession(user);
+  const entries = within(await within(panel).findByRole("list", { name: "Flag timeline" })).getAllByRole("listitem");
+  expect(within(entries[1]).getByText("No image for this flag")).toBeInTheDocument();
+  expect(within(entries[1]).queryByRole("button", { name: /Enlarge photo/ })).not.toBeInTheDocument();
+});
+
+it("shows an error with a retry when a flag photo cannot be loaded", async () => {
+  const user = userEvent.setup();
+  let denied = true;
+  api((u) => {
+    if (u.pathname.endsWith("/evidence/ev1/file") && denied) {
+      return jsonResponse(403, { error: { code: "FORBIDDEN", message: "You may not open this file" } });
+    }
+    return undefined;
+  });
+  setSession(sessionFor("proctor"));
+  renderApp("/proctoring");
+  const panel = await openSession(user);
+  const entry = within(await within(panel).findByRole("list", { name: "Flag timeline" })).getAllByRole("listitem")[0];
+
+  expect(await within(entry).findByRole("alert")).toHaveTextContent("You may not open this file");
+  denied = false;
+  await user.click(within(entry).getByRole("button", { name: "Try again" }));
+  expect(await within(entry).findByRole("button", { name: /Enlarge photo/ })).toBeInTheDocument();
+});
+
+it("lists this session's snapshots with no flag, newest first, and leaves the flagged one out", async () => {
+  const user = userEvent.setup();
+  const mock = api();
+  setSession(sessionFor("proctor"));
+  renderApp("/proctoring");
+  const panel = await openSession(user);
+
+  const strip = await within(panel).findByRole("list", { name: "Snapshots without a flag" });
+  const items = within(strip).getAllByRole("listitem");
+  expect(items).toHaveLength(2);
+  expect(items[0]).toHaveTextContent("2.0 KB");
+  expect(items[1]).toHaveTextContent("20 KB");
+  expect(await within(items[0]).findByRole("button", { name: /Enlarge photo: Snapshot taken at/ })).toBeInTheDocument();
+  expect(String(calls(mock, "/evidence")[0][0])).toContain("sessionId=s1");
+  expect(String(calls(mock, "/evidence")[0][0])).toContain("kind=proctor_snapshot");
+  await waitFor(() => expect(calls(mock, "/evidence/ev2/file")).toHaveLength(1));
+});
+
+it("shows the empty and error states of the snapshot strip", async () => {
+  const user = userEvent.setup();
+  let fail = true;
+  api((u) => {
+    if (!u.pathname.endsWith("/evidence")) return undefined;
+    return fail
+      ? jsonResponse(500, { error: { code: "INTERNAL", message: "Something went wrong" } })
+      : jsonResponse(200, evidencePage([evidenceRow({ id: "ev1" })]));
+  });
+  setSession(sessionFor("proctor"));
+  renderApp("/proctoring");
+  const panel = await openSession(user);
+
+  const section = await within(panel).findByRole("region", { name: "Snapshots" });
+  expect(await within(section).findByRole("alert")).toHaveTextContent("Something went wrong");
+  fail = false;
+  await user.click(within(section).getByRole("button", { name: "Try again" }));
+  expect(await within(section).findByText("No snapshots without a flag in this session.")).toBeInTheDocument();
+});
+
+it("shows a loading state while the snapshots load", async () => {
+  const user = userEvent.setup();
+  api((u) => (u.pathname.endsWith("/evidence") ? new Promise<Response>(() => {}) : undefined));
+  setSession(sessionFor("proctor"));
+  renderApp("/proctoring");
+  const panel = await openSession(user);
+  expect(await within(panel).findByText("Loading snapshots…")).toBeInTheDocument();
 });
 
 it("lets a proctor dismiss and warn, but not recommend invalidation", async () => {
@@ -323,7 +490,7 @@ it("shows a review error and an existing decision", async () => {
     if (init?.method === "PATCH") {
       return jsonResponse(409, { error: { code: "PROCTORING_FLAG_REVIEWED", message: "This flag already has a decision" } });
     }
-    return jsonResponse(404);
+    return evidenceApi(u) ?? jsonResponse(404);
   });
   setSession(sessionFor("proctor"));
   renderApp("/proctoring");

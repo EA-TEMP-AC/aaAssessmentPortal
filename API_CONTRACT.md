@@ -1405,9 +1405,9 @@ The server computes `sha256` and `size`, sets `uploadedAt`, and records the uplo
 
 Audit: `evidence.upload` (or `evidence.replay`) with the response fields and `meta.{contentType,size,sha256}`. File contents are never written to the audit log.
 
-### GET /evidence?batchId=&candidateId=&kind=&uploaderId=&from=&to=&hasLocation=&page=&pageSize=
+### GET /evidence?batchId=&candidateId=&kind=&uploaderId=&sessionId=&from=&to=&hasLocation=&page=&pageSize=
 
-Read roles above. All filters optional; an unknown filter or bad value is `400`. `from` and `to` are ISO dates or times applied to `capturedAt`. `uploaderId` is a user id. `hasLocation=true` means `locationStatus` is `captured`; `false` is every other status. `page` default 1, `pageSize` default 20, max 100. Newest `capturedAt` first. The filters are ANDed with the caller's scope and never replace it: an assessor or proctor who passes another user's `uploaderId` gets an empty list (B-17).
+Read roles above. All filters optional; an unknown filter or bad value is `400`. `from` and `to` are ISO dates or times applied to `capturedAt`. `uploaderId` is a user id. `sessionId` (X-06) is a proctoring session id; it narrows the list and never widens the caller's scope. `hasLocation=true` means `locationStatus` is `captured`; `false` is every other status. `page` default 1, `pageSize` default 20, max 100. Newest `capturedAt` first. The filters are ANDed with the caller's scope and never replace it: an assessor or proctor who passes another user's `uploaderId` gets an empty list (B-17).
 
 `200`: `{ "page": 1, "pageSize": 20, "total": 3, "items": [ <evidence row as above, without replayed> ] }`
 
@@ -1743,6 +1743,8 @@ The **server** sets `severity` (a `severity` key in the body is `400`): low `tab
 `201` new, `200` replay: `{ id, sessionId, clientEventId, type, severity, capturedAt, receivedAt, evidenceId, replayed }`. The same `clientEventId` with a different `type`, `capturedAt`, `detail` or `evidenceId` is `409 CONFLICT_IDEMPOTENT`. The server does not enforce the cooldown.
 Audit: `proctoring.flag` or `proctoring.flag_replay` (session, type, severity, time, evidence id; no request body).
 
+Storage (X-06): the flag and the session's `flagCounts` are written in one transaction. A MongoDB that is not a replica set refuses transactions with code 20 (IllegalOperation); the server then writes the flag and the count as two plain writes and logs one warning, so the flag is not lost. The supported set-up is still the replica set in docker-compose.yml.
+
 ### Snapshots: POST /batches/:id/evidence with kind `proctor_snapshot`
 The evidence vault upload, with `kind=proctor_snapshot` and `sessionId=<proctoring session id>`. JPEG only (PNG or anything else is `400`), 25 MB limit. Only a `candidate` may send this kind, and it is the only kind a candidate may send (`403` otherwise). The session must be the candidate's own and on this batch (`403`), and the candidate must be on the batch's active roster (`403`). `candidateId` may not be sent with this kind; the server copies it from the session. `sessionId` with any other kind is `400`. Evidence responses now carry `sessionId` (null for other kinds). Idempotency, checksum, audit and access logging are unchanged. The batch's assigned `proctor` and `assessor` may also read `proctor_snapshot` rows of their batches (open question 624).
 
@@ -1757,7 +1759,7 @@ Roles: `aa_admin` and `ncvet_viewer` (all), `proctor` (batches whose `proctorId`
 ```
 
 ### GET /api/v1/proctoring/sessions/:id
-Same roles and scope (`403` outside scope, `404` unknown). The list item plus `serverTime`, `warnings[{ id, message, createdAt }]` and `flags[]`, oldest `capturedAt` first: `{ id, sessionId, clientEventId, type, severity, capturedAt, receivedAt, detail, evidenceId, review }`, where `review` is `null` or `{ decision, note, decidedAt, decidedBy, decidedByRole }`. Load a snapshot with `GET /evidence/:evidenceId/file` (access-logged).
+Same roles and scope (`403` outside scope, `404` unknown). The list item plus `serverTime`, `warnings[{ id, message, createdAt }]` and `flags[]`, oldest `capturedAt` first: `{ id, sessionId, clientEventId, type, severity, capturedAt, receivedAt, detail, sustainedSeconds, evidenceId, review }`, where `sustainedSeconds` (X-06) is how long the condition must last before the browser raises this type (`PROCTOR_SUSTAINED_SECONDS`: `face_not_present` 2, `camera_blocked` 2, `camera_frozen` 8), and `null` for one-off events such as `tab_hidden`; it is the rule, not a measured duration, and it is also on the review response. In `review` is `null` or `{ decision, note, decidedAt, decidedBy, decidedByRole }`. Load a snapshot with `GET /evidence/:evidenceId/file` (access-logged). The proctor page lists a session's photos with `GET /evidence?sessionId=<session id>&kind=proctor_snapshot&pageSize=100` (X-06) and shows those that no flag points at as the "Snapshots" strip. The same read roles and scope apply; no image bytes or links are written to any audit row.
 
 ### GET /api/v1/proctoring/sessions/:id/report (P-04)
 Same roles and scope. Writes nothing.

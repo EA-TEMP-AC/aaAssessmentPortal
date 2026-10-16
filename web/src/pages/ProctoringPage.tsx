@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { errorMessage } from "../api/client";
-import { fetchEvidenceFile } from "../api/evidence";
+import type { EvidenceRow } from "../api/evidence";
 import {
   DECISION_LABELS,
   FLAG_TYPE_LABELS,
   getProctoringSession,
+  listSessionSnapshots,
   listProctoringSessions,
   reviewProctoringFlag,
   SESSION_STATUSES,
@@ -20,6 +21,9 @@ import {
 } from "../api/proctoring";
 import { useSession } from "../api/session";
 import { isRole, ROLE_LABELS } from "../routing/access";
+import { EvidenceImage } from "./proctoring/EvidenceImage";
+import { formatTime } from "./proctoring/format";
+import { SnapshotStrip } from "./proctoring/SnapshotStrip";
 
 /** The list and the open session refresh this often (task P-01). */
 export const PROCTORING_REFRESH_MS = 10_000;
@@ -27,21 +31,6 @@ export const PROCTORING_REFRESH_MS = 10_000;
 type Filters = { batchId: string; status: string; minSeverity: string };
 const EMPTY: Filters = { batchId: "", status: "", minSeverity: "" };
 const COLUMNS = ["Candidate", "Batch", "Status", "Last seen", "Flags", "To review", "Details"] as const;
-
-function formatTime(iso: string | null): string {
-  if (!iso) return "Never";
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return iso;
-  const text = new Intl.DateTimeFormat("en-IN", {
-    timeZone: "Asia/Kolkata",
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  }).format(date);
-  return `${text} IST`;
-}
 
 function typeLabel(type: string): string {
   return FLAG_TYPE_LABELS[type] ?? type;
@@ -71,77 +60,6 @@ function StatusTag({ item }: { item: SessionItem }) {
 
 function countsText(counts: FlagCounts): string {
   return SEVERITIES.map((s) => `${SEVERITY_LABELS[s]} ${counts[s]}`).join(", ");
-}
-
-/** Loads the snapshot through GET /evidence/:id/file (access-logged). A link is used only as the image source. */
-function Snapshot({ evidenceId, flag }: { evidenceId: string; flag: Flag }) {
-  const [src, setSrc] = useState<string | null>(null);
-  const blobRef = useRef<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  function clear() {
-    if (blobRef.current) URL.revokeObjectURL(blobRef.current);
-    blobRef.current = null;
-    setSrc(null);
-  }
-
-  useEffect(
-    () => () => {
-      if (blobRef.current) URL.revokeObjectURL(blobRef.current);
-    },
-    [],
-  );
-
-  async function show() {
-    setBusy(true);
-    setError(null);
-    try {
-      const file = await fetchEvidenceFile({ id: evidenceId, contentType: "image/jpeg" });
-      clear();
-      if (file.mode === "link") {
-        setSrc(file.url);
-      } else {
-        const url = URL.createObjectURL(file.blob);
-        blobRef.current = url;
-        setSrc(url);
-      }
-    } catch (err) {
-      setError(errorMessage(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="proctor-snapshot">
-      {src ? (
-        <div className="evidence-preview">
-          <img
-            src={src}
-            alt={`Snapshot for ${typeLabel(flag.type).toLowerCase()} at ${formatTime(flag.capturedAt)}`}
-            referrerPolicy="no-referrer"
-            onError={() => {
-              clear();
-              setError("The snapshot could not be shown. Ask for it again.");
-            }}
-          />
-          <button type="button" className="button-quiet" onClick={clear}>
-            Hide snapshot
-          </button>
-        </div>
-      ) : (
-        <button type="button" className="button-quiet" onClick={show} disabled={busy} aria-busy={busy}>
-          {busy ? "Loading snapshot…" : "Show snapshot"}
-        </button>
-      )}
-      {error ? (
-        <p className="form-error" role="alert">
-          {error}
-        </p>
-      ) : null}
-    </div>
-  );
 }
 
 function ReviewControls({
@@ -270,11 +188,15 @@ function ReviewControls({
 
 function FlagEntry({
   flag,
+  evidence,
+  detailsState,
   canReview,
   canRecommend,
   onDecided,
 }: {
   flag: Flag;
+  evidence: EvidenceRow | undefined;
+  detailsState: "loading" | "error" | "ready";
   canReview: boolean;
   canRecommend: boolean;
   onDecided: (flag: Flag, decision: Decision) => void;
@@ -298,8 +220,21 @@ function FlagEntry({
           Severity: <SeverityTag severity={flag.severity} />
         </span>
       </p>
-      {detailParts.length > 0 ? <p className="field-hint">Detection: {detailParts.join(", ")}</p> : null}
-      {flag.evidenceId ? <Snapshot evidenceId={flag.evidenceId} flag={flag} /> : <p className="field-hint">No snapshot.</p>}
+      {flag.sustainedSeconds !== null ? (
+        <p className="field-hint">Raised after the condition lasted at least {flag.sustainedSeconds} seconds.</p>
+      ) : null}
+      {detailParts.length > 0 ? <p className="field-hint">Sent by the browser: {detailParts.join(", ")}</p> : null}
+      {flag.evidenceId ? (
+        <EvidenceImage
+          evidenceId={flag.evidenceId}
+          description={`${typeLabel(flag.type)} at ${formatTime(flag.capturedAt)}`}
+          row={evidence}
+          detailsState={detailsState}
+          showMeta
+        />
+      ) : (
+        <p className="field-hint">No image for this flag</p>
+      )}
       {flag.review ? (
         <p className="proctor-decision">
           Decision: {DECISION_LABELS[flag.review.decision]} by {roleLabel(flag.review.decidedByRole)}
@@ -335,6 +270,15 @@ function SessionPanel({
     refetchInterval: PROCTORING_REFRESH_MS,
   });
 
+  const snapshots = useQuery({
+    queryKey: ["proctoring-snapshots", id],
+    queryFn: ({ signal }) => listSessionSnapshots(id, signal),
+    refetchInterval: PROCTORING_REFRESH_MS,
+  });
+  const snapshotState = snapshots.isError ? "error" : snapshots.isPending ? "loading" : "ready";
+  const snapshotRows = snapshots.data ?? [];
+  const byId = new Map(snapshotRows.map((row) => [row.id, row]));
+
   useEffect(() => {
     panelRef.current?.focus();
   }, [id]);
@@ -355,7 +299,7 @@ function SessionPanel({
       tabIndex={-1}
       className="evidence-detail"
       onKeyDown={(event) => {
-        if (event.key === "Escape") onClose();
+        if (event.key === "Escape" && !event.defaultPrevented) onClose();
       }}
     >
       <h2 id={headingId}>{data ? `Session of ${candidateLabel(data)}` : "Session"}</h2>
@@ -419,6 +363,8 @@ function SessionPanel({
                 <FlagEntry
                   key={flag.id}
                   flag={flag}
+                  evidence={flag.evidenceId ? byId.get(flag.evidenceId) : undefined}
+                  detailsState={snapshotState}
                   canReview={canReview}
                   canRecommend={canRecommend}
                   onDecided={decided}
@@ -426,6 +372,13 @@ function SessionPanel({
               ))}
             </ol>
           )}
+
+          <SnapshotStrip
+            rows={snapshotRows.filter((row) => !data.flags.some((f) => f.evidenceId === row.id))}
+            state={snapshotState}
+            error={snapshots.error}
+            onRetry={() => void snapshots.refetch()}
+          />
 
           {data.warnings.length > 0 ? (
             <>

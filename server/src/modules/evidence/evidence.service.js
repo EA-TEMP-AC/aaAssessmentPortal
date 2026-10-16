@@ -356,6 +356,7 @@ export async function listEvidence(user, query) {
   if (query.candidateId) filter.candidateId = toObjectIdOrNull(query.candidateId);
   if (query.kind) filter.kind = query.kind;
   if (query.uploaderId) filter.uploaderUserId = toObjectIdOrNull(query.uploaderId);
+  if (query.sessionId) filter.sessionId = toObjectIdOrNull(query.sessionId);
   if (query.hasLocation !== undefined) {
     filter.locationStatus = query.hasLocation ? "captured" : { $ne: "captured" };
   }
