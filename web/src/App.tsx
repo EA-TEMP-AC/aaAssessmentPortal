@@ -21,6 +21,7 @@ import { UsersPage } from "./pages/UsersPage";
 import { WorkingDaysPage } from "./pages/WorkingDaysPage";
 import { BatchesPage } from "./pages/BatchesPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
+import { ProctoringDemoPage } from "./pages/ProctoringDemoPage";
 import { RoleHomePage } from "./pages/RoleHomePage";
 import { SiteLayout } from "./site/SiteLayout";
 import { EventsPage } from "./site/EventsPage";
@@ -55,6 +56,11 @@ export function AppRoutes() {
           <Route element={<AppLayout />}>
             <Route path="/home" element={<RoleHomePage />} />
             <Route path="/account/password" element={<ChangePasswordPage />} />
+            {import.meta.env.DEV ? (
+              <Route element={<RequireRole roles={["aa_admin"]} />}>
+                <Route path="/proctoring-demo" element={<ProctoringDemoPage />} />
+              </Route>
+            ) : null}
             <Route path="/settings" element={<Navigate to="/settings/access" replace />} />
             {sections.map((item) => (
               <Route key={item.id} element={<RequireRole roles={item.accessRoles ?? item.roles} />}>
