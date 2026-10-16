@@ -103,6 +103,7 @@ export const compliance = Object.freeze({
    * endpoint. Was hard-coded as 5 in the service. Open question 580.
    */
   QUESTION_MIN_APPROVED_PER_PC: 5,
+  /**
    * project. P-01. Proctoring client settings returned with each session. The browser takes a
    * snapshot every PROCTOR_SNAPSHOT_INTERVAL_SECONDS, runs detection every
    * PROCTOR_DETECTION_INTERVAL_MS, waits PROCTOR_FLAG_COOLDOWN_SECONDS between two flags of one
@@ -138,5 +139,7 @@ export const compliance = Object.freeze({
     phone_detected: "high",
     camera_blocked: "high",
     camera_frozen: "high",
+    face_mismatch: "high",
+    id_mismatch: "high",
   }),
 });

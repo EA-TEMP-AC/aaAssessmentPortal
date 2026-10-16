@@ -18,6 +18,8 @@ export const PROCTORING_FLAG_TYPES = Object.freeze([
   "phone_detected",
   "camera_blocked",
   "camera_frozen",
+  "face_mismatch",
+  "id_mismatch",
 ]);
 export const PROCTORING_SEVERITIES = Object.freeze(["low", "medium", "high"]);
 export const PROCTORING_DECISIONS = Object.freeze(["dismiss", "warn", "invalidate_recommended"]);

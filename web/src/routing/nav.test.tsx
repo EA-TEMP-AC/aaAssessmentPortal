@@ -50,9 +50,6 @@ const VISIBLE: Record<Role, readonly string[]> = {
   sme: ["Home"],
   assessor: ["Home", "Batches", "Registry", "Results", "Proctoring"],
   proctor: ["Home", "Batches", "Registry", "Proctoring"],
-  candidate: ["Home", "Batches", "Master data", "Results"],
-  assessor: ["Home", "Batches", "Registry", "Results"],
-  proctor: ["Home", "Batches", "Registry"],
   candidate: ["Home", "Batches", "Master data", "Results", "Exam"],
   tp: ["Home", "Batches", "Master data", "Results"],
   ab_reviewer: [
