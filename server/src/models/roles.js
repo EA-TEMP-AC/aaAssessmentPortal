@@ -228,8 +228,17 @@ export const QUESTION_APPROVE_ROLES = Object.freeze(["aa_admin", "ab_reviewer"])
 /** Question bank reads and coverage. Q-01: aa_admin, sme, and ab_reviewer only. */
 export const QUESTION_READ_ROLES = Object.freeze(["aa_admin", "sme", "ab_reviewer"]);
 
-/** POST /batches/:id/evidence. V-01: aa_admin, or the assessor or proctor of that batch. */
-export const EVIDENCE_UPLOAD_ROLES = Object.freeze(["aa_admin", "assessor", "proctor"]);
+/**
+ * POST /batches/:id/evidence. V-01: aa_admin, or the assessor or proctor of that batch.
+ * P-01: a candidate may upload only `proctor_snapshot` for their own proctoring session
+ * (enforced in the service).
+ */
+export const EVIDENCE_UPLOAD_ROLES = Object.freeze([
+  "aa_admin",
+  "assessor",
+  "proctor",
+  "candidate",
+]);
 
 /**
  * Evidence reads. V-01: aa_admin, mis and ncvet_viewer see all; ab_reviewer sees its own awarding
@@ -307,3 +316,24 @@ export const SECURITY_AUDIT_READ_ROLES = Object.freeze(["aa_admin", "mis", "ncve
 
 /** GET /security/content-anomalies. S-02: aa_admin only. */
 export const CONTENT_ANOMALY_READ_ROLES = Object.freeze(["aa_admin"]);
+
+/** POST /proctoring/sessions, heartbeat, flags, GET warnings. P-01: the candidate, own attempt. */
+export const PROCTORING_CANDIDATE_ROLES = Object.freeze(["candidate"]);
+
+/**
+ * GET /proctoring/sessions, /:id and /:id/report. P-01/P-04. aa_admin and ncvet_viewer see all;
+ * proctor and assessor their assigned batches; ab_reviewer its own awarding body (service).
+ */
+export const PROCTORING_READ_ROLES = Object.freeze([
+  "aa_admin",
+  "proctor",
+  "assessor",
+  "ab_reviewer",
+  "ncvet_viewer",
+]);
+
+/** PATCH /proctoring/flags/:id/review. P-08: dismiss or warn; proctor only on their batches. */
+export const PROCTORING_REVIEW_ROLES = Object.freeze(["aa_admin", "proctor"]);
+
+/** P-08: only aa_admin may record `invalidate_recommended`. */
+export const PROCTORING_INVALIDATE_ROLES = Object.freeze(["aa_admin"]);

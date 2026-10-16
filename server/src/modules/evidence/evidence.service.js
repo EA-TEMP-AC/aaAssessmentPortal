@@ -10,12 +10,13 @@ import {
   validationError,
 } from "../../lib/errors.js";
 import { toObjectIdOrNull } from "../../lib/object-id.js";
-import { isInBatchScope } from "../../middleware/scope.js";
+import { batchQueryFilter, isInBatchScope } from "../../middleware/scope.js";
 import { Batch } from "../../models/batch.model.js";
 import { Candidate } from "../../models/candidate.model.js";
 import { Evidence } from "../../models/evidence.model.js";
 import { recordAccess } from "../audit/access-log.service.js";
 import { stableStringify } from "../login-events/login-event.service.js";
+import { loadSnapshotSession } from "../proctoring/proctoring.service.js";
 import {
   EVIDENCE_EXTENSIONS,
   EVIDENCE_MAX_BYTES,
@@ -34,6 +35,7 @@ const KIND_CONTENT_TYPES = {
   attendance: ["image/jpeg", "image/png", "application/pdf"],
   equipment: ["image/jpeg", "image/png", "application/pdf"],
   other: ["image/jpeg", "image/png", "application/pdf"],
+  proctor_snapshot: ["image/jpeg"],
 };
 
 const SUPPORTED = new Set(Object.keys(EVIDENCE_MAX_BYTES));
@@ -50,6 +52,7 @@ export function presentEvidence(doc, { replayed } = {}) {
     batchId: String(doc.batchId),
     abId: String(doc.abId),
     candidateId: doc.candidateId ? String(doc.candidateId) : null,
+    sessionId: doc.sessionId ? String(doc.sessionId) : null,
     kind: doc.kind,
     contentType: doc.contentType,
     size: doc.size,
@@ -85,6 +88,16 @@ export function presentEvidence(doc, { replayed } = {}) {
 export async function loadUploadBatch(user, batchId) {
   const batch = await Batch.findById(batchId).lean();
   if (!batch) throw notFound();
+  if (user.role === "candidate") {
+    // P-01: a candidate uploads only to a batch where they are on the active roster.
+    const onRoster = await Candidate.exists({
+      batchId: batch._id,
+      learnerId: toObjectIdOrNull(user.linkedProfileId),
+      active: true,
+    });
+    if (!user.linkedProfileId || !onRoster) throw forbidden();
+    return batch;
+  }
   if (!isInBatchScope(user, batch)) throw forbidden();
   return batch;
 }
@@ -105,6 +118,8 @@ function payloadHash(user, batchId, fields, sha256) {
         accuracy: fields.accuracy ?? null,
         locationUnavailableReason: fields.locationUnavailableReason ?? null,
         deviceId: fields.deviceId ?? null,
+        // Only present for snapshots, so the hash of older rows is unchanged.
+        ...(fields.sessionId ? { sessionId: fields.sessionId.toLowerCase() } : {}),
         sha256,
       }),
     )
@@ -156,6 +171,18 @@ function replay(existing, hashValue) {
  */
 export async function createEvidence(user, batch, fields, file, context = {}) {
   const uploadedAt = context.now ?? new Date();
+  // P-01: proctor_snapshot is the candidate's kind, and the only kind a candidate may send.
+  const isCandidate = user.role === "candidate";
+  if (isCandidate !== (fields.kind === "proctor_snapshot")) {
+    throw forbidden(
+      isCandidate
+        ? "A candidate may upload only proctor_snapshot evidence"
+        : "Only the candidate uploads proctor_snapshot evidence",
+    );
+  }
+  const snapshotSession = isCandidate
+    ? await loadSnapshotSession(user, fields.sessionId, batch._id)
+    : null;
   const { sha256, size, head } = await inspectFile(file.path);
 
   const hashValue = payloadHash(user, batch._id, fields, sha256);
@@ -193,7 +220,7 @@ export async function createEvidence(user, batch, fields, file, context = {}) {
     });
   }
 
-  let candidateId = null;
+  let candidateId = snapshotSession ? snapshotSession.candidateId : null;
   if (fields.candidateId) {
     const candidate = await Candidate.findOne({ _id: fields.candidateId, batchId: batch._id })
       .select("_id")
@@ -222,6 +249,7 @@ export async function createEvidence(user, batch, fields, file, context = {}) {
       batchId: batch._id,
       abId: batch.abId,
       candidateId,
+      sessionId: snapshotSession ? snapshotSession._id : null,
       kind: fields.kind,
       contentType,
       size,
@@ -247,8 +275,11 @@ export async function createEvidence(user, batch, fields, file, context = {}) {
   return { evidence: created.toObject(), replayed: false };
 }
 
-/** Rows the caller may read. Assessor and proctor: own uploads. ab_reviewer: own awarding body. */
-function readScope(user) {
+/**
+ * Rows the caller may read. Assessor and proctor: own uploads, plus (P-01) the proctor
+ * snapshots of their assigned batches. ab_reviewer: own awarding body.
+ */
+async function readScope(user) {
   switch (user?.role) {
     case "aa_admin":
     case "mis":
@@ -259,15 +290,22 @@ function readScope(user) {
       return abId ? { abId } : { _id: { $in: [] } };
     }
     case "assessor":
-    case "proctor":
-      return { uploaderUserId: user._id };
+    case "proctor": {
+      const batches = await Batch.find(batchQueryFilter(user)).select("_id").lean();
+      return {
+        $or: [
+          { uploaderUserId: user._id },
+          { kind: "proctor_snapshot", batchId: { $in: batches.map((b) => b._id) } },
+        ],
+      };
+    }
     default:
       return { _id: { $in: [] } };
   }
 }
 
 export async function listEvidence(user, query) {
-  const filter = { ...readScope(user) };
+  const filter = { ...(await readScope(user)) };
   if (query.batchId) filter.batchId = toObjectIdOrNull(query.batchId);
   if (query.candidateId) filter.candidateId = toObjectIdOrNull(query.candidateId);
   if (query.kind) filter.kind = query.kind;
@@ -298,7 +336,7 @@ export async function listEvidence(user, query) {
 export async function loadReadableEvidence(user, id) {
   const doc = await Evidence.findById(id).lean();
   if (!doc) throw notFound();
-  const allowed = await Evidence.exists({ _id: doc._id, ...readScope(user) });
+  const allowed = await Evidence.exists({ _id: doc._id, ...(await readScope(user)) });
   if (!allowed) throw forbidden();
   return doc;
 }

@@ -63,6 +63,24 @@ describe("compliance constants", () => {
       QUESTION_REVIEW_INTERVAL_MONTHS: 12,
       QUESTION_REVIEW_INTERVAL_MIN_MONTHS: 1,
       QUESTION_REVIEW_INTERVAL_MAX_MONTHS: 60,
+      PROCTOR_SNAPSHOT_INTERVAL_SECONDS: 30,
+      PROCTOR_DETECTION_INTERVAL_MS: 1000,
+      PROCTOR_FLAG_COOLDOWN_SECONDS: 15,
+      PROCTOR_SUSTAINED_SECONDS: { face_not_present: 5, camera_blocked: 5, camera_frozen: 8 },
+      PROCTOR_FEED_LOST_INTERVALS: 3,
+      PROCTOR_FLAG_SEVERITY: {
+        tab_hidden: "low",
+        fullscreen_exit: "low",
+        window_blur: "low",
+        permission_revoked: "low",
+        object_detected: "low",
+        face_not_present: "medium",
+        multiple_faces: "high",
+        person_detected: "high",
+        phone_detected: "high",
+        camera_blocked: "high",
+        camera_frozen: "high",
+      },
     });
     expect(Object.isFrozen(compliance)).toBe(true);
     expect(Object.isFrozen(compliance.WEEKEND_DAYS)).toBe(true);

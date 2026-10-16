@@ -23,6 +23,7 @@ export const uploadFieldsSchema = z
     kind: z.enum(EVIDENCE_KINDS),
     capturedAt: z.string().datetime({ offset: true }),
     candidateId: optional(objectIdSchema),
+    sessionId: optional(objectIdSchema),
     deviceId: optional(z.string().trim().min(1).max(200)),
     latitude: numberField(-90, 90),
     longitude: numberField(-180, 180),
@@ -34,6 +35,14 @@ export const uploadFieldsSchema = z
   .superRefine((data, ctx) => {
     const issue = (path, message) =>
       ctx.addIssue({ code: z.ZodIssueCode.custom, message, path: [path] });
+    if (data.kind === "proctor_snapshot") {
+      if (!data.sessionId) issue("sessionId", "sessionId is required for a proctor_snapshot");
+      if (data.candidateId !== undefined) {
+        issue("candidateId", "candidateId is set from the session for a proctor_snapshot");
+      }
+    } else if (data.sessionId !== undefined) {
+      issue("sessionId", "sessionId is only allowed with kind 'proctor_snapshot'");
+    }
     const hasCoords = data.latitude !== undefined || data.longitude !== undefined;
     if (data.locationStatus === "unavailable") {
       if (!data.locationUnavailableReason) {

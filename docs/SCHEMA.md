@@ -215,6 +215,12 @@ Implement in B-02. No magic numbers in feature code.
 | `ATTEMPT_DEFAULT_DURATION_MINUTES` | `60` | Project (E-03). Attempt length when the test paper gives none. Open Q421 |
 | `ATTEMPT_GRACE_SECONDS` | `30` | Project (E-03). Seconds after the deadline when a save or submit is still taken; env `ATTEMPT_GRACE_SECONDS` overrides. Open Q422 |
 | `QUESTION_REVIEW_INTERVAL_MONTHS` | `12` | Project (Q-04). Months between question bank reviews of a qualification unless it has its own interval (`reviewSettings`). Allowed range `QUESTION_REVIEW_INTERVAL_MIN_MONTHS` 1 to `QUESTION_REVIEW_INTERVAL_MAX_MONTHS` 60. Open Q440 |
+| `PROCTOR_SNAPSHOT_INTERVAL_SECONDS` | `30` | Project (P-01). Seconds between proctor snapshots in the candidate's browser. Returned as `config.snapshotIntervalSeconds`. Open Q620 |
+| `PROCTOR_DETECTION_INTERVAL_MS` | `1000` | Project (P-01). Milliseconds between two in-browser detection runs (`config.detectionIntervalMs`) |
+| `PROCTOR_FLAG_COOLDOWN_SECONDS` | `15` | Project (P-01). Seconds the browser waits before sending a second flag of the same type (`config.flagCooldownSeconds`). Not enforced by the server |
+| `PROCTOR_SUSTAINED_SECONDS` | `{ face_not_present: 5, camera_blocked: 5, camera_frozen: 8 }` | Project (P-01, P-05). How long the condition must last before the browser raises the flag (`config.sustainedSeconds`) |
+| `PROCTOR_FEED_LOST_INTERVALS` | `3` | Project (P-01). No heartbeat for this many snapshot intervals (90 s) shows the session as `feed_lost`. Open Q621 |
+| `PROCTOR_FLAG_SEVERITY` | table | Project (P-04). low: `tab_hidden`, `fullscreen_exit`, `window_blur`, `permission_revoked`, `object_detected`; medium: `face_not_present`; high: `multiple_faces`, `person_detected`, `phone_detected`, `camera_blocked`, `camera_frozen`. Set by the server, never by the client |
 
 ### 2.1 Working-day counting convention
 

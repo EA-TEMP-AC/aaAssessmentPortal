@@ -98,4 +98,41 @@ export const compliance = Object.freeze({
   /** project. Q-04. Lowest and highest interval a qualification may be given, in months. */
   QUESTION_REVIEW_INTERVAL_MIN_MONTHS: 1,
   QUESTION_REVIEW_INTERVAL_MAX_MONTHS: 60,
+  /**
+   * project. P-01. Proctoring client settings returned with each session. The browser takes a
+   * snapshot every PROCTOR_SNAPSHOT_INTERVAL_SECONDS, runs detection every
+   * PROCTOR_DETECTION_INTERVAL_MS, waits PROCTOR_FLAG_COOLDOWN_SECONDS between two flags of one
+   * type, and raises face_not_present, camera_blocked and camera_frozen only after the condition
+   * has lasted PROCTOR_SUSTAINED_SECONDS. Open question 620.
+   */
+  PROCTOR_SNAPSHOT_INTERVAL_SECONDS: 30,
+  PROCTOR_DETECTION_INTERVAL_MS: 1000,
+  PROCTOR_FLAG_COOLDOWN_SECONDS: 15,
+  PROCTOR_SUSTAINED_SECONDS: Object.freeze({
+    face_not_present: 5,
+    camera_blocked: 5,
+    camera_frozen: 8,
+  }),
+  /**
+   * project. P-01. A session with no heartbeat for this many snapshot intervals shows as
+   * `feed_lost` in lists (3 x 30 s = 90 s). Open question 621.
+   */
+  PROCTOR_FEED_LOST_INTERVALS: 3,
+  /**
+   * project. P-04. Severity of each flag type, set by the server. A flag never changes the
+   * attempt or the result; a person reviews it (P-08).
+   */
+  PROCTOR_FLAG_SEVERITY: Object.freeze({
+    tab_hidden: "low",
+    fullscreen_exit: "low",
+    window_blur: "low",
+    permission_revoked: "low",
+    object_detected: "low",
+    face_not_present: "medium",
+    multiple_faces: "high",
+    person_detected: "high",
+    phone_detected: "high",
+    camera_blocked: "high",
+    camera_frozen: "high",
+  }),
 });
