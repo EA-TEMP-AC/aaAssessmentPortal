@@ -6,6 +6,7 @@ import {
   BATCH_ROLES,
   EVIDENCE_ROLES,
   MASTER_DATA_ROLES,
+  PROCTORING_ROLES,
   PUBLIC_SITE_ROLES,
   RECOGNITION_ROLES,
   REGISTRY_ROLES,
@@ -111,6 +112,13 @@ export const NAV_ITEMS: readonly NavItem[] = [
     to: "/evidence",
     description: "Photos, videos and documents uploaded for batches, with checksum and location details.",
     roles: EVIDENCE_ROLES,
+  },
+  {
+    id: "proctoring",
+    label: "Proctoring",
+    to: "/proctoring",
+    description: "Proctored online attempts, their flags and snapshots, and the review decisions.",
+    roles: PROCTORING_ROLES,
   },
   {
     id: "audit",

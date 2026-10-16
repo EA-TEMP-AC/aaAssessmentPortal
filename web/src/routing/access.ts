@@ -92,6 +92,12 @@ export const AUDIT_ROLES: readonly Role[] = ["aa_admin", "mis", "ab_reviewer", "
 /** API_CONTRACT Evidence vault: roles that get the browser. Assessor and proctor only upload (V-01). */
 export const EVIDENCE_ROLES: readonly Role[] = ["aa_admin", "ab_reviewer", "mis", "ncvet_viewer"];
 
+/**
+ * API_CONTRACT Proctoring (P-01, P-04, P-08): session list and detail. proctor and assessor see
+ * their assigned batches, ab_reviewer its own awarding body. aa_admin and proctor review flags.
+ */
+export const PROCTORING_ROLES: readonly Role[] = ["aa_admin", "proctor", "assessor", "ab_reviewer", "ncvet_viewer"];
+
 /** API_CONTRACT Analytics: read-only for these roles. */
 export const ANALYTICS_ROLES: readonly Role[] = ["aa_admin", "mis", "ncvet_viewer", "ab_reviewer"];
 

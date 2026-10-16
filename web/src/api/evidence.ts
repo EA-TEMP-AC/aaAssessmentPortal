@@ -1,6 +1,14 @@
 import { apiRequest, ApiError } from "./client";
 
-export const EVIDENCE_KINDS = ["photo", "id_proof", "attendance", "equipment", "other", "video"] as const;
+export const EVIDENCE_KINDS = [
+  "photo",
+  "id_proof",
+  "attendance",
+  "equipment",
+  "other",
+  "video",
+  "proctor_snapshot",
+] as const;
 export type EvidenceKind = (typeof EVIDENCE_KINDS)[number];
 
 export const KIND_LABELS: Record<EvidenceKind, string> = {
@@ -10,6 +18,7 @@ export const KIND_LABELS: Record<EvidenceKind, string> = {
   equipment: "Equipment",
   other: "Other",
   video: "Video",
+  proctor_snapshot: "Proctor snapshot",
 };
 
 export type VerifyResult = "ok" | "mismatch" | "missing";
