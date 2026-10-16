@@ -66,3 +66,40 @@ export function createSnapshotTaker(thresholds: ProctorThresholds = PROCTOR_THRE
       );
     });
 }
+
+export type DetectionFrame = HTMLVideoElement | ImageBitmap;
+
+/**
+ * Makes the small copy of the video frame the detector reads: at most `detectionMaxWidth` wide.
+ * When the browser cannot (no 2D canvas, no createImageBitmap, video size not known yet) the
+ * video itself is returned, so detection still runs, only slower.
+ */
+export function createDetectionFramer(thresholds: ProctorThresholds = PROCTOR_THRESHOLDS): {
+  make: (video: HTMLVideoElement) => Promise<DetectionFrame>;
+  release: () => void;
+} {
+  let canvas: HTMLCanvasElement | null = null;
+  return {
+    async make(video) {
+      const width = video.videoWidth;
+      const height = video.videoHeight;
+      if (!width || !height || typeof createImageBitmap !== "function") return video;
+      try {
+        const scale = Math.min(1, thresholds.detectionMaxWidth / width);
+        canvas ??= document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(width * scale));
+        canvas.height = Math.max(1, Math.round(height * scale));
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return video;
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        return await createImageBitmap(canvas);
+      } catch {
+        return video;
+      }
+    },
+    release() {
+      if (canvas) canvas.width = canvas.height = 0;
+      canvas = null;
+    },
+  };
+}

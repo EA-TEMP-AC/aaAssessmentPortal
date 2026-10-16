@@ -1,6 +1,13 @@
 import { PROCTOR_THRESHOLDS, type ProctorThresholds } from "./config";
 import type { DetectorFactory } from "./detector";
-import { createFrameSampler, createSnapshotTaker, type FrameSampler, type SnapshotTaker } from "./frame";
+import {
+  createDetectionFramer,
+  createFrameSampler,
+  createSnapshotTaker,
+  type DetectionFrame,
+  type FrameSampler,
+  type SnapshotTaker,
+} from "./frame";
 import {
   faceConfig,
   evaluateIdentity,
@@ -42,6 +49,12 @@ export type EngineOptions = {
   /** Builds the brightness/freeze sampler. Default reads a 32x24 canvas. */
   samplerFactory?: () => { sample: FrameSampler; release: () => void };
   takeSnapshot?: SnapshotTaker;
+  /** Builds the scaled-down frame the detector reads. Default: at most `detectionMaxWidth` wide. */
+  framerFactory?: () => { make: (video: HTMLVideoElement) => Promise<DetectionFrame>; release: () => void };
+  /** High-resolution clock for timing a check. Default performance.now. */
+  perfNow?: () => number;
+  /** For the demo page: how long each check took, in ms. Checks that were skipped are not counted. */
+  onTick?: (ms: number) => void;
   /** Whether the video has a frame the model can read. Default: readyState >= 2. */
   isFrameReady?: (video: HTMLVideoElement) => boolean;
   /** Face check numbers (mismatch samples, hold time, cooldown). Default: face/config.ts. */
@@ -67,6 +80,8 @@ type Run = {
   tracks: MediaStreamTrack[];
   detector: Detector | null;
   sampler: { sample: FrameSampler; release: () => void };
+  framer: { make: (video: HTMLVideoElement) => Promise<DetectionFrame>; release: () => void };
+  onFlag?: (flag: RaisedFlag) => void;
   previous: Uint8ClampedArray | null;
   rules: RulesState;
   busy: boolean;
@@ -108,6 +123,8 @@ export function createEngine(options: EngineOptions = {}): ProctorEngine {
   const now = options.now ?? (() => Date.now());
   const detectorFactory = options.detectorFactory ?? createMediaPipeDetector;
   const samplerFactory = options.samplerFactory ?? (() => createFrameSampler(thresholds));
+  const framerFactory = options.framerFactory ?? (() => createDetectionFramer(thresholds));
+  const perfNow = options.perfNow ?? (() => performance.now());
   const takeSnapshot = options.takeSnapshot ?? createSnapshotTaker(thresholds);
   const isFrameReady = options.isFrameReady ?? ((video: HTMLVideoElement) => video.readyState >= 2);
   const faceCfg = options.faceConfig ?? faceConfig();
@@ -152,6 +169,11 @@ export function createEngine(options: EngineOptions = {}): ProctorEngine {
   }
 
   async function send(r: Run, flag: RaisedFlag) {
+    try {
+      r.onFlag?.(flag);
+    } catch {
+      // The page's notice must never stop the flag from being sent.
+    }
     const capturedAt = new Date(flag.at).toISOString();
     const clientEventId = eventId(r, "f");
     const evidenceId = await snapshot(r, flag.type);
@@ -193,8 +215,10 @@ export function createEngine(options: EngineOptions = {}): ProctorEngine {
   }
 
   async function tick(r: Run) {
-    if (r.busy || run !== r) return;
+    // One check at a time, and none while the tab is hidden (nothing useful to see, and it saves power).
+    if (r.busy || run !== r || document.visibilityState === "hidden") return;
     r.busy = true;
+    const startedAt = perfNow();
     try {
       const gray = r.sampler.sample(r.video);
       const stats = gray ? frameStats(gray, r.previous, thresholds) : { brightness: null, identical: null };
@@ -203,7 +227,12 @@ export function createEngine(options: EngineOptions = {}): ProctorEngine {
       let detections: Detection[] | null = null;
       if (r.detector && isFrameReady(r.video)) {
         try {
-          detections = await r.detector.detect(r.video);
+          const frame = await r.framer.make(r.video);
+          try {
+            detections = await r.detector.detect(frame);
+          } finally {
+            if (frame !== r.video) (frame as ImageBitmap).close?.();
+          }
           if (r.degradedReason === "detect") {
             r.degradedReason = null;
             settle(r);
@@ -224,6 +253,7 @@ export function createEngine(options: EngineOptions = {}): ProctorEngine {
       await checkIdentity(r);
     } finally {
       r.busy = false;
+      if (run === r) options.onTick?.(perfNow() - startedAt);
     }
   }
 
@@ -244,6 +274,7 @@ export function createEngine(options: EngineOptions = {}): ProctorEngine {
       // A model that fails to close has nothing more to release.
     }
     r.sampler.release();
+    r.framer.release();
     try {
       r.video.pause();
     } catch {
@@ -287,6 +318,8 @@ export function createEngine(options: EngineOptions = {}): ProctorEngine {
       tracks: o.stream.getVideoTracks(),
       detector: null,
       sampler: samplerFactory(),
+      framer: framerFactory(),
+      onFlag: o.onFlag,
       previous: null,
       rules: createRulesState(),
       busy: false,
@@ -373,7 +406,7 @@ export function createEngine(options: EngineOptions = {}): ProctorEngine {
 
     if (r.tracks.length === 0 || r.tracks.some((t) => t.readyState === "ended")) cameraLost("no live track");
 
-    r.timers.push(setInterval(() => void tick(r), Math.max(50, r.config.detectionIntervalMs)));
+    r.timers.push(setInterval(() => void tick(r), Math.max(50, Math.min(r.config.detectionIntervalMs, thresholds.faceDetectionIntervalMs))));
     if (r.config.snapshotIntervalSeconds > 0) {
       r.timers.push(setInterval(() => void snapshot(r, "interval"), r.config.snapshotIntervalSeconds * 1000));
     }

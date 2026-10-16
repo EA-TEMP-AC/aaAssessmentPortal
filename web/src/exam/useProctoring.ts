@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createProctoringSession, listWarnings, sendHeartbeat, type ProctorWarning } from "../api/proctoringSession";
 import { createTransport } from "../proctoring/transport";
 import { FACE_EVIDENCE_NOTICE, submitFaceEvidence, type FaceStart } from "./faceEvidence";
-import { getProctorEngine, type ProctorEngine, type ProctorStatus } from "./proctorBridge";
+import { addNotice, dismissNotice, NO_NOTICES, type NoticeState } from "./flagNotices";
+import { getProctorEngine, type ProctorEngine, type ProctorFlagType, type ProctorStatus } from "./proctorBridge";
 
 export const HEARTBEAT_MS = 15000;
 export const WARNING_POLL_MS = 15000;
@@ -22,6 +23,9 @@ export type ProctoringView = {
   /** Warnings the candidate has not acknowledged yet, oldest first. */
   warnings: ProctorWarning[];
   acknowledge: (id: string) => void;
+  /** X-05: the flag type to tell the candidate about now, or null. Repeats inside the cooldown are merged. */
+  notice: ProctorFlagType | null;
+  dismissNotice: () => void;
   stop: () => void;
 };
 
@@ -33,6 +37,8 @@ export function useProctoring({ attemptId, batchId, stream, face }: Input): Proc
   const [unavailable, setUnavailable] = useState<string | null>(null);
   const [status, setStatus] = useState<ProctorStatus>({ state: "starting" });
   const [warnings, setWarnings] = useState<ProctorWarning[]>([]);
+  const [notices, setNotices] = useState<NoticeState>(NO_NOTICES);
+  const cooldownMs = useRef(15000);
   const seen = useRef(new Set<string>());
   const engine = useRef<ProctorEngine | null>(null);
   const timers = useRef<ReturnType<typeof setInterval>[]>([]);
@@ -118,6 +124,7 @@ export function useProctoring({ attemptId, batchId, stream, face }: Input): Proc
         setStatus({ state: "degraded", message: "Camera not available" });
         return;
       }
+      cooldownMs.current = Math.max(0, session.config.flagCooldownSeconds) * 1000;
       const next = getProctorEngine();
       engine.current = next;
       try {
@@ -128,6 +135,12 @@ export function useProctoring({ attemptId, batchId, stream, face }: Input): Proc
           batchId,
           config: session.config,
           faceMatcher: faceStart?.matcher ?? undefined,
+          onFlag: (flag) => {
+            if (live && !stopped.current) {
+              const at = Date.now();
+              setNotices((cur) => addNotice(cur, flag.type, at, cooldownMs.current));
+            }
+          },
           onStatus: (s) => {
             if (live && !stopped.current) setStatus(s);
           },
@@ -151,5 +164,7 @@ export function useProctoring({ attemptId, batchId, stream, face }: Input): Proc
     setWarnings((current) => current.filter((row) => row.id !== id));
   }, []);
 
-  return { unavailable, status, warnings, acknowledge, stop };
+  const dismiss = useCallback(() => setNotices((cur) => dismissNotice(cur)), []);
+
+  return { unavailable, status, warnings, acknowledge, notice: notices.queue[0] ?? null, dismissNotice: dismiss, stop };
 }

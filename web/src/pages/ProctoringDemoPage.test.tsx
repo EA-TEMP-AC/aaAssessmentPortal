@@ -16,6 +16,8 @@ vi.mock("../proctoring/engine", () => ({
       async start(o) {
         o.onStatus({ state: "starting" });
         o.onStatus({ state: "running" });
+        options.onTick?.(10);
+        options.onTick?.(20);
         options.onDetections?.([{ kind: "face", label: "face", confidence: 0.91 }], {
           brightness: 120,
           identical: false,
@@ -72,6 +74,7 @@ it("starts the engine, shows detections and flags, and calls no server", async (
   expect(await screen.findByText("running")).toBeInTheDocument();
   expect(screen.getByText("face 91%")).toBeInTheDocument();
   expect(screen.getByText("phone_detected")).toBeInTheDocument();
+  expect(screen.getByText("15.0 ms over 2 checks")).toBeInTheDocument();
   expect(fetchMock.mock.calls.length).toBe(callsBefore);
 
   await user.click(screen.getByRole("button", { name: /^stop$/i }));

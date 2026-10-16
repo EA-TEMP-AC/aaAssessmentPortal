@@ -57,11 +57,11 @@ it("shows one question at a time with a navigator and never shows marks", async 
 
   expect(screen.getByRole("heading", { name: "Question 1 of 2" })).toBeInTheDocument();
   expect(screen.getByRole("radio", { name: /Pliers/ })).toBeInTheDocument();
-  expect(screen.queryByText(/marks?/i)).not.toBeInTheDocument();
+  expect(screen.queryByText(/\d+ marks?\b|marks:/i)).not.toBeInTheDocument();
 
   const nav = screen.getByRole("navigation", { name: "Questions" });
-  expect(within(nav).getByRole("button", { name: "Question 1, not answered" })).toHaveAttribute("aria-current", "step");
-  await user.click(within(nav).getByRole("button", { name: "Question 2, answered" }));
+  expect(within(nav).getByRole("button", { name: "Question 1, not attempted" })).toHaveAttribute("aria-current", "step");
+  await user.click(within(nav).getByRole("button", { name: "Question 2, attempted" }));
   expect(screen.getByRole("heading", { name: "Question 2 of 2" })).toHaveFocus();
   expect(screen.getByLabelText("Your answer")).toHaveValue("Saved before");
 });
@@ -89,7 +89,7 @@ it("autosaves after a pause, shows saving and saved, and retries after an error"
   expect(await screen.findByText("All answers saved")).toBeInTheDocument();
   expect(bodyOf(callsTo(mock, "/answers", "PUT")[1])).toEqual({ answers: [{ questionId: "q1", answer: "B" }] });
 
-  await user.click(screen.getByRole("button", { name: "Next question" }));
+  await user.click(screen.getByRole("button", { name: "Save and Next" }));
   await user.clear(screen.getByLabelText("Your answer"));
   await waitFor(() => expect(callsTo(mock, "/answers", "PUT")).toHaveLength(3));
   expect(bodyOf(callsTo(mock, "/answers", "PUT")[2])).toEqual({ answers: [{ questionId: "q2", answer: null }] });
@@ -195,7 +195,7 @@ it("starts the engine with the session, sends heartbeats and shows each new warn
   expect(engine.start).toHaveBeenCalledWith(
     expect.objectContaining({ stream, sessionId: "ps1", attemptId: ATTEMPT_ID, batchId: BATCH_ID, config: SESSION.config }),
   );
-  expect(screen.getByText("Proctoring: on")).toBeInTheDocument();
+  expect(screen.getByText("Camera on")).toBeInTheDocument();
 
   rows = [{ id: "w1", message: "Please keep your face in view of the camera.", createdAt: null }];
   await act(async () => {
@@ -231,7 +231,8 @@ it("keeps the exam going with a visible notice when no proctoring session can be
 it("shows the no-op engine as limited when no real engine is installed", async () => {
   server();
   render(<ExamScreen attempt={attempt()} stream={fakeStream().stream} onFinished={() => {}} />);
-  expect(await screen.findByText("Proctoring: limited (Proctoring engine not installed)")).toBeInTheDocument();
+  expect(await screen.findByText("Camera problem")).toBeInTheDocument();
+  expect(screen.getByText("Proctoring engine not installed")).toBeInTheDocument();
 });
 
 it("asks the candidate to return to full screen after leaving it", async () => {

@@ -97,3 +97,12 @@ browser-event checks and the brightness and freeze checks.
 In a development build, `aa_admin` can open `/proctoring-demo`. It opens the camera, runs the engine
 with a local config, and shows the live detections and the flags raised. It sends nothing to the
 server.
+
+## Speed and candidate feedback (X-05)
+
+- **Cadence.** Faces are checked every 500 ms (or the server's `detectionIntervalMs` if shorter); the object model runs every 2 s and its last result is reused in between (`web/src/proctoring/cadence.ts`). Frames are scaled to at most 320 px wide before detection (`createDetectionFramer`). The `Detector` interface is unchanged.
+- **Skipping.** A tick that finds the previous one still running does nothing. No tick runs while the tab is hidden.
+- **Timing.** `onTick(ms)` reports how long each check took; `/proctoring-demo` shows the average. Skipped ticks are not counted.
+- **Flag notice.** `start()` takes an optional `onFlag({ type })`, called when the rules raise a flag. The exam page shows a centred, non-blocking card (`role="alertdialog"`, focus on OK) with one calm sentence per type (`web/src/exam/flagNotices.ts`), one at a time, merging repeats of a type inside `flagCooldownSeconds`. Nothing is stored or sent for it.
+- **Chip and preview.** "Camera on", "Checking" or "Camera problem" (with the engine's reason), and a mirrored 160 x 120 view of the candidate's own camera. The view is not recorded.
+- No flag rule, severity or result changed.

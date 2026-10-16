@@ -6,6 +6,12 @@ import { formatRemaining, spokenRemaining, useExamClock, WARN_SECONDS } from "./
 import { useProctoring } from "./useProctoring";
 import type { FaceStart } from "./faceEvidence";
 import { fullscreenSupported, requestExamFullscreen } from "./fullscreen";
+import { FlagNotice } from "./FlagNotice";
+import { ProctorStatusChip } from "./ProctorStatusChip";
+import { QuestionPalette } from "./QuestionPalette";
+
+/** Text size steps for the A- and A+ buttons, in percent. Not saved anywhere. */
+const TEXT_SIZES = [100, 115, 130, 150] as const;
 
 export type ExamOutcome = "submitted" | "timed_out" | "closed";
 
@@ -57,11 +63,6 @@ function QuestionBody({
             <span className="exam-option-key">{option.key}.</span> {option.text}
           </label>
         ))}
-        {value !== "" ? (
-          <button type="button" className="exam-clear" onClick={() => onChange("")} disabled={disabled}>
-            Clear my answer
-          </button>
-        ) : null}
       </fieldset>
     );
   }
@@ -91,6 +92,10 @@ export function ExamScreen({ attempt, stream, face, onFinished, autosaveDebounce
     Object.fromEntries(questions.map((q) => [q.questionId, q.answer ?? ""])),
   );
   const [index, setIndex] = useState(0);
+  // Browser only: kept in memory, never sent or stored. Gone if the page is reloaded.
+  const [review, setReview] = useState<ReadonlySet<string>>(() => new Set());
+  const [skipped, setSkipped] = useState<ReadonlySet<string>>(() => new Set());
+  const [sizeStep, setSizeStep] = useState(0);
   const [confirming, setConfirming] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -176,6 +181,27 @@ export function ExamScreen({ attempt, stream, face, onFinished, autosaveDebounce
   const unanswered = questions.length - answeredCount;
   const level = remaining <= 60 ? "exam-timer-critical" : remaining <= 300 ? "exam-timer-warn" : "";
 
+  function toggleIn(set: ReadonlySet<string>, id: string, on: boolean): ReadonlySet<string> {
+    if (set.has(id) === on) return set;
+    const next = new Set(set);
+    if (on) next.add(id);
+    else next.delete(id);
+    return next;
+  }
+
+  /** Moves to a question. Leaving one unanswered marks it skipped; answering it later clears that. */
+  function goTo(target: number) {
+    if (target === index || target < 0 || target >= questions.length) return;
+    if (question) setSkipped((cur) => toggleIn(cur, question.questionId, !isAnswered(answers[question.questionId])));
+    setIndex(target);
+  }
+
+  async function saveAndNext() {
+    await flush();
+    setAnnouncement(index === questions.length - 1 ? "Your answers are saved." : "Saved. Next question.");
+    goTo(index + 1);
+  }
+
   function change(value: string) {
     if (!question || timeUp || submitting) return;
     setAnswers((current) => ({ ...current, [question.questionId]: value }));
@@ -249,22 +275,12 @@ export function ExamScreen({ attempt, stream, face, onFinished, autosaveDebounce
         <p className="form-error">Your last changes did not save. They will be sent again when you retry.</p>
       ) : null}
 
+      <ProctorStatusChip status={proctoring.status} unavailable={proctoring.unavailable} stream={stream} />
       {proctoring.unavailable ? (
         <p className="form-warning" role="status">
           <strong>Proctoring unavailable.</strong> {proctoring.unavailable}
         </p>
-      ) : (
-        <p className="field-hint exam-proctor-status">
-          Proctoring:{" "}
-          {proctoring.status.state === "running"
-            ? "on"
-            : proctoring.status.state === "starting"
-              ? "starting"
-              : proctoring.status.state === "stopped"
-                ? "stopped"
-                : `limited (${proctoring.status.message ?? "degraded"})`}
-        </p>
-      )}
+      ) : null}
 
       {fullscreenSupported() && !isFullscreen && !timeUp ? (
         <div className="form-warning exam-fullscreen" role="alert">
@@ -275,31 +291,18 @@ export function ExamScreen({ attempt, stream, face, onFinished, autosaveDebounce
         </div>
       ) : null}
 
-      <nav aria-label="Questions" className="exam-nav">
-        <ol>
-          {questions.map((q, i) => {
-            const done = isAnswered(answers[q.questionId]);
-            return (
-              <li key={q.questionId}>
-                <button
-                  type="button"
-                  className={`exam-nav-item${done ? " exam-nav-done" : ""}`}
-                  aria-current={i === index ? "step" : undefined}
-                  aria-label={`Question ${i + 1}, ${done ? "answered" : "not answered"}`}
-                  onClick={() => setIndex(i)}
-                >
-                  {i + 1}
-                </button>
-              </li>
-            );
-          })}
-        </ol>
-        <p className="field-hint">
-          {answeredCount} of {questions.length} answered
-        </p>
-      </nav>
+      <QuestionPalette
+        questions={questions}
+        currentIndex={index}
+        status={(id) => ({ attempted: isAnswered(answers[id]), review: review.has(id), skipped: skipped.has(id) })}
+        onSelect={goTo}
+      />
 
-      <article className="exam-question" aria-labelledby="question-heading">
+      <article
+        className="exam-question"
+        aria-labelledby="question-heading"
+        style={{ fontSize: `${TEXT_SIZES[sizeStep]}%` }}
+      >
         <h2 id="question-heading" ref={questionHeading} tabIndex={-1}>
           Question {index + 1} of {questions.length}
         </h2>
@@ -312,12 +315,48 @@ export function ExamScreen({ attempt, stream, face, onFinished, autosaveDebounce
         />
       </article>
 
-      <div className="dialog-actions">
-        <button type="button" onClick={() => setIndex((i) => i - 1)} disabled={index === 0}>
-          Previous question
+      <div className="exam-tools">
+        <label className="exam-review">
+          <input
+            type="checkbox"
+            checked={review.has(question.questionId)}
+            onChange={(event) => setReview((cur) => toggleIn(cur, question.questionId, event.target.checked))}
+          />{" "}
+          Mark for review
+        </label>
+        <button
+          type="button"
+          onClick={() => change("")}
+          disabled={timeUp || submitting || !isAnswered(answers[question.questionId])}
+        >
+          Reset
         </button>
-        <button type="button" onClick={() => setIndex((i) => i + 1)} disabled={index === questions.length - 1}>
-          Next question
+        <span role="group" aria-label="Text size">
+          <button
+            type="button"
+            aria-label="Smaller text"
+            onClick={() => setSizeStep((n) => Math.max(0, n - 1))}
+            disabled={sizeStep === 0}
+          >
+            A-
+          </button>
+          <button
+            type="button"
+            aria-label="Larger text"
+            onClick={() => setSizeStep((n) => Math.min(TEXT_SIZES.length - 1, n + 1))}
+            disabled={sizeStep === TEXT_SIZES.length - 1}
+          >
+            A+
+          </button>
+        </span>
+      </div>
+
+      <div className="dialog-actions">
+        <button type="button" onClick={() => goTo(index - 1)} disabled={index === 0}>
+          Previous
+        </button>
+        <button type="button" onClick={() => void saveAndNext()} disabled={submitting}>
+          Save and Next
         </button>
         <button type="button" onClick={() => setConfirming(true)} disabled={timeUp || submitting}>
           Submit exam
@@ -357,6 +396,10 @@ export function ExamScreen({ attempt, stream, face, onFinished, autosaveDebounce
             </div>
           </div>
         </div>
+      ) : null}
+
+      {proctoring.notice && !currentWarning ? (
+        <FlagNotice type={proctoring.notice} onDismiss={proctoring.dismissNotice} />
       ) : null}
 
       {currentWarning ? (

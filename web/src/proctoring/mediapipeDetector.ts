@@ -1,3 +1,5 @@
+import { PROCTOR_THRESHOLDS } from "./config";
+import { withObjectCadence } from "./cadence";
 import type { Detection, Detector } from "./types";
 
 /**
@@ -55,23 +57,32 @@ export async function createMediaPipeDetector(): Promise<Detector> {
 
   let lastTimestamp = 0;
 
+  // VIDEO mode needs a strictly increasing timestamp, shared by both models.
+  const nextTimestamp = () => {
+    lastTimestamp = Math.max(performance.now(), lastTimestamp + 1);
+    return lastTimestamp;
+  };
+
+  const detectFaces = async (frame: Parameters<Detector["detect"]>[0]): Promise<Detection[]> =>
+    (face.detectForVideo(frame, nextTimestamp()).detections as Box[]).map((box) => ({
+      kind: "face",
+      label: "face",
+      confidence: box.categories[0]?.score ?? 0,
+    }));
+
+  const detectObjects = async (frame: Parameters<Detector["detect"]>[0]): Promise<Detection[]> => {
+    const out: Detection[] = [];
+    for (const box of objects.detectForVideo(frame, nextTimestamp()).detections as Box[]) {
+      const top = box.categories[0];
+      if (!top) continue;
+      const label = top.categoryName ?? "object";
+      out.push({ kind: kindForLabel(label), label, confidence: top.score });
+    }
+    return out;
+  };
+
   return {
-    async detect(frame) {
-      // VIDEO mode needs a strictly increasing timestamp.
-      const timestamp = Math.max(performance.now(), lastTimestamp + 1);
-      lastTimestamp = timestamp;
-      const out: Detection[] = [];
-      for (const box of face.detectForVideo(frame, timestamp).detections as Box[]) {
-        out.push({ kind: "face", label: "face", confidence: box.categories[0]?.score ?? 0 });
-      }
-      for (const box of objects.detectForVideo(frame, timestamp).detections as Box[]) {
-        const top = box.categories[0];
-        if (!top) continue;
-        const label = top.categoryName ?? "object";
-        out.push({ kind: kindForLabel(label), label, confidence: top.score });
-      }
-      return out;
-    },
+    ...withObjectCadence(detectFaces, detectObjects, PROCTOR_THRESHOLDS.objectDetectionIntervalMs),
     close() {
       face.close();
       objects.close();

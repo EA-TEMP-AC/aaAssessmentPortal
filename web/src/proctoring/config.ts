@@ -26,6 +26,12 @@ export const PROCTOR_THRESHOLDS = {
   /** Snapshot JPEG. */
   snapshotMaxWidth: 640,
   snapshotQuality: 0.7,
+  /** Speed (X-05). Face detection runs at most this often (the server's interval is used if shorter). */
+  faceDetectionIntervalMs: 500,
+  /** Object detection is the heavy model, so it runs less often; the last result is reused between runs. */
+  objectDetectionIntervalMs: 2000,
+  /** Frames are scaled down to at most this wide before detection. */
+  detectionMaxWidth: 320,
   /** Flag send retry. */
   retryDelayMs: 5000,
   maxQueuedFlags: 50,
