@@ -573,7 +573,8 @@ One row per file in the evidence vault. The file is in object storage (section 3
 | `batchId` | ObjectId | required |
 | `abId` | ObjectId | copied from the batch at upload, for awarding-body scoping |
 | `candidateId` | ObjectId or null | a `candidates` row of this batch |
-| `kind` | string | `photo`, `id_proof`, `attendance`, `equipment`, `other`, `video` |
+| `kind` | string | `photo`, `id_proof`, `attendance`, `equipment`, `other`, `video`, `proctor_snapshot` (P-01; JPEG only, uploaded by the candidate) |
+| `sessionId` | ObjectId or null | P-01: the `proctoringSessions` row of a `proctor_snapshot`; null for every other kind. `candidateId` is copied from the session |
 | `contentType` | string | from the bytes: `image/jpeg`, `image/png`, `application/pdf`, `video/mp4` |
 | `size` | number | bytes, counted by the server. Limit 25 MB (image, PDF), 200 MB (video) |
 | `sha256` | string | hex, computed by the server from the uploaded bytes |
@@ -589,9 +590,9 @@ One row per file in the evidence vault. The file is in object storage (section 3
 | `lastVerification` | object or null | `{ at, byUserId, result (ok, mismatch, missing), actualSha256, actualSize }`; the actual values only on mismatch |
 | `verifyCount` | number | |
 
-Indexes: `{ clientEventId: 1 }` unique; `{ batchId: 1, capturedAt: -1 }`; `{ candidateId: 1, capturedAt: -1 }`; `{ abId: 1, capturedAt: -1 }`; `{ uploaderUserId: 1, capturedAt: -1 }`; `{ sha256: 1 }`.
+Indexes: `{ clientEventId: 1 }` unique; `{ batchId: 1, capturedAt: -1 }`; `{ candidateId: 1, capturedAt: -1 }`; `{ abId: 1, capturedAt: -1 }`; `{ uploaderUserId: 1, capturedAt: -1 }`; `{ sha256: 1 }`; `{ sessionId: 1, capturedAt: -1 }`.
 
-Read scope: aa_admin, mis, ncvet_viewer all rows; ab_reviewer `abId`; assessor and proctor `uploaderUserId` (their own uploads, not the batch's); candidate, tp, sme none.
+Read scope: aa_admin, mis, ncvet_viewer all rows; ab_reviewer `abId`; assessor and proctor `uploaderUserId` (their own uploads, not the batch's), plus `proctor_snapshot` rows of their assigned batches (P-01); candidate, tp, sme none. A candidate uploads only `proctor_snapshot` for their own session.
 
 #### 3.24.1 Storage
 
@@ -643,7 +644,7 @@ Indexes: `{ scope: 1, schemeId: 1, projectId: 1 }`. Collection name `authorisedS
 
 ### 3.16 Phase 2 / 3 collections
 
-Reserved: `tests`, `attempts`; `proctoringSessions`, `proctoringFlags`, `grievances`, `erfScores`, `siteDocuments`, `securityAudits`, `exportCredentials`.
+Reserved: `tests`, `attempts`; `grievances`, `erfScores`, `siteDocuments`, `securityAudits`, `exportCredentials`.
 
 The old `sectors` placeholder is replaced by `aaRecognition` plus `SectorName` on the qualification (§3.17, §1.5).
 
@@ -955,6 +956,45 @@ One finding raised by an audit.
 
 Indexes: `{ auditId: 1 }`; `{ status: 1, severity: 1 }`; `{ status: 1, dueDate: 1 }`.
 
+### 3.40 `proctoringSessions` / `proctoringFlags` (phase 3) — NCVET:TR s6-s8; Tasks P-01, P-04, P-08
+
+Prototype. Detection runs in the candidate's browser; the server stores sessions, flags and human decisions. Nothing here changes an attempt or a result (no penalty without human review, DECISIONS Accepted).
+
+**`proctoringSessions`**: one per attempt.
+
+| Field | Type | Req | Notes |
+|---|---|---|---|
+| attemptId | ObjectId | Y | Unique. Ref `attempts` |
+| batchId, abId | ObjectId | Y | Copied from the attempt, for scoping |
+| candidateId, learnerId, userId | ObjectId | Y | Roster row, learner and the candidate's login user (the owner) |
+| lastSeenAt | Date | N | Server time of the last heartbeat; set at start |
+| flagCounts | {low, medium, high} | Y | Incremented with each new flag (same transaction) |
+| warnings[] | {_id, flagId, message (max 300), createdAt, createdBy} | Y | Added by a `warn` decision; the candidate reads them |
+| invalidationRecommendedAt, invalidationRecommendedBy, invalidationRecommendedFlagId | Date, ObjectId, ObjectId | N | Set by the first `invalidate_recommended` decision; a mark only |
+| createdAt, updatedAt | Date | Y | `createdAt` is the session start |
+
+The shown status is computed: `ended` (attempt closed), `feed_lost` (no heartbeat for `PROCTOR_FEED_LOST_INTERVALS` x `PROCTOR_SNAPSHOT_INTERVAL_SECONDS`), else `active`.
+Indexes: `{ attemptId: 1 }` unique; `{ batchId: 1, createdAt: -1 }`; `{ abId: 1, createdAt: -1 }`; `{ userId: 1 }`.
+
+**`proctoringFlags`**: one per event the browser reported.
+
+| Field | Type | Req | Notes |
+|---|---|---|---|
+| sessionId, attemptId, batchId, abId | ObjectId | Y | |
+| clientEventId | string | Y | Max 200; unique per session |
+| type | enum | Y | `tab_hidden`, `fullscreen_exit`, `window_blur`, `permission_revoked`, `object_detected`, `face_not_present`, `multiple_faces`, `person_detected`, `phone_detected`, `camera_blocked`, `camera_frozen` |
+| severity | enum | Y | `low`, `medium`, `high`; set by the server from `PROCTOR_FLAG_SEVERITY` (§2) |
+| capturedAt | Date | Y | Device clock, as sent |
+| receivedAt | Date | Y | Server clock |
+| detail | {label, count, confidence} | N | Label max 60, count 0 to 100, confidence 0 to 1. No images or personal data |
+| evidenceId | ObjectId | N | A `proctor_snapshot` evidence row of the same session |
+| payloadHash | string | Y | sha256 of the canonical payload; replay vs `CONFLICT_IDEMPOTENT`. Never returned |
+| review | {decision, note (max 300), decidedAt, decidedBy, decidedByRole} | N | One decision per flag: `dismiss`, `warn`, `invalidate_recommended` |
+
+Indexes: `{ sessionId: 1, clientEventId: 1 }` unique; `{ sessionId: 1, capturedAt: 1 }`; `{ batchId: 1, severity: 1 }`.
+
+Scope: the candidate writes and reads warnings for their own session only; aa_admin and ncvet_viewer read all; proctor and assessor read their assigned batches; ab_reviewer reads its own `abId`. Review: aa_admin, and proctor on their own batches; `invalidate_recommended` is aa_admin only.
+
 ## 4. Business rules
 
 ### 4.1 Assignment / ratio / clash
@@ -1022,8 +1062,12 @@ Schema and contract only. **B-10** writes `learnerFeedback` once the batch is `a
 | Schemes / projects / signatories CRUD (`/schemes`, `/projects`, `/signatories`) | A | A | D | D | D | D | D | R | R | H-01; deactivate, never delete; audited (signatory name redacted); Q380 |
 | Question bank write / import | A | D | A | D | D | D | D | D | D | Q-01; aa_admin and sme only; audited (content redacted) |
 | Question bank approve | A | D | D | D | D | D | D | A | D | Q-01; ab_reviewer and aa_admin; audited |
-| Evidence upload (`POST /batches/:id/evidence`) | A | D | D | own | own | D | D | D | D | V-01; assessor and proctor of the batch; not into `cancelled` or `rejected` batches |
-| Evidence list / get / file | A | R | D | own | own | D | D | R° | R | V-01; ° own `abId`; assessor and proctor see only their own uploads; every file download is access-logged |
+| Evidence upload (`POST /batches/:id/evidence`) | A | D | D | own | own | own¶ | D | D | D | V-01; assessor and proctor of the batch; not into `cancelled` or `rejected` batches; ¶ P-01: a candidate uploads only `proctor_snapshot` for their own proctoring session |
+| Evidence list / get / file | A | R | D | own | own | D | D | R° | R | V-01; ° own `abId`; assessor and proctor see their own uploads plus `proctor_snapshot` rows of their batches (P-01); every file download is access-logged |
+| Proctoring session start / heartbeat / flags / own warnings | D | D | D | D | D | own | D | D | D | P-01; the candidate's own attempt and session |
+| Proctoring sessions list / detail / report | A | D | D | R | R | D | D | R° | R | P-01, P-04; assessor and proctor their assigned batches; ° own `abId` |
+| Proctoring flag review (dismiss / warn) | A | D | D | D | A | D | D | D | D | P-08; proctor on own batches; audited before and after, no note text |
+| Proctoring flag review (invalidate_recommended) | A | D | D | D | D | D | D | D | D | P-08; marks the session only, never the attempt or result |
 | Evidence verify | A | D | D | D | D | D | D | D | D | V-01; aa_admin only; audited |
 | Test paper generate | A | D | A | D | D | D | D | D | D | E-01; aa_admin and sme; audited (ids, seed and rules only) |
 | Test paper approve | A | D | D | D | D | D | D | A | D | E-01; ab_reviewer and aa_admin; complete papers only |

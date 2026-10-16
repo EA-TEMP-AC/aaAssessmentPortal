@@ -1355,7 +1355,8 @@ Parts:
 |---|---|---|
 | `file` | yes | One file. Real type read from the bytes: `image/jpeg`, `image/png`, `application/pdf`, `video/mp4`. Anything else `415 UNSUPPORTED_FILE_TYPE`. If the part declares one of the four types and the bytes say another, `415 FILE_TYPE_MISMATCH`. The file name is ignored and never stored. Images and PDFs up to 25 MB, video up to 200 MB, else `413 FILE_TOO_LARGE`. An empty file is `400` |
 | `clientEventId` | yes | Idempotency key, 1 to 200 characters |
-| `kind` | yes | `photo`, `id_proof`, `attendance`, `equipment`, `other`, `video`. `video` needs an MP4 and an MP4 needs `video`; the other kinds take JPEG, PNG or PDF, except `photo`, which takes JPEG or PNG (`400` otherwise) |
+| `kind` | yes | `photo`, `id_proof`, `attendance`, `equipment`, `other`, `video`. `video` needs an MP4 and an MP4 needs `video`; the other kinds take JPEG, PNG or PDF, except `photo`, which takes JPEG or PNG (`400` otherwise). `proctor_snapshot` (P-01) takes JPEG only, needs `sessionId`, and only a candidate may send it (see Proctoring below) |
+| `sessionId` | with `proctor_snapshot` only | The candidate's own proctoring session on this batch. Any other kind with `sessionId` is `400` |
 | `capturedAt` | yes | ISO 8601 with offset, from the device clock. Kept as sent |
 | `candidateId` | no | A candidate row (roster id) of this batch, else `400` |
 | `deviceId` | no | |
@@ -1662,3 +1663,84 @@ Role: `aa_admin`. Read-only totals to copy into a result draft: `{ attemptId, ba
 
 ### Timer and timeout
 The server clock decides. `deadlineAt` = `startedAt` + duration (the paper's `durationMinutes`, else 60). Saves and submit are taken until `deadlineAt` + grace (30 s, env `ATTEMPT_GRACE_SECONDS`). A timeout is applied when the attempt is next read or written, or by `closeExpiredAttempts()` (no scheduler yet, Q423); it writes audit `attempt.timeout` (actor role `system`). `POST /tests/generate` takes an optional `durationMinutes` (1 to 600).
+
+## Proctoring (tasks P-01, P-04, P-08)
+
+All under `/api/v1/proctoring`. A prototype for a demo: detection runs in the candidate's browser and sends flags here. **Nothing is invalidated automatically.** A flag only records an event; a person reviews it, and even `invalidate_recommended` only marks the session (the attempt and the result never change). Unknown request keys are `400 VALIDATION_ERROR`; national ID keys are refused. Collections: SCHEMA §3.40.
+
+Session `status` is computed, not stored: `ended` once the attempt is `submitted` or `timed_out`; `feed_lost` when there was no heartbeat for `PROCTOR_FEED_LOST_INTERVALS` x `snapshotIntervalSeconds` (3 x 30 = 90 s; the session start counts as the first heartbeat); `active` otherwise.
+
+### POST /api/v1/proctoring/sessions
+Role: `candidate`, for their own attempt (`attempts.userId`). Body `{ "attemptId" }`. `201` new, `200` when the attempt already has a session (same id). A new session needs the attempt `in_progress`; an existing session is returned whatever the attempt status.
+```json
+{ "id": "66f0...", "attemptId": "66f0...", "batchId": "66f0...", "status": "active",
+  "config": { "snapshotIntervalSeconds": 30, "detectionIntervalMs": 1000, "flagCooldownSeconds": 15,
+              "sustainedSeconds": { "face_not_present": 5, "camera_blocked": 5, "camera_frozen": 8 } } }
+```
+The numbers come from `server/src/config/compliance.js` (SCHEMA §2).
+Errors: `403 FORBIDDEN` (another user's attempt, any other role), `404 NOT_FOUND` (unknown attempt), `409 PROCTORING_ATTEMPT_CLOSED` (new session for a closed attempt).
+Audit: `proctoring.session_start` or `proctoring.session_replay`.
+
+### POST /api/v1/proctoring/sessions/:id/heartbeat
+Role: `candidate`, own session. Body `{}` (any key is `400`). Sets `lastSeenAt` to the server time. `200 { id, status, lastSeenAt, serverTime }`. Send it at least every `snapshotIntervalSeconds`.
+Audit: `proctoring.heartbeat` with `before.lastSeenAt` and `after.lastSeenAt` (open question 622).
+
+### POST /api/v1/proctoring/sessions/:id/flags
+Role: `candidate`, own session.
+```json
+{ "clientEventId": "f-0192", "type": "phone_detected", "capturedAt": "2026-11-20T05:00:03.000Z",
+  "detail": { "label": "cell phone", "count": 1, "confidence": 0.82 }, "evidenceId": "66f0..." }
+```
+| Field | Required | Rule |
+|---|---|---|
+| `clientEventId` | yes | 1 to 200 characters; idempotency key within the session |
+| `type` | yes | `tab_hidden`, `fullscreen_exit`, `window_blur`, `permission_revoked`, `object_detected`, `face_not_present`, `multiple_faces`, `person_detected`, `phone_detected`, `camera_blocked`, `camera_frozen` |
+| `capturedAt` | yes | ISO-8601 with `Z` or an offset; device clock, stored as sent |
+| `detail` | no | Only `label` (1 to 60 letters, digits, spaces, `_`, `-`), `count` (integer 0 to 100), `confidence` (0 to 1). Never an image, a name or other personal data; any other key is `400` |
+| `evidenceId` | no | A `proctor_snapshot` evidence row of this session, else `400` |
+
+The **server** sets `severity` (a `severity` key in the body is `400`): low `tab_hidden`, `fullscreen_exit`, `window_blur`, `permission_revoked`, `object_detected`; medium `face_not_present`; high `multiple_faces`, `person_detected`, `phone_detected`, `camera_blocked`, `camera_frozen`.
+
+`201` new, `200` replay: `{ id, sessionId, clientEventId, type, severity, capturedAt, receivedAt, evidenceId, replayed }`. The same `clientEventId` with a different `type`, `capturedAt`, `detail` or `evidenceId` is `409 CONFLICT_IDEMPOTENT`. The server does not enforce the cooldown.
+Audit: `proctoring.flag` or `proctoring.flag_replay` (session, type, severity, time, evidence id; no request body).
+
+### Snapshots: POST /batches/:id/evidence with kind `proctor_snapshot`
+The evidence vault upload, with `kind=proctor_snapshot` and `sessionId=<proctoring session id>`. JPEG only (PNG or anything else is `400`), 25 MB limit. Only a `candidate` may send this kind, and it is the only kind a candidate may send (`403` otherwise). The session must be the candidate's own and on this batch (`403`), and the candidate must be on the batch's active roster (`403`). `candidateId` may not be sent with this kind; the server copies it from the session. `sessionId` with any other kind is `400`. Evidence responses now carry `sessionId` (null for other kinds). Idempotency, checksum, audit and access logging are unchanged. The batch's assigned `proctor` and `assessor` may also read `proctor_snapshot` rows of their batches (open question 624).
+
+### GET /api/v1/proctoring/sessions?batchId=&status=&minSeverity=&page=&pageSize=
+Roles: `aa_admin` and `ncvet_viewer` (all), `proctor` (batches whose `proctorId` is theirs), `assessor` (batches whose `assessorId` is theirs), `ab_reviewer` (own `abId`). Everyone else `403`. `status` is `active`, `feed_lost` or `ended`; `minSeverity` `low`, `medium` or `high` keeps sessions with at least one flag of that severity or higher. `page` default 1, `pageSize` default 50, max 100. Newest session first.
+```json
+{ "page": 1, "pageSize": 50, "total": 1, "serverTime": "2026-11-20T05:01:00.000Z",
+  "items": [ { "id": "66f0...", "attemptId": "66f0...", "batchId": "66f0...", "abId": "66f0...",
+    "candidateId": "66f0...", "candidateName": "Asha Devi", "status": "feed_lost", "attemptStatus": "in_progress",
+    "startedAt": "...", "lastSeenAt": "...", "flagCounts": { "low": 2, "medium": 0, "high": 1 },
+    "unreviewedCount": 3, "warningCount": 0, "invalidationRecommended": false, "invalidationRecommendedAt": null } ] }
+```
+
+### GET /api/v1/proctoring/sessions/:id
+Same roles and scope (`403` outside scope, `404` unknown). The list item plus `serverTime`, `warnings[{ id, message, createdAt }]` and `flags[]`, oldest `capturedAt` first: `{ id, sessionId, clientEventId, type, severity, capturedAt, receivedAt, detail, evidenceId, review }`, where `review` is `null` or `{ decision, note, decidedAt, decidedBy, decidedByRole }`. Load a snapshot with `GET /evidence/:evidenceId/file` (access-logged).
+
+### GET /api/v1/proctoring/sessions/:id/report (P-04)
+Same roles and scope. Writes nothing.
+```json
+{ "sessionId": "...", "attemptId": "...", "batchId": "...", "candidateId": "...", "candidateName": "Asha Devi",
+  "generatedAt": "...", "status": "ended", "attemptStatus": "submitted", "startedAt": "...", "lastSeenAt": "...",
+  "invalidationRecommended": true, "invalidationRecommendedAt": "...",
+  "totals": { "flags": 3, "bySeverity": { "low": 2, "medium": 0, "high": 1 }, "reviewed": 2, "unreviewed": 1, "warnings": 0 },
+  "byType": [ { "type": "phone_detected", "severity": "high", "count": 1 }, { "type": "tab_hidden", "severity": "low", "count": 2 } ],
+  "timeline": [ { "flagId": "...", "type": "tab_hidden", "severity": "low", "capturedAt": "...", "receivedAt": "...", "evidenceId": null, "decision": "dismiss" } ],
+  "decisions": [ { "flagId": "...", "type": "tab_hidden", "severity": "low", "decision": "dismiss", "note": null, "decidedAt": "...", "decidedByRole": "proctor" } ] }
+```
+`byType` is sorted high to low severity, then by type. `timeline` is oldest first; `decisions` are in the order they were made.
+
+### PATCH /api/v1/proctoring/flags/:id/review (P-08)
+Roles: `aa_admin` (any flag) and `proctor` (flags of their batches). Body `{ "decision": "dismiss" | "warn" | "invalidate_recommended", "note"?: "up to 300 characters" }`. Only `aa_admin` may send `invalidate_recommended` (`403` for a proctor). Every other role `403`; unknown flag `404`.
+- `dismiss`: records the decision only.
+- `warn`: also adds a warning to the session. Its message is the `note`, or a default message when there is no note. The candidate reads it at `GET /sessions/:id/warnings`.
+- `invalidate_recommended`: also marks the session (`invalidationRecommended: true`; the first recommendation is kept). It never changes the attempt or the result; invalidating is a separate human step outside this API.
+
+One decision per flag: a second review is `409 PROCTORING_FLAG_REVIEWED` (open question 625). `200` the flag as in the detail view.
+Audit: `proctoring.review_dismiss`, `proctoring.review_warn` or `proctoring.review_invalidate_recommended`, with `before` and `after` `{ flag: { sessionId, type, severity, capturedAt, evidenceId, detail, decision, noteLength }, session: { attemptId, batchId, candidateId, lastSeenAt, flagCounts, warningCount, invalidationRecommended } }`. The note text, the warning message, the snapshot and the candidate's name are never written to the audit row.
+
+### GET /api/v1/proctoring/sessions/:id/warnings
+Role: `candidate`, own session only (staff read warnings in the session detail). `200 [ { "id", "message", "createdAt" } ]`, oldest first.
