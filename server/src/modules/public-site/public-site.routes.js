@@ -54,8 +54,17 @@ const adminListQuery = z
   })
   .strict();
 
+/** Public callers may not page deeper than this; narrow with a filter instead. */
+export const PUBLIC_PAGE_MAX = 100;
+
 function publicListQuery(slug) {
-  return z.object({ ...pageFields, ...(RESOURCES[slug].publicQuery ?? {}) }).strict();
+  return z
+    .object({
+      ...pageFields,
+      page: queryNumber({ min: 1, max: PUBLIC_PAGE_MAX, fallback: 1 }),
+      ...(RESOURCES[slug].publicQuery ?? {}),
+    })
+    .strict();
 }
 
 function slugOf(req) {

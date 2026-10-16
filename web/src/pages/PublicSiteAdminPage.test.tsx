@@ -168,6 +168,9 @@ it("publishes a draft with a PATCH and confirms it", async () => {
   const user = userEvent.setup();
 
   await user.click(await screen.findByRole("button", { name: "Publish Asha Rao" }));
+  expect(calls(fetchMock, "PATCH")).toHaveLength(0);
+  const dialog = await screen.findByRole("dialog", { name: "Publish Asha Rao?" });
+  await user.click(within(dialog).getByRole("button", { name: "Publish" }));
 
   expect(await screen.findByText("Asha Rao is now published.")).toBeInTheDocument();
   const [call] = calls(fetchMock, "PATCH");
@@ -186,6 +189,9 @@ it("explains CONSENT_REQUIRED in plain words when publishing without consent", a
   const user = userEvent.setup();
 
   await user.click(await screen.findByRole("button", { name: "Publish Asha Rao" }));
+  await user.click(
+    within(await screen.findByRole("dialog", { name: "Publish Asha Rao?" })).getByRole("button", { name: "Publish" }),
+  );
 
   const alert = await screen.findByRole("alert");
   expect(alert).toHaveTextContent("Consent has not been recorded, so this cannot be published yet.");
@@ -350,4 +356,56 @@ it("keeps other sections free of the bills warning", async () => {
 
   await screen.findByText(/No events yet/);
   expect(screen.queryByText(/Bills are never shown publicly/)).not.toBeInTheDocument();
+});
+
+it("cancels a publish without a request", async () => {
+  const fetchMock = install([DRAFT_PERSON]);
+  setSession(sessionFor("aa_admin"));
+  renderApp("/admin/public-site?section=people");
+  const user = userEvent.setup();
+
+  await user.click(await screen.findByRole("button", { name: "Publish Asha Rao" }));
+  const dialog = await screen.findByRole("dialog", { name: "Publish Asha Rao?" });
+  await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(calls(fetchMock, "PATCH")).toHaveLength(0);
+});
+
+it("does not keep the old section's rows while a new section loads", async () => {
+  install([LIVE_PERSON], (u) =>
+    u.pathname === `${BASE}/team-members` ? new Promise<Response>(() => {}) : undefined,
+  );
+  setSession(sessionFor("aa_admin"));
+  renderApp("/admin/public-site?section=people");
+  const user = userEvent.setup();
+
+  expect(await screen.findByRole("row", { name: /Ravi Menon/ })).toBeInTheDocument();
+  await user.click(screen.getByRole("link", { name: "Team members" }));
+
+  await waitFor(() => expect(screen.queryByRole("row", { name: /Ravi Menon/ })).not.toBeInTheDocument());
+});
+
+it("steps back one page when a later page comes back empty", async () => {
+  const fetchMock = install([], (u) => {
+    if (u.pathname !== `${BASE}/people`) return undefined;
+    const page = Number(u.searchParams.get("page"));
+    return jsonResponse(200, {
+      page,
+      pageSize: 20,
+      total: 21,
+      items: page === 1 ? [LIVE_PERSON] : [],
+    });
+  });
+  setSession(sessionFor("aa_admin"));
+  renderApp("/admin/public-site?section=people");
+  const user = userEvent.setup();
+
+  await user.click(await screen.findByRole("button", { name: "Next page" }));
+
+  await waitFor(() => {
+    const pages = calls(fetchMock, "GET").map(([input]) => url(input).searchParams.get("page"));
+    expect(pages.filter((p) => p === "1").length).toBeGreaterThanOrEqual(2);
+  });
+  expect(await screen.findByRole("row", { name: /Ravi Menon/ })).toBeInTheDocument();
 });

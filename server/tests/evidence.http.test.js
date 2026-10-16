@@ -874,6 +874,45 @@ describe("evidence vault", () => {
       expect(logs[0].actorId.toString()).toBe(w.admin.userId);
     });
 
+    it("passes the inline flag to the link only for images and PDFs", async () => {
+      const w = await world();
+      const img = await upload(w.assessorSession.token, w.batch._id, {
+        file: jpeg(300),
+        fields: { candidateId: String(w.candidate._id) },
+      });
+      const local = createLocalStorage({ dir: storageDir });
+      const seen = [];
+      try {
+        setEvidenceStorage({
+          ...local,
+          get: local.get,
+          put: local.put,
+          async signedUrl(key, options) {
+            seen.push(options.inline);
+            return "https://bucket.example/signed";
+          },
+        });
+        const get = (query) =>
+          request(app)
+            .get(`/api/v1/evidence/${img.body.id}/file${query}`)
+            .set(bearer(w.admin.token));
+        expect((await get("")).body.url).toBe("https://bucket.example/signed");
+        expect((await get("?inline=true")).status).toBe(200);
+        expect((await get("?inline=false")).status).toBe(200);
+        expect((await get("?inline=maybe")).status).toBe(400);
+        expect((await get("?other=1")).status).toBe(400);
+        expect(seen).toEqual([false, true, false]);
+        await Evidence.collection.updateOne(
+          { _id: new mongoose.Types.ObjectId(img.body.id) },
+          { $set: { contentType: "video/mp4" } },
+        );
+        expect((await get("?inline=true")).status).toBe(200);
+        expect(seen.at(-1)).toBe(false);
+      } finally {
+        setEvidenceStorage(local);
+      }
+    });
+
     it("writes one entry per download", async () => {
       const w = await world();
       const saved = await upload(w.assessorSession.token, w.batch._id);

@@ -6,6 +6,7 @@ import { AuditLog } from "../src/models/audit-log.model.js";
 import { OrganogramNode } from "../src/models/public-site.model.js";
 import { USER_ROLES } from "../src/models/roles.js";
 import { resetLoginRateLimit } from "../src/modules/auth/login-rate-limit.js";
+import { resetRegistryIdCache } from "../src/modules/public-site/public-site.service.js";
 import { resetPublicRateLimit } from "../src/modules/public-site/public-site.rate-limit.js";
 import { RESOURCE_SLUGS } from "../src/modules/public-site/public-site.resources.js";
 import { clearCollections, startMongo, stopMongo } from "./helpers/db.js";
@@ -96,7 +97,7 @@ function samples() {
       body: {
         title: "Electrician paper 1",
         qualificationId: String(qualificationId),
-        fileRef: "papers/el-1.pdf",
+        fileRef: "https://files.example/papers/el-1.pdf",
       },
       shown: ["id", "title", "fileRef", "qualification"],
     },
@@ -128,7 +129,11 @@ function samples() {
       shown: ["id", "kind", "title", "body", "memberName", "memberRole", "fileRef"],
     },
     "office-documents": {
-      body: { category: "lease", title: "Lease agreement", fileRef: "docs/lease.pdf" },
+      body: {
+        category: "lease",
+        title: "Lease agreement",
+        fileRef: "https://files.example/docs/lease.pdf",
+      },
       shown: ["id", "category", "title", "note", "fileRef", "proofOnFile"],
     },
     events: {
@@ -149,6 +154,7 @@ describe("public site content", () => {
     await clearCollections();
     resetLoginRateLimit();
     resetPublicRateLimit();
+    resetRegistryIdCache();
     await seedRegistry();
   });
 
@@ -532,13 +538,13 @@ describe("public site content", () => {
       await post(admin.token, "office-documents", {
         category: "lease",
         title: "L",
-        fileRef: "a",
+        fileRef: "https://files.example/a",
         published: true,
       });
       await post(admin.token, "office-documents", {
         category: "electricity_bill",
         title: "E",
-        fileRef: "b",
+        fileRef: "https://files.example/b",
         published: true,
       });
       expect((await pub("office-documents?category=lease")).body.items.map((r) => r.title)).toEqual(
@@ -691,11 +697,13 @@ describe("public site content", () => {
       expect(person.status).toBe(201);
 
       // Public endpoint displays the assessor
+      resetRegistryIdCache();
       let pubRes = await pub("people");
       expect(pubRes.body.items.map((r) => r.id)).toContain(person.body.id);
 
       // 1. Mark assessor inactive in registry
       await db.collection("assessors").updateOne({ _id: assessorId }, { $set: { active: false } });
+      resetRegistryIdCache();
       pubRes = await pub("people");
       expect(pubRes.body.items.map((r) => r.id)).not.toContain(person.body.id);
 
@@ -707,6 +715,7 @@ describe("public site content", () => {
       await db
         .collection("assessors")
         .updateOne({ _id: assessorId }, { $set: { active: true, "toa.expiresOn": "2020-01-01" } });
+      resetRegistryIdCache();
       pubRes = await pub("people");
       expect(pubRes.body.items.map((r) => r.id)).not.toContain(person.body.id);
 
@@ -714,6 +723,7 @@ describe("public site content", () => {
       await db
         .collection("assessors")
         .updateOne({ _id: assessorId }, { $set: { "toa.expiresOn": "2029-01-01" } });
+      resetRegistryIdCache();
       pubRes = await pub("people");
       expect(pubRes.body.items.map((r) => r.id)).toContain(person.body.id);
 
@@ -725,12 +735,103 @@ describe("public site content", () => {
         consentRecorded: true,
         published: true,
       });
+      resetRegistryIdCache();
       pubRes = await pub("people");
       expect(pubRes.body.items.map((r) => r.id)).toContain(proctorPerson.body.id);
 
       await db.collection("proctors").updateOne({ _id: proctorId }, { $set: { active: false } });
+      resetRegistryIdCache();
       pubRes = await pub("people");
       expect(pubRes.body.items.map((r) => r.id)).not.toContain(proctorPerson.body.id);
+    });
+
+    it("allows memberName and memberRole only for committee members", async () => {
+      const admin = await sessionFor("aa_admin");
+      const policyName = await post(admin.token, "posh", {
+        kind: "policy",
+        title: "Policy",
+        memberName: "Meera",
+      });
+      expect(policyName.status).toBe(400);
+      const policyRole = await post(admin.token, "posh", {
+        kind: "policy",
+        title: "Policy",
+        memberRole: "Chair",
+      });
+      expect(policyRole.status).toBe(400);
+      expect((await post(admin.token, "posh", { kind: "policy", title: "Policy" })).status).toBe(
+        201,
+      );
+      const member = await post(admin.token, "posh", samples().posh.body);
+      expect(member.status).toBe(201);
+      expect((await patch(admin.token, "posh", member.body.id, { kind: "policy" })).status).toBe(
+        400,
+      );
+    });
+
+    it("accepts only http or https for photoRef, logoRef and fileRef", async () => {
+      const admin = await sessionFor("aa_admin");
+      const bad = ["javascript:alert(1)", "data:text/html,x", "papers/a.pdf", "ftp://x.example/a"];
+      for (const value of bad) {
+        expect(
+          (
+            await post(admin.token, "team-members", {
+              ...samples()["team-members"].body,
+              photoRef: value,
+            })
+          ).status,
+        ).toBe(400);
+        expect(
+          (await post(admin.token, "industry-linkages", { name: "N", logoRef: value })).status,
+        ).toBe(400);
+        expect(
+          (
+            await post(admin.token, "office-documents", {
+              category: "lease",
+              title: "L",
+              fileRef: value,
+            })
+          ).status,
+        ).toBe(400);
+      }
+      expect(
+        (
+          await post(admin.token, "team-members", {
+            ...samples()["team-members"].body,
+            photoRef: "https://img.example/a.jpg",
+          })
+        ).status,
+      ).toBe(201);
+      expect(
+        (
+          await post(admin.token, "industry-linkages", {
+            name: "N",
+            logoRef: "http://x.example/l.png",
+          })
+        ).status,
+      ).toBe(201);
+    });
+
+    it("caps the public page number at 100", async () => {
+      expect((await pub("team-members?page=100")).status).toBe(200);
+      expect((await pub("team-members?page=101")).status).toBe(400);
+    });
+
+    it("reuses the active registry id set for 60 seconds", async () => {
+      const admin = await sessionFor("aa_admin");
+      const person = await post(admin.token, "people", {
+        ...samples().people.body,
+        published: true,
+      });
+      expect(person.status).toBe(201);
+      resetRegistryIdCache();
+      expect((await pub("people")).body.total).toBe(1);
+      await mongoose.connection.db
+        .collection("assessors")
+        .updateOne({ _id: assessorId }, { $set: { active: false } });
+      expect((await pub("people")).body.total).toBe(1);
+      resetRegistryIdCache();
+      expect((await pub("people")).body.total).toBe(0);
     });
 
     it("replaces hard delete with unpublish and archived flag", async () => {
@@ -773,22 +874,22 @@ describe("public site content", () => {
       const elec = await post(admin.token, "office-documents", {
         category: "electricity_bill",
         title: "Office Electricity 2026",
-        fileRef: "uploads/bills/electricity-jan.pdf",
+        fileRef: "https://files.example/bills/electricity-jan.pdf",
         published: true,
       });
       expect(elec.status).toBe(201);
       // Admin sees fileRef
-      expect(elec.body.fileRef).toBe("uploads/bills/electricity-jan.pdf");
+      expect(elec.body.fileRef).toBe("https://files.example/bills/electricity-jan.pdf");
 
       // Create non-utility doc
       const lease = await post(admin.token, "office-documents", {
         category: "lease",
         title: "Office Lease Agreement",
-        fileRef: "uploads/docs/lease-2026.pdf",
+        fileRef: "https://files.example/docs/lease-2026.pdf",
         published: true,
       });
       expect(lease.status).toBe(201);
-      expect(lease.body.fileRef).toBe("uploads/docs/lease-2026.pdf");
+      expect(lease.body.fileRef).toBe("https://files.example/docs/lease-2026.pdf");
 
       // Check public endpoint
       const pubDocs = await pub("office-documents");
@@ -800,7 +901,7 @@ describe("public site content", () => {
       const pubLease = pubDocs.body.items.find((d) => d.id === lease.body.id);
       expect(pubLease).toBeDefined();
       expect(pubLease.proofOnFile).toBe(false);
-      expect(pubLease.fileRef).toBe("uploads/docs/lease-2026.pdf");
+      expect(pubLease.fileRef).toBe("https://files.example/docs/lease-2026.pdf");
     });
   });
 });

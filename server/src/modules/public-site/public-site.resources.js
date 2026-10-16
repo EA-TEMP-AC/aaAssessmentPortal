@@ -36,8 +36,6 @@ const isoDate = z
   }, "Not a real calendar date");
 
 const str = (max) => z.string().trim().min(1).max(max);
-/** A reference to a file or photo hosted elsewhere. Not fetched, not uploaded. */
-const ref = z.string().trim().min(1).max(500);
 const optionalText = (max) => z.string().trim().max(max).nullish();
 
 const common = {
@@ -57,6 +55,9 @@ const httpUrl = z
       return false;
     }
   }, "Use an http or https address");
+
+/** A reference to a file or photo hosted elsewhere. Not fetched, not uploaded. http(s) only. */
+const ref = httpUrl;
 
 async function registryCheck(body, existing) {
   if (existing) return {};
@@ -265,6 +266,17 @@ export const RESOURCES = {
     publicFields: ["kind", "title", "body", "memberName", "memberRole", "fileRef"],
     publicQuery: { kind: queryEnum(POSH_KINDS) },
     refine(body, ctx) {
+      if (body.kind !== undefined && body.kind !== "committee_member") {
+        for (const key of ["memberName", "memberRole"]) {
+          if (body[key] != null && body[key] !== "") {
+            ctx.addIssue({
+              code: "custom",
+              path: [key],
+              message: `${key} is only allowed for a committee member`,
+            });
+          }
+        }
+      }
       if (body.kind === "committee_member" && !body.memberName) {
         ctx.addIssue({
           code: "custom",

@@ -39,12 +39,16 @@ export function createS3Storage({ bucket, client, presign = getSignedUrl }) {
       return { stream: out.Body, size: out.ContentLength };
     },
 
-    async signedUrl(key, { expiresInSeconds, contentType, filename } = {}) {
+    async signedUrl(key, { expiresInSeconds, contentType, filename, inline = false } = {}) {
       const command = new GetObjectCommand({
         Bucket: bucket,
         Key: key,
         ...(contentType ? { ResponseContentType: contentType } : {}),
-        ...(filename ? { ResponseContentDisposition: `attachment; filename="${filename}"` } : {}),
+        ...(inline
+          ? { ResponseContentDisposition: "inline" }
+          : filename
+            ? { ResponseContentDisposition: `attachment; filename="${filename}"` }
+            : {}),
       });
       return presign(client, command, { expiresIn: expiresInSeconds ?? 120 });
     },

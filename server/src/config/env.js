@@ -18,6 +18,20 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().positive().default(3000),
   MONGO_URI: z.string().min(1).optional(),
   JWT_ACCESS_SECRET: z.string().min(1).optional(),
+  /**
+   * Express `trust proxy`. Off by default. Set to a hop count (`1`) or `true` when the API runs
+   * behind a reverse proxy, so req.ip and the rate limits use the real client address.
+   */
+  TRUST_PROXY: z.preprocess(
+    (value) => {
+      if (value === undefined || value === null || value === "") return false;
+      if (value === true || value === "true") return true;
+      if (value === false || value === "false") return false;
+      if (typeof value === "string" && /^\d+$/.test(value)) return Number(value);
+      return value;
+    },
+    z.union([z.boolean(), z.number().int().min(1).max(10)]).default(false),
+  ),
   /** bcrypt cost. Integer 4–15. Defaults to 10. Tests usually set 4. */
   BCRYPT_COST: z.coerce.number().int().min(4).max(15).default(10),
   /** Dev seed only. When unset, the seed script uses its documented default. */
