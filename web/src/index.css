@@ -993,3 +993,24 @@ button.button-danger {
 .proctor-photo-large { display: block; max-width: 100%; max-height: 70vh; margin: 0 auto 0.75rem; }
 .proctor-strip { list-style: none; padding: 0; margin: 0 0 0.75rem; display: grid; grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr)); gap: 0.75rem; }
 .exam-proctor-debug { border: 1px dashed #5c6670; padding: 0.5rem 0.75rem; }
+
+/* X-08: candidate dashboard and two-step pre-exam check */
+.exam-toolbar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.75rem 1.5rem; margin: 0 0 1rem; }
+.exam-view-toggle { display: flex; gap: 0.5rem; }
+.exam-view-toggle button[aria-pressed="true"] { background: #0b3a6e; color: #ffffff; }
+.exam-tabs { display: flex; flex-wrap: wrap; gap: 0.25rem; border-bottom: 2px solid #d5dbe3; margin: 0 0 1rem; }
+.exam-tab { background: #ffffff; color: #0b3a6e; border: 1px solid #d5dbe3; border-bottom: 0; border-radius: 6px 6px 0 0; }
+.exam-tab[aria-selected="true"] { background: #0b3a6e; color: #ffffff; }
+.exam-tab:disabled { color: #4b5563; }
+.exam-cards { list-style: none; padding: 0; margin: 0; display: grid; gap: 1rem; }
+.exam-cards-grid { grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr)); }
+.exam-card { border: 1px solid #d5dbe3; border-radius: 6px; padding: 1rem; }
+.exam-card h3 { margin: 0 0 0.25rem; font-size: 1.0625rem; }
+.exam-card-batch { margin: 0 0 0.5rem; color: #374151; }
+.exam-card-state { font-weight: 600; }
+.exam-cards-list .exam-card { display: grid; gap: 0.25rem; }
+.exam-progress { height: 0.5rem; background: #e5e7eb; border-radius: 4px; overflow: hidden; margin: 0.75rem 0 0.25rem; }
+.exam-progress-bar { height: 100%; background: #0b3a6e; transition: width 0.2s; }
+.exam-progress-text { margin: 0 0 0.75rem; font-weight: 600; }
+.exam-checks { list-style: none; padding: 0; margin: 0 0 1rem; display: grid; gap: 0.5rem; }
+.exam-check-row { border: 1px solid #d5dbe3; border-radius: 6px; padding: 0.5rem 0.75rem; }

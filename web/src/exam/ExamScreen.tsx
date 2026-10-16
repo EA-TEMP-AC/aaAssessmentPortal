@@ -24,6 +24,11 @@ type Props = {
   face?: FaceStart | null;
   onFinished: (outcome: ExamOutcome) => void;
   autosaveDebounceMs?: number;
+  /**
+   * X-08: off in the exam window. When on, the exam asks for full screen, shows the "return to
+   * full screen" notice and the engine raises fullscreen_exit. Kept so a batch setting can turn it back on.
+   */
+  requireFullscreen?: boolean;
 };
 
 const TYPE_HINTS: Record<string, string> = {
@@ -88,7 +93,7 @@ function QuestionBody({
   );
 }
 
-export function ExamScreen({ attempt, stream, face, onFinished, autosaveDebounceMs }: Props) {
+export function ExamScreen({ attempt, stream, face, onFinished, autosaveDebounceMs, requireFullscreen = false }: Props) {
   const questions = attempt.questions;
   const [answers, setAnswers] = useState<Record<string, string>>(() =>
     Object.fromEntries(questions.map((q) => [q.questionId, q.answer ?? ""])),
@@ -112,7 +117,7 @@ export function ExamScreen({ attempt, stream, face, onFinished, autosaveDebounce
   const firstRender = useRef(true);
 
   const remaining = useExamClock(attempt.deadlineAt, attempt.serverTime);
-  const proctoring = useProctoring({ attemptId: attempt.id, batchId: attempt.batchId, stream, face });
+  const proctoring = useProctoring({ attemptId: attempt.id, batchId: attempt.batchId, stream, face, requireFullscreen });
   const { stop: stopProctoring } = proctoring;
 
   const finish = useCallback(
@@ -286,7 +291,7 @@ export function ExamScreen({ attempt, stream, face, onFinished, autosaveDebounce
 
       {debugStripWanted() ? <ProctorDebugStrip status={proctoring.status} /> : null}
 
-      {fullscreenSupported() && !isFullscreen && !timeUp ? (
+      {requireFullscreen && fullscreenSupported() && !isFullscreen && !timeUp ? (
         <div className="form-warning exam-fullscreen" role="alert">
           <p>You left full screen. Leaving full screen is recorded for the proctor. Please return to full screen.</p>
           <button type="button" onClick={requestExamFullscreen}>

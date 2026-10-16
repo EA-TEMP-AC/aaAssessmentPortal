@@ -235,12 +235,19 @@ it("shows the no-op engine as limited when no real engine is installed", async (
   expect(screen.getByText("Proctoring engine not installed")).toBeInTheDocument();
 });
 
-it("asks the candidate to return to full screen after leaving it", async () => {
+it("does not ask for full screen in the exam window by default (X-08)", async () => {
+  Object.defineProperty(document.documentElement, "requestFullscreen", { value: vi.fn(async () => {}), configurable: true });
+  server();
+  render(<ExamScreen attempt={attempt()} stream={fakeStream().stream} onFinished={() => {}} />);
+  expect(screen.queryByRole("button", { name: "Return to full screen" })).not.toBeInTheDocument();
+});
+
+it("asks the candidate to return to full screen after leaving it when full screen is required", async () => {
   const user = userEvent.setup();
   const request = vi.fn(async () => {});
   Object.defineProperty(document.documentElement, "requestFullscreen", { value: request, configurable: true });
   server();
-  render(<ExamScreen attempt={attempt()} stream={fakeStream().stream} onFinished={() => {}} />);
+  render(<ExamScreen attempt={attempt()} stream={fakeStream().stream} onFinished={() => {}} requireFullscreen />);
   const notice = screen.getByRole("alert");
   expect(notice).toHaveTextContent(/You left full screen/);
   await user.click(within(notice).getByRole("button", { name: "Return to full screen" }));

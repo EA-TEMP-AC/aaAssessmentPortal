@@ -347,11 +347,13 @@ export function createEngine(options: EngineOptions = {}): ProctorEngine {
       if (document.visibilityState === "hidden") raiseEvent(r, "tab_hidden");
     });
     listen(r, window, "blur", () => raiseEvent(r, "window_blur"));
-    listen(r, document, "fullscreenchange", () => {
-      const isFull = Boolean(document.fullscreenElement);
-      if (r.wasFullscreen && !isFull) raiseEvent(r, "fullscreen_exit");
-      r.wasFullscreen = isFull;
-    });
+    if (o.watchFullscreen !== false) {
+      listen(r, document, "fullscreenchange", () => {
+        const isFull = Boolean(document.fullscreenElement);
+        if (r.wasFullscreen && !isFull) raiseEvent(r, "fullscreen_exit");
+        r.wasFullscreen = isFull;
+      });
+    }
     const cameraLost = (reason: string) => {
       raiseEvent(r, "permission_revoked", {
         label: reason,

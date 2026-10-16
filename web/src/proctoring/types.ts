@@ -62,6 +62,8 @@ export interface ProctorEngine {
     onFlag?: (flag: { type: ProctorFlagType }) => void;
     /** P-09: holds the selfie reference. When present, the live face is compared with it. */
     faceMatcher?: FaceMatcher;
+    /** X-08: false in the exam window, where full screen is not asked for. Default true. */
+    watchFullscreen?: boolean;
   }): Promise<void>;
   stop(): void;
 }

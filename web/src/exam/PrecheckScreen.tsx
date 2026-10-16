@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import {
   checkBrowser,
   checkNetwork,
@@ -69,6 +69,8 @@ type Props = {
   /** Gets the live camera stream. The exam keeps it for proctoring and stops it at the end. */
   onStart: (stream: MediaStream, face: FaceStart) => void;
   onCancel: () => void;
+  /** Text of the leave button. The exam window says "Close this window". */
+  cancelLabel?: string;
   frameCheck?: FrameCheckOptions;
   faceChecks?: FaceCheckOptions;
 };
@@ -99,9 +101,24 @@ function networkText(check: NetworkCheck | null, busy: boolean): string {
   return "The exam server could not be reached. Check your connection and try again.";
 }
 
-export function PrecheckScreen({ heading, starting, startError, onStart, onCancel, frameCheck, faceChecks }: Props) {
+export function PrecheckScreen({
+  heading,
+  starting,
+  startError,
+  onStart,
+  onCancel,
+  cancelLabel = "Back to my exams",
+  frameCheck,
+  faceChecks,
+}: Props) {
   const headingRef = useRef<HTMLHeadingElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const idVideoRef = useRef<HTMLVideoElement | null>(null);
+  const selfieVideoRef = useRef<HTMLVideoElement | null>(null);
+  const panelHeadingRefs = [useRef<HTMLHeadingElement>(null), useRef<HTMLHeadingElement>(null)];
+  const tabRefs = [useRef<HTMLButtonElement>(null), useRef<HTMLButtonElement>(null)];
+  const movedTab = useRef(false);
+  const [step, setStep] = useState<0 | 1>(0);
   const streamRef = useRef<MediaStream | null>(null);
   const handedOff = useRef(false);
   const runId = useRef(0);
@@ -111,7 +128,7 @@ export function PrecheckScreen({ heading, starting, startError, onStart, onCance
   const [network, setNetwork] = useState<NetworkCheck | null>(null);
   const [networkBusy, setNetworkBusy] = useState(true);
   const [consent, setConsent] = useState(false);
-  const [browser] = useState(checkBrowser);
+  const [browser, setBrowser] = useState(checkBrowser);
   const faceConfig = faceChecks?.config ?? DEFAULT_FACE_CONFIG;
   const matcherRef = useRef<IdFaceMatcher | null>(null);
   const idFrameRef = useRef<ImageBitmap | null>(null);
@@ -129,6 +146,8 @@ export function PrecheckScreen({ heading, starting, startError, onStart, onCance
   const [fallback, setFallback] = useState(false);
   const consentId = useId();
   const blockedId = useId();
+  const nextHintId = useId();
+  const tabsId = useId();
 
   useEffect(() => {
     headingRef.current?.focus();
@@ -187,11 +206,14 @@ export function PrecheckScreen({ heading, starting, startError, onStart, onCance
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [camera.state, faceModel]);
 
-  function attachPreview(element: HTMLVideoElement | null) {
-    if (element && streamRef.current && element.srcObject !== streamRef.current) {
-      element.srcObject = streamRef.current;
-      void Promise.resolve(element.play()).catch(() => {});
-    }
+  function previewRef(target: { current: HTMLVideoElement | null }) {
+    return (element: HTMLVideoElement | null) => {
+      target.current = element;
+      if (element && streamRef.current && element.srcObject !== streamRef.current) {
+        element.srcObject = streamRef.current;
+        void Promise.resolve(element.play()).catch(() => {});
+      }
+    };
   }
 
   async function verifyId() {
@@ -223,7 +245,7 @@ export function PrecheckScreen({ heading, starting, startError, onStart, onCance
   }
 
   async function captureId() {
-    const video = videoRef.current;
+    const video = idVideoRef.current;
     if (!video || faceBusy) return;
     setFaceBusy("id");
     setFaceMessage(null);
@@ -247,7 +269,7 @@ export function PrecheckScreen({ heading, starting, startError, onStart, onCance
   }
 
   async function takeSelfie() {
-    const video = videoRef.current;
+    const video = selfieVideoRef.current;
     if (!video || faceBusy) return;
     setFaceBusy("selfie");
     setFaceMessage(null);
@@ -386,12 +408,50 @@ export function PrecheckScreen({ heading, starting, startError, onStart, onCance
     if (startError) handedOff.current = false;
   }, [startError]);
 
-  const browserBlocked = browser.some((item) => item.required && !item.ok);
+  const networkOk = network?.state === "ok" || network?.state === "slow";
+  const required: { ok: boolean; todo: string }[] = [
+    ...browser.filter((item) => item.required).map((item) => ({ ok: item.ok, todo: item.label.toLowerCase() })),
+    { ok: camera.state === "passed", todo: "camera access" },
+    { ok: !networkBusy && networkOk, todo: "network speed" },
+  ];
+  const step1Ok = required.every((row) => row.ok);
+  const step1Todo = required.filter((row) => !row.ok).map((row) => row.todo);
+
+  function goTo(next: 0 | 1) {
+    if (next === 1 && !step1Ok) return;
+    movedTab.current = true;
+    setStep(next);
+  }
+
+  // Move focus to the new panel's heading after a tab change, never on the first render.
+  useEffect(() => {
+    if (!movedTab.current) return;
+    movedTab.current = false;
+    panelHeadingRefs[step].current?.focus();
+    // The refs are stable; only the step moves focus.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
+
+  function onTabKey(event: ReactKeyboardEvent<HTMLButtonElement>) {
+    let next: 0 | 1 | null = null;
+    if (event.key === "ArrowRight" || event.key === "ArrowLeft") next = step === 0 ? 1 : 0;
+    else if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = 1;
+    if (next === null) return;
+    event.preventDefault();
+    if (next === 1 && !step1Ok) return;
+    goTo(next);
+    tabRefs[next].current?.focus();
+  }
+
   const missing: string[] = [];
-  if (camera.state !== "passed") missing.push("pass the camera check");
+  if (!step1Ok) missing.push("pass the browser checks");
   if (!faceDone) missing.push("show your ID card and take a selfie");
   if (!consent) missing.push("agree to the proctoring notice");
   const canStart = missing.length === 0 && !starting;
+
+  const tabs = ["Browser checks", "Photo ID and photo"] as const;
+  const progress = step === 0 ? (step1Ok ? 1 : 0) : faceDone && consent ? 2 : 1;
 
   return (
     <section className="exam-precheck" aria-labelledby="precheck-heading">
@@ -400,179 +460,362 @@ export function PrecheckScreen({ heading, starting, startError, onStart, onCance
       </h1>
       <p>The exam timer starts only when you select Start exam.</p>
 
-      <h2>Step 1: camera</h2>
-      <div className="exam-camera">
-        <video
-          ref={videoRef}
-          className="exam-preview"
-          aria-label="Camera preview"
-          muted
-          playsInline
-          autoPlay
-          hidden={!hasPreview}
-        />
-        {!hasPreview ? <p className="field-hint">Your camera preview appears here.</p> : null}
+      <div
+        className="exam-progress"
+        role="progressbar"
+        aria-label="Pre-exam check progress"
+        aria-valuemin={0}
+        aria-valuemax={2}
+        aria-valuenow={progress}
+        aria-valuetext={`Step ${step + 1} of 2: ${tabs[step]}`}
+      >
+        <div className="exam-progress-bar" style={{ width: `${(progress / 2) * 100}%` }} />
       </div>
-      <p role="status" className={camera.state === "passed" ? "exam-check-ok" : undefined}>
-        {camera.state === "idle" && "The camera has not been checked yet."}
-        {camera.state === "requesting" && "Asking for camera permission…"}
-        {camera.state === "checking" && "Checking the camera picture…"}
-        {camera.state === "passed" && "Camera check passed."}
-      </p>
-      {camera.state === "failed" ? (
-        <p role="alert" className="form-error">
-          {camera.message}
-        </p>
-      ) : null}
-      <button
-        type="button"
-        onClick={() => void runCameraCheck()}
-        disabled={camera.state === "requesting" || camera.state === "checking" || starting}
-      >
-        {camera.state === "passed" ? "Check camera again" : "Check camera"}
-      </button>
-
-      <h2>Step 2: show your ID card</h2>
-      <p className="field-hint">
-        Hold your ID card in front of the camera so the photo on it is flat and in focus. The page does not read the
-        card's text or number.
-      </p>
-      {hasPreview ? (
-        <video className="exam-preview" aria-label="ID card preview" muted playsInline autoPlay ref={attachPreview} />
-      ) : null}
-      <button
-        type="button"
-        onClick={() => void captureId()}
-        disabled={camera.state !== "passed" || faceBusy !== null || starting || faceModel === "failed"}
-      >
-        {idResult === "unreadable" ? "Retry" : "Capture ID card"}
-      </button>
-      <p role="status">
-        {camera.state !== "passed" && "Pass the camera check first."}
-        {camera.state === "passed" && faceModel === "loading" && "Loading the face check…"}
-        {faceModel === "failed" && ID_STEP_MESSAGES.modelFailed}
-        {faceModel !== "failed" &&
-          idCaptured &&
-          idResult === "pending" &&
-          !selfieDone &&
-          "ID card captured. Now take a selfie."}
-        {idResult === "match" && ID_STEP_MESSAGES.match}
-        {idResult === "mismatch" && ID_STEP_MESSAGES.mismatch}
-        {idResult === "unreadable" && ID_STEP_MESSAGES.unreadable}
+      <p className="exam-progress-text" aria-hidden="true">
+        Step {step + 1} of 2: {tabs[step]}
       </p>
 
-      <h2>Step 3: take a selfie</h2>
-      <p className="field-hint">Look straight at the camera, alone in the picture, with your face well lit.</p>
-      {hasPreview ? (
-        <video className="exam-preview" aria-label="Selfie preview" muted playsInline autoPlay ref={attachPreview} />
-      ) : null}
-      <button
-        type="button"
-        onClick={() => void takeSelfie()}
-        disabled={camera.state !== "passed" || faceBusy !== null || starting || faceModel === "failed"}
-      >
-        {selfieDone ? "Take selfie again" : "Take selfie"}
-      </button>
-      <p role="status">{selfieDone ? "Selfie taken." : camera.state === "passed" ? "No selfie yet." : ""}</p>
-      {faceMessage ? (
-        <p role="alert" className="form-error">
-          {faceMessage}
-        </p>
-      ) : null}
-      {canFallback && !faceDone ? (
-        <button type="button" onClick={() => setFallback(true)} disabled={starting}>
-          {FALLBACK_LABEL}
-        </button>
-      ) : null}
-      {fallback && !idChecked ? (
-        <p role="status">A proctor will check your ID by hand. You can start the exam.</p>
-      ) : null}
-
-      <h2>Step 4: microphone (optional)</h2>
-      <p className="field-hint">Checks only that your browser allows the microphone. Nothing is recorded.</p>
-      <p role="status">
-        {mic === "idle" && "The microphone has not been checked."}
-        {mic === "requesting" && "Asking for microphone permission…"}
-        {mic === "ok" && "Microphone permission is allowed."}
-        {mic === "denied" && "Microphone permission was refused. You can still take the exam."}
-        {mic === "unavailable" && "No microphone was found. You can still take the exam."}
-      </p>
-      <button type="button" onClick={() => void runMicCheck()} disabled={mic === "requesting" || starting}>
-        Check microphone
-      </button>
-
-      <h2>Step 5: browser and network</h2>
-      <ul className="exam-checklist">
-        {browser.map((item) => (
-          <li key={item.id}>
-            <span className={item.ok ? "exam-check-ok" : "form-error-text"}>
-              {item.label}: {item.ok ? "OK" : item.required ? "Not available" : "Not available (optional)"}
-            </span>
-            {!item.ok ? <span className="field-hint"> {item.help}</span> : null}
-          </li>
-        ))}
-        <li>
-          <span role="status">Network: {networkText(network, networkBusy)}</span>{" "}
-          {!networkBusy ? (
-            <button type="button" onClick={() => void rerunNetwork()}>
-              Check network again
+      <div role="tablist" aria-label="Pre-exam check steps" className="exam-tabs">
+        {tabs.map((name, index) => {
+          const done = index === 0 && step1Ok && step === 1;
+          const locked = index === 1 && !step1Ok;
+          return (
+            <button
+              key={name}
+              ref={tabRefs[index]}
+              type="button"
+              role="tab"
+              id={`${tabsId}-tab-${index}`}
+              aria-selected={step === index}
+              aria-controls={`${tabsId}-panel-${index}`}
+              tabIndex={step === index ? 0 : -1}
+              disabled={locked}
+              className="exam-tab"
+              onClick={() => goTo(index as 0 | 1)}
+              onKeyDown={onTabKey}
+            >
+              {index + 1}. {name}
+              {done ? <span className="visually-hidden"> (done)</span> : null}
             </button>
-          ) : null}
-        </li>
-      </ul>
-      {browserBlocked ? (
-        <p role="alert" className="form-error">
-          This browser is missing something the exam needs. Open the portal in a recent browser over https.
-        </p>
-      ) : null}
+          );
+        })}
+      </div>
 
-      <h2>Step 6: proctoring notice</h2>
-      <div className="exam-consent" id={consentId}>
-        <p>Your camera is used for proctoring while the exam is open.</p>
-        <ul>
-          <li>No video is uploaded or recorded.</li>
-          <li>
-            The exam software looks for things like your face leaving the camera, another person, or a phone, and
-            records a flag when it sees one. It may also take an occasional snapshot.
-          </li>
-          <li>
-            The face on your ID card is compared with your selfie, and your face is compared with that selfie during the
-            exam. No government record is checked. The comparison happens in your browser.
-          </li>
-          <li>Nothing is sent except flags and a few photos, including the photo of your ID card and your selfie.</li>
-          <li>A person reviews every flag. Nothing is decided against you automatically.</li>
-          <li>The exam opens in full screen. Leaving full screen or switching tabs is recorded as a flag.</li>
+      <div
+        role="tabpanel"
+        id={`${tabsId}-panel-0`}
+        aria-labelledby={`${tabsId}-tab-0`}
+        hidden={step !== 0}
+        className="exam-tabpanel"
+      >
+        <h2 ref={panelHeadingRefs[0]} tabIndex={-1}>
+          Browser checks
+        </h2>
+        <ul className="exam-checks">
+          {browser.map((item) => (
+            <CheckRow
+              key={item.id}
+              label={item.label}
+              state={item.ok ? "pass" : "fail"}
+              reason={
+                item.ok
+                  ? item.id === "secure"
+                    ? "The connection to this page is secure."
+                    : "Your browser can run the exam."
+                  : item.help
+              }
+              buttonLabel={`Retry ${item.label.toLowerCase()} check`}
+              onRetry={() => setBrowser(checkBrowser())}
+              disabled={starting}
+            />
+          ))}
+          <CheckRow
+            label="Camera access"
+            state={
+              camera.state === "passed"
+                ? "pass"
+                : camera.state === "failed"
+                  ? "fail"
+                  : camera.state === "idle"
+                    ? "idle"
+                    : "busy"
+            }
+            reason={cameraReason(camera)}
+            buttonLabel={camera.state === "idle" ? "Check camera" : "Retry camera check"}
+            onRetry={() => void runCameraCheck()}
+            disabled={camera.state === "requesting" || camera.state === "checking" || starting}
+          />
+          <CheckRow
+            label="Microphone"
+            optional
+            state={
+              mic === "ok" ? "pass" : mic === "denied" || mic === "unavailable" ? "fail" : mic === "idle" ? "idle" : "busy"
+            }
+            reason={micReason(mic)}
+            buttonLabel={mic === "idle" ? "Check microphone" : "Retry microphone check"}
+            onRetry={() => void runMicCheck()}
+            disabled={mic === "requesting" || starting}
+          />
+          <CheckRow
+            label="Network speed"
+            state={networkBusy || !network ? "busy" : networkOk ? "pass" : "fail"}
+            reason={networkText(network, networkBusy)}
+            buttonLabel="Retry network check"
+            onRetry={() => void rerunNetwork()}
+            disabled={networkBusy || starting}
+          />
         </ul>
-      </div>
-      <label className="check-label">
-        <input
-          type="checkbox"
-          checked={consent}
-          onChange={(event) => setConsent(event.target.checked)}
-          aria-describedby={consentId}
-          disabled={starting}
-        />
-        I have read the proctoring notice and agree to the camera being used during the exam.
-      </label>
 
-      {startError ? (
-        <p role="alert" className="form-error">
-          {startError}
-        </p>
-      ) : null}
-      <div className="dialog-actions">
-        <button type="button" onClick={start} disabled={!canStart} aria-describedby={canStart ? undefined : blockedId}>
-          {starting ? "Starting…" : "Start exam"}
-        </button>
-        <button type="button" onClick={onCancel} disabled={starting}>
-          Back to my exams
-        </button>
+        <div className="exam-camera">
+          <video
+            ref={videoRef}
+            className="exam-preview"
+            aria-label="Camera preview"
+            muted
+            playsInline
+            autoPlay
+            hidden={!hasPreview}
+          />
+          {!hasPreview ? <p className="field-hint">Your camera preview appears here.</p> : null}
+        </div>
+
+        <div className="dialog-actions">
+          <button
+            type="button"
+            onClick={() => goTo(1)}
+            disabled={!step1Ok || starting}
+            aria-describedby={step1Ok ? undefined : nextHintId}
+          >
+            Next: photo ID and photo
+          </button>
+          <button type="button" onClick={onCancel} disabled={starting}>
+            {cancelLabel}
+          </button>
+        </div>
+        {!step1Ok ? (
+          <p id={nextHintId} className="field-hint">
+            To continue, pass: {step1Todo.join(", ")}.
+          </p>
+        ) : null}
       </div>
-      {!canStart && !starting ? (
-        <p id={blockedId} className="field-hint">
-          To start, {missing.join(" and ")}.
+
+      <div
+        role="tabpanel"
+        id={`${tabsId}-panel-1`}
+        aria-labelledby={`${tabsId}-tab-1`}
+        hidden={step !== 1}
+        className="exam-tabpanel"
+      >
+        <h2 ref={panelHeadingRefs[1]} tabIndex={-1}>
+          Photo ID and photo
+        </h2>
+        {camera.state !== "passed" ? (
+          <div role="alert" className="form-error">
+            <p>The camera is not working. Go back to the browser checks and retry the camera check.</p>
+            <button type="button" onClick={() => goTo(0)}>
+              Back to browser checks
+            </button>
+          </div>
+        ) : null}
+
+        <h3>Show your ID card</h3>
+        <p className="field-hint">
+          Hold your ID card in front of the camera so the photo on it is flat and in focus. The page does not read the
+          card's text or number.
         </p>
-      ) : null}
+        {hasPreview ? (
+          <video
+            className="exam-preview"
+            aria-label="ID card preview"
+            muted
+            playsInline
+            autoPlay
+            ref={previewRef(idVideoRef)}
+          />
+        ) : null}
+        <button
+          type="button"
+          onClick={() => void captureId()}
+          disabled={camera.state !== "passed" || faceBusy !== null || starting || faceModel === "failed"}
+        >
+          {idResult === "unreadable" ? "Retry" : "Capture ID card"}
+        </button>
+        <p role="status">
+          {camera.state === "passed" && faceModel === "loading" && "Loading the face check…"}
+          {faceModel === "failed" && ID_STEP_MESSAGES.modelFailed}
+          {faceModel !== "failed" &&
+            idCaptured &&
+            idResult === "pending" &&
+            !selfieDone &&
+            "ID card captured. Now take a selfie."}
+          {idResult === "match" && ID_STEP_MESSAGES.match}
+          {idResult === "mismatch" && ID_STEP_MESSAGES.mismatch}
+          {idResult === "unreadable" && ID_STEP_MESSAGES.unreadable}
+        </p>
+
+        <h3>Take a selfie</h3>
+        <p className="field-hint">Look straight at the camera, alone in the picture, with your face well lit.</p>
+        {hasPreview ? (
+          <video
+            className="exam-preview"
+            aria-label="Selfie preview"
+            muted
+            playsInline
+            autoPlay
+            ref={previewRef(selfieVideoRef)}
+          />
+        ) : null}
+        <button
+          type="button"
+          onClick={() => void takeSelfie()}
+          disabled={camera.state !== "passed" || faceBusy !== null || starting || faceModel === "failed"}
+        >
+          {selfieDone ? "Take selfie again" : "Take selfie"}
+        </button>
+        <p role="status">{selfieDone ? "Selfie taken." : camera.state === "passed" ? "No selfie yet." : ""}</p>
+        {faceMessage ? (
+          <p role="alert" className="form-error">
+            {faceMessage}
+          </p>
+        ) : null}
+        {canFallback && !faceDone ? (
+          <button type="button" onClick={() => setFallback(true)} disabled={starting}>
+            {FALLBACK_LABEL}
+          </button>
+        ) : null}
+        {fallback && !idChecked ? <p role="status">A proctor will check your ID by hand. You can start the exam.</p> : null}
+
+        <h3>Proctoring notice</h3>
+        <div className="exam-consent" id={consentId}>
+          <p>Your camera is used for proctoring while the exam is open.</p>
+          <ul>
+            <li>No video is uploaded or recorded.</li>
+            <li>
+              The exam software looks for things like your face leaving the camera, another person, or a phone, and
+              records a flag when it sees one. It may also take an occasional snapshot.
+            </li>
+            <li>
+              The face on your ID card is compared with your selfie, and your face is compared with that selfie during
+              the exam. No government record is checked. The comparison happens in your browser.
+            </li>
+            <li>Nothing is sent except flags and a few photos, including the photo of your ID card and your selfie.</li>
+            <li>A person reviews every flag. Nothing is decided against you automatically.</li>
+            <li>
+              The exam opens in its own window. Switching to another tab or window during the exam is recorded as a
+              flag.
+            </li>
+          </ul>
+        </div>
+        <label className="check-label">
+          <input
+            type="checkbox"
+            checked={consent}
+            onChange={(event) => setConsent(event.target.checked)}
+            aria-describedby={consentId}
+            disabled={starting}
+          />
+          I have read the proctoring notice and agree to the camera being used during the exam.
+        </label>
+
+        {startError ? (
+          <p role="alert" className="form-error">
+            {startError}
+          </p>
+        ) : null}
+        <div className="dialog-actions">
+          <button type="button" onClick={start} disabled={!canStart} aria-describedby={canStart ? undefined : blockedId}>
+            {starting ? "Starting…" : "Start exam"}
+          </button>
+          <button type="button" onClick={() => goTo(0)} disabled={starting}>
+            Back to browser checks
+          </button>
+          <button type="button" onClick={onCancel} disabled={starting}>
+            {cancelLabel}
+          </button>
+        </div>
+        {!canStart && !starting ? (
+          <p id={blockedId} className="field-hint">
+            To start, {missing.join(" and ")}.
+          </p>
+        ) : null}
+      </div>
     </section>
+  );
+}
+
+function cameraReason(camera: CameraState): string {
+  switch (camera.state) {
+    case "failed":
+      return camera.message;
+    case "passed":
+      return "The camera works.";
+    case "requesting":
+      return "Asking for camera permission…";
+    case "checking":
+      return "Checking the camera picture…";
+    default:
+      return "Select Check camera and allow the camera when your browser asks.";
+  }
+}
+
+function micReason(mic: MicState): string {
+  switch (mic) {
+    case "ok":
+      return "Microphone permission is allowed.";
+    case "denied":
+      return "Microphone permission was refused. You can still take the exam.";
+    case "unavailable":
+      return "No microphone was found. You can still take the exam.";
+    case "requesting":
+      return "Asking for microphone permission…";
+    default:
+      return "Checks only that your browser allows the microphone. Nothing is recorded.";
+  }
+}
+
+type CheckState = "pass" | "fail" | "busy" | "idle";
+
+function CheckRow({
+  label,
+  optional = false,
+  state,
+  reason,
+  buttonLabel,
+  onRetry,
+  disabled,
+}: {
+  label: string;
+  optional?: boolean;
+  state: CheckState;
+  reason: string;
+  buttonLabel: string;
+  onRetry: () => void;
+  disabled: boolean;
+}) {
+  const word =
+    state === "pass"
+      ? "Pass"
+      : state === "busy"
+        ? "Checking"
+        : state === "idle"
+          ? "Not checked"
+          : optional
+            ? "Not available"
+            : "Fail";
+  const blocking = state === "fail" && !optional;
+  return (
+    <li className="exam-check-row">
+      <strong>
+        {label}
+        {optional ? " (optional)" : ""}
+      </strong>{" "}
+      <span className={state === "pass" ? "exam-check-ok" : blocking ? "form-error-text" : undefined}>{word}.</span>{" "}
+      <span className="exam-check-reason" role={blocking ? "alert" : undefined}>
+        {reason}
+      </span>{" "}
+      <button type="button" onClick={onRetry} disabled={disabled}>
+        {buttonLabel}
+      </button>
+    </li>
   );
 }

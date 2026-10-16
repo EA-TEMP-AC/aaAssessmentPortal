@@ -35,17 +35,19 @@ async function setup(matcher: FakeFaceMatcher) {
     />,
   );
   await user.click(screen.getByRole("button", { name: "Check camera" }));
-  await screen.findByText("Camera check passed.");
+  await screen.findByText("The camera works.");
+  await screen.findByText(/Connected to the exam server/);
+  await user.click(screen.getByRole("button", { name: "Next: photo ID and photo" }));
   await user.click(screen.getByRole("checkbox", { name: /proctoring notice/i }));
   return { user, stream, onStart, faceChecks, unmount: view.unmount };
 }
 
 const start = () => screen.getByRole("button", { name: "Start exam" });
 
-it("shows the ID card and selfie steps in order after the camera check", async () => {
+it("shows the ID card and selfie steps in order on the second tab", async () => {
   const { user } = await setup(new FakeFaceMatcher());
-  const headings = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
-  expect(headings.slice(0, 3)).toEqual(["Step 1: camera", "Step 2: show your ID card", "Step 3: take a selfie"]);
+  const headings = screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent);
+  expect(headings).toEqual(["Show your ID card", "Take a selfie", "Proctoring notice"]);
   expect(screen.getByLabelText("ID card preview")).toBeInTheDocument();
   expect(screen.getByLabelText("Selfie preview")).toBeInTheDocument();
   expect(start()).toBeDisabled();
