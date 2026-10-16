@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { batchLabels } from "../../lib/display-names.js";
 import { resolveBatchSettings } from "../../config/batch-settings.js";
 import { compliance } from "../../config/compliance.js";
 import {
@@ -528,8 +529,10 @@ function presentLock(session, attempt, settings) {
   };
 }
 
-function presentForStaff(session, { attemptStatus, paused, name, unreviewed, now }) {
+function presentForStaff(session, { attemptStatus, paused, name, unreviewed, now, batchLabel }) {
   return {
+    // X-11: the batch in words (qualification and dates), so the screens need not show the id.
+    batchLabel: batchLabel ?? null,
     paused: paused === true,
     id: idStr(session._id),
     attemptId: idStr(session.attemptId),
@@ -598,8 +601,9 @@ export async function listSessions(user, query, now = new Date()) {
   const start = (query.page - 1) * query.pageSize;
   const page = withStatus.slice(start, start + query.pageSize);
   const ids = page.map(({ session }) => session._id);
-  const [names, pending] = await Promise.all([
+  const [names, labels, pending] = await Promise.all([
     candidateNames(page.map(({ session }) => session.candidateId)),
+    batchLabels(page.map(({ session }) => session.batchId)),
     ProctoringFlag.aggregate([
       { $match: { sessionId: { $in: ids }, review: null } },
       { $group: { _id: "$sessionId", n: { $sum: 1 } } },
@@ -616,6 +620,7 @@ export async function listSessions(user, query, now = new Date()) {
         attemptStatus,
         paused: pausedById.get(String(session.attemptId)),
         name: names.get(String(session.candidateId)),
+        batchLabel: labels.get(String(session.batchId)),
         unreviewed: pendingById.get(String(session._id)) ?? 0,
         now,
       }),
@@ -630,11 +635,12 @@ async function loadFlags(sessionId) {
 /** GET /proctoring/sessions/:id with every flag, oldest first. */
 export async function getSessionDetail(user, id, now = new Date()) {
   const { session } = await loadReadableSession(user, id);
-  const [attempt, names, flags, settings] = await Promise.all([
+  const [attempt, names, flags, settings, labels] = await Promise.all([
     Attempt.findById(session.attemptId).select("status pause").lean(),
     candidateNames([session.candidateId]),
     loadFlags(session._id),
     batchSettingsOf(session.batchId),
+    batchLabels([session.batchId]),
   ]);
   const attemptStatus = attempt?.status ?? null;
   return {
@@ -642,6 +648,7 @@ export async function getSessionDetail(user, id, now = new Date()) {
       attemptStatus,
       paused: isOpenAndPaused(attempt),
       name: names.get(String(session.candidateId)),
+      batchLabel: labels.get(String(session.batchId)),
       unreviewed: flags.filter((f) => !f.review).length,
       now,
     }),

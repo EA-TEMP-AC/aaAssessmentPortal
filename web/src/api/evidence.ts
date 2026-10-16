@@ -35,6 +35,9 @@ export type Verification = {
 export type EvidenceRow = {
   id: string;
   batchId: string;
+  /** X-11: the batch in words and the candidate's name; null when the server had none. */
+  batchLabel: string | null;
+  candidateName: string | null;
   candidateId: string | null;
   kind: string;
   contentType: string;
@@ -157,6 +160,8 @@ function parseRow(value: unknown): EvidenceRow {
   return {
     id,
     batchId,
+    batchLabel: nullableStr(value.batchLabel),
+    candidateName: nullableStr(value.candidateName),
     candidateId: nullableStr(value.candidateId),
     kind,
     contentType,

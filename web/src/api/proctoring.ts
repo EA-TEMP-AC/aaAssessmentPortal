@@ -54,6 +54,8 @@ export type SessionItem = {
   batchId: string;
   candidateId: string;
   candidateName: string | null;
+  /** X-11: the batch in words (qualification and dates). Null when the server had none. */
+  batchLabel: string | null;
   status: SessionStatus;
   startedAt: string | null;
   lastSeenAt: string | null;
@@ -183,6 +185,7 @@ function parseItem(value: unknown): SessionItem {
     batchId,
     candidateId,
     candidateName: str(value.candidateName),
+    batchLabel: str(value.batchLabel),
     status: value.status,
     startedAt: str(value.startedAt),
     lastSeenAt: str(value.lastSeenAt),

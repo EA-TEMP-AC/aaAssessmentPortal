@@ -483,10 +483,15 @@ legend {
 
 .snapshot-list {
   margin: 0;
+  /* X-11: facts sit side by side when there is room, one under the other on a narrow screen. */
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 0.75rem 1.5rem;
 }
 
 .snapshot-list > div {
-  margin-bottom: 0.75rem;
+  margin-bottom: 0;
+  min-width: 0;
 }
 
 .snapshot-list dt {
@@ -1062,4 +1067,8 @@ button.button-danger {
   .report-sheet {
     max-width: none;
   }
+/* X-11: the photo and what was saved about it, side by side. */
+.proctor-flag-capture > .proctor-photo-meta,
+.proctor-flag-capture > dl {
+  flex: 1 1 22rem;
 }

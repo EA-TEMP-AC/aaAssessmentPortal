@@ -34,6 +34,11 @@ function Fact({ label, value }: { label: string; value: string }) {
   );
 }
 
+/** X-11: the name when the server sent one, otherwise the stored id. */
+function named(name: string | null | undefined, fallback: string): string {
+  return name ?? fallback;
+}
+
 function display(value: string | null | undefined): string {
   return value && value.length > 0 ? value : "None";
 }
@@ -165,14 +170,14 @@ export function BatchDetailPage() {
               <StatusBadge status={batch.status} /> Version {batch.statusVersion}.
             </p>
             <dl className="batch-facts">
-              <Fact label="Awarding body" value={batch.abId} />
-              <Fact label="Qualification" value={batch.qualificationId} />
+              <Fact label="Awarding body" value={named(batch.names?.abName, batch.abId)} />
+              <Fact label="Qualification" value={named(batch.names?.qualificationName, batch.qualificationId)} />
               <Fact label="Type" value={batch.type} />
               <Fact label="Mode" value={batch.mode} />
               <Fact label="Assessment start" value={batch.assessmentStartDate} />
               <Fact label="Assessment end" value={batch.assessmentEndDate} />
-              <Fact label="Training partner" value={batch.tpId} />
-              <Fact label="Centre" value={batch.centreId} />
+              <Fact label="Training partner" value={named(batch.names?.tpName, batch.tpId)} />
+              <Fact label="Centre" value={named(batch.names?.centreName, batch.centreId)} />
               <Fact
                 label="Scheme"
                 value={schemeId ? (schemeQuery.data ? `${schemeQuery.data.name} (${schemeQuery.data.code})` : schemeId) : "None"}
@@ -186,8 +191,8 @@ export function BatchDetailPage() {
               <Fact label="Ratio class" value={batch.ratioClass} />
               <Fact label="Assessment language" value={batch.assessmentLanguage} />
               <Fact label="State" value={batch.state} />
-              <Fact label="Assessor" value={display(batch.assessorId)} />
-              <Fact label="Proctor" value={display(batch.proctorId)} />
+              <Fact label="Assessor" value={named(batch.names?.assessorName, display(batch.assessorId))} />
+              <Fact label="Proctor" value={named(batch.names?.proctorName, display(batch.proctorId))} />
               <Fact label="Result" value={display(batch.resultId)} />
               <Fact label="Reassessment" value={batch.isReassessment ? "Yes" : "No"} />
               <Fact label="Reassessment of" value={display(batch.reassessmentOf)} />

@@ -685,6 +685,9 @@ describe("evidence vault", () => {
       const list = await request(app).get("/api/v1/evidence").set(bearer(w.assessorSession.token));
       expect(list.status).toBe(200);
       expect(list.body.items.map((i) => i.id)).toEqual([mine.body.id]);
+      // X-11: rows also carry the batch in words and the candidate's name (null when not known).
+      expect(list.body.items[0]).toHaveProperty("batchLabel");
+      expect(list.body.items[0]).toHaveProperty("candidateName");
       expect(list.body.total).toBe(1);
 
       expect(

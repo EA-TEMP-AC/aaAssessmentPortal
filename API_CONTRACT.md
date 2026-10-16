@@ -1903,3 +1903,9 @@ Roles: `aa_admin`, `assessor` (own batches), `ab_reviewer` (own awarding body). 
 ### Changes to existing attempt reads (X-09)
 - `GET /api/v1/attempts/:id` for staff: each question also has `answeredAt` (last save of the answer) and `secondsSpent` (seconds since the answer before it, or since the start for the first; `null` when not answered). Estimate, see DECISIONS 921.
 - `GET /api/v1/attempts`: each row also has `candidateName` (`null` when unknown).
+## Names next to ids (task X-11)
+
+Additive fields only; nothing was removed. A value is `null` when the record is not found, and the screen then shows the id.
+- `GET /api/v1/batches/:id`: `names { abName, qualificationName, tpName, centreName, assessorName, proctorName }`. `qualificationName` is "code name". The batch list does not carry `names`.
+- `GET /api/v1/proctoring/sessions` and `GET /api/v1/proctoring/sessions/:id`: `batchLabel` ("code name, start to end").
+- `GET /api/v1/evidence` and `GET /api/v1/evidence/:id`: `batchLabel` and `candidateName`.

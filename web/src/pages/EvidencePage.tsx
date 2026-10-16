@@ -265,11 +265,11 @@ function EvidenceDetail({
         </div>
         <div>
           <dt>Batch</dt>
-          <dd>{row.batchId}</dd>
+          <dd>{row.batchLabel ?? row.batchId}</dd>
         </div>
         <div>
           <dt>Candidate</dt>
-          <dd>{row.candidateId ?? "None"}</dd>
+          <dd>{row.candidateName ?? row.candidateId ?? "None"}</dd>
         </div>
         <div>
           <dt>Uploader</dt>

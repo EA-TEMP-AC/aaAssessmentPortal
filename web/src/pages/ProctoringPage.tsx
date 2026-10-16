@@ -404,7 +404,7 @@ function SessionPanel({
             </div>
             <div>
               <dt>Batch</dt>
-              <dd>{data.batchId}</dd>
+              <dd>{data.batchLabel ?? data.batchId}</dd>
             </div>
             <div>
               <dt>Started</dt>
@@ -617,7 +617,7 @@ export function ProctoringPage() {
               {result.items.map((item) => (
                 <tr key={item.id}>
                   <td>{candidateLabel(item)}</td>
-                  <td>{item.batchId}</td>
+                  <td>{item.batchLabel ?? item.batchId}</td>
                   <td>
                     <StatusTag item={item} />
                   </td>

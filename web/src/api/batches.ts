@@ -75,6 +75,29 @@ export type StatusHistoryEntry = {
   note?: string;
 };
 
+export type BatchNames = {
+  abName: string | null;
+  qualificationName: string | null;
+  tpName: string | null;
+  centreName: string | null;
+  assessorName: string | null;
+  proctorName: string | null;
+};
+
+function parseNames(value: unknown): BatchNames | undefined {
+  if (typeof value !== "object" || value === null) return undefined;
+  const v = value as Record<string, unknown>;
+  const text = (x: unknown) => (typeof x === "string" && x !== "" ? x : null);
+  return {
+    abName: text(v.abName),
+    qualificationName: text(v.qualificationName),
+    tpName: text(v.tpName),
+    centreName: text(v.centreName),
+    assessorName: text(v.assessorName),
+    proctorName: text(v.proctorName),
+  };
+}
+
 export type BatchRecord = {
   id: string;
   abId: string;
@@ -99,6 +122,8 @@ export type BatchRecord = {
   statusVersion: number;
   assessorId: string | null;
   proctorId: string | null;
+  /** X-11: the names behind the ids. Only the single-batch read sends them; a value is null when not found. */
+  names?: BatchNames;
   resultId: string | null;
   /** D5: the one test paper candidates of this batch can start. Null until aa_admin sets it. */
   testPaperId: string | null;
@@ -412,6 +437,7 @@ export function parseBatch(value: unknown): BatchRecord {
     statusVersion,
     assessorId,
     proctorId,
+    ...(parseNames(value.names) ? { names: parseNames(value.names) } : {}),
     resultId,
     testPaperId,
     rejectReason,

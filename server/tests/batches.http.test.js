@@ -309,7 +309,17 @@ describe("batches", () => {
       .get(`/api/v1/batches/${created.id}`)
       .set(bearer(admin.token));
     expect(fetched.status).toBe(200);
-    expect(fetched.body).toEqual(created);
+    // X-11: a single batch also carries the names behind its ids (null when no record is found).
+    const { names, ...fetchedBatch } = fetched.body;
+    expect(fetchedBatch).toEqual(created);
+    expect(Object.keys(names).sort()).toEqual([
+      "abName",
+      "assessorName",
+      "centreName",
+      "proctorName",
+      "qualificationName",
+      "tpName",
+    ]);
 
     const listed = await request(app).get("/api/v1/batches").set(bearer(admin.token));
     expect(listed.status).toBe(200);

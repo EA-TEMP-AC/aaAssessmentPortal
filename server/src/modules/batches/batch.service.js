@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { namesForBatch } from "../../lib/display-names.js";
 import {
   forbidden,
   invalidTransition,
@@ -304,7 +305,9 @@ export async function loadReadableBatch(user, id) {
 }
 
 export async function getBatch(user, id, now = new Date()) {
-  return presentBatch(await loadReadableBatch(user, id), { now });
+  const doc = await loadReadableBatch(user, id);
+  // X-11: the names behind the ids, so the page can say "Asha Training Centre" instead of an id.
+  return { ...presentBatch(doc, { now }), names: await namesForBatch(doc) };
 }
 
 /**
