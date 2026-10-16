@@ -1,8 +1,9 @@
 import { ZodError } from "zod";
 import { AppError } from "../lib/errors.js";
 import { safeErrorCode } from "../lib/safe-error.js";
+import { env } from "../config/env.js";
 
-export function errorHandler(err, _req, res, _next) {
+export function errorHandler(err, req, res, _next) {
   if (err instanceof ZodError) {
     res.status(400).json({
       error: {
@@ -36,6 +37,18 @@ export function errorHandler(err, _req, res, _next) {
   }
 
   console.error("unhandled error", safeErrorCode(err, "INTERNAL"));
+  // Development only: say which route failed and why, to find faults in a local trial.
+  // Never in production, where a message could carry personal data.
+  if (env.NODE_ENV === "development") {
+    console.error(
+      "  route:",
+      req?.method,
+      req?.originalUrl?.split("?")[0],
+      "|",
+      err?.codeName ?? "",
+      err?.message,
+    );
+  }
   res.status(500).json({
     error: { code: "INTERNAL", message: "Internal server error" },
   });
