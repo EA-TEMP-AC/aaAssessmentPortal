@@ -140,6 +140,15 @@ export async function updateItem(slug, actor, id, body) {
 
   const extra = (await def.check?.(body, existing)) ?? {};
   const merged = { ...existing, ...body };
+  if (slug === "posh" && merged.kind !== "committee_member") {
+    for (const key of ["memberName", "memberRole"]) {
+      if (merged[key]) {
+        throw validationError(`${key} is only allowed for a committee member`, {
+          [key]: ["Only for a committee member"],
+        });
+      }
+    }
+  }
   if (slug === "events" && merged.endDate && merged.endDate < merged.date) {
     throw validationError("endDate is before date", { endDate: ["Before date"] });
   }
@@ -180,23 +189,36 @@ export async function deleteItem(slug, actor, id) {
   return presentAdmin(slug, saved);
 }
 
+const REGISTRY_CACHE_MS = 60_000;
+/** @type {{ at: number, ids: unknown[] } | null} */
+let registryCache = null;
+
+export function resetRegistryIdCache() {
+  registryCache = null;
+}
+
+/** Ids of active assessors (valid TOA) and proctors, reused for 60 seconds. */
+async function activeRegistryIds(now = Date.now()) {
+  if (registryCache && now - registryCache.at < REGISTRY_CACHE_MS) return registryCache.ids;
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
+  const [activeAssessors, activeProctors] = await Promise.all([
+    Assessor.find({ active: true, "toa.expiresOn": { $gte: today } })
+      .select("_id")
+      .lean(),
+    Proctor.find({ active: true }).select("_id").lean(),
+  ]);
+  const ids = [...activeAssessors.map((a) => a._id), ...activeProctors.map((p) => p._id)];
+  registryCache = { at: now, ids };
+  return ids;
+}
+
 /** Anonymous list: published items only, whitelisted fields, never an admin field. */
 export async function listPublic(slug, query) {
   const def = RESOURCES[slug];
   const filter = { published: true, archived: { $ne: true } };
 
   if (slug === "people") {
-    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
-    const [activeAssessors, activeProctors] = await Promise.all([
-      Assessor.find({ active: true, "toa.expiresOn": { $gte: today } })
-        .select("_id")
-        .lean(),
-      Proctor.find({ active: true }).select("_id").lean(),
-    ]);
-    const validRegistryIds = [
-      ...activeAssessors.map((a) => a._id),
-      ...activeProctors.map((p) => p._id),
-    ];
+    const validRegistryIds = await activeRegistryIds();
     filter.registryId = { $in: validRegistryIds };
   }
 

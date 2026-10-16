@@ -335,13 +335,17 @@ export function downloadName(doc) {
  * A short-lived link when the driver has URLs, otherwise the stream. Call recordDownload first.
  * @returns {Promise<{ url: string, expiresAt: string } | { stream: import("node:stream").Readable, size: number }>}
  */
-export async function openEvidenceFile(doc, now = new Date()) {
+const INLINE_TYPES = /^(image\/|application\/pdf$)/;
+
+/** `inline` only takes effect for image and PDF files; anything else stays an attachment. */
+export async function openEvidenceFile(doc, now = new Date(), { inline = false } = {}) {
   const storage = getEvidenceStorage();
   const expiresInSeconds = env.EVIDENCE_SIGNED_URL_SECONDS;
   const url = await storage.signedUrl(doc.storageKey, {
     expiresInSeconds,
     contentType: doc.contentType,
     filename: downloadName(doc),
+    inline: inline && INLINE_TYPES.test(doc.contentType ?? ""),
   });
   if (url) {
     return { url, expiresAt: new Date(now.getTime() + expiresInSeconds * 1000).toISOString() };

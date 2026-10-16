@@ -70,6 +70,8 @@ const boolQuery = z.preprocess((value) => {
   return value;
 }, z.boolean().optional());
 
+export const evidenceFileQuerySchema = z.object({ inline: boolQuery }).strict();
+
 const dateQuery = z.string().refine((value) => !Number.isNaN(Date.parse(value)), {
   message: "Invalid date",
 });

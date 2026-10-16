@@ -103,6 +103,19 @@ describe("S3 driver (mocked client)", () => {
     expect(options).toEqual({ expiresIn: 90 });
   });
 
+  it("issues an inline link without an attachment disposition when asked", async () => {
+    const { storage, presign } = setup();
+    await storage.signedUrl("evidence/k.jpg", {
+      expiresInSeconds: 90,
+      contentType: "image/jpeg",
+      filename: "evidence-1.jpg",
+      inline: true,
+    });
+    const [, command] = presign.mock.calls[0];
+    expect(command.input.ResponseContentDisposition).toBe("inline");
+    expect(command.input.ResponseContentType).toBe("image/jpeg");
+  });
+
   it("has no delete or update", () => {
     const { storage } = setup();
     expect(Object.keys(storage).sort()).toEqual(["get", "name", "put", "signedUrl"]);

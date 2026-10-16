@@ -1,4 +1,5 @@
 import express from "express";
+import { env } from "./config/env.js";
 import { auditMiddleware } from "./middleware/audit.middleware.js";
 import { errorHandler } from "./middleware/error-handler.js";
 import { assessorPaymentsRouter } from "./modules/assessor-payments/assessor-payment.routes.js";
@@ -52,6 +53,7 @@ export function createApp() {
   const app = express();
 
   app.disable("x-powered-by");
+  app.set("trust proxy", env.TRUST_PROXY);
   app.use(express.json({ limit: "1mb" }));
   app.use(auditMiddleware);
 

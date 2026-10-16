@@ -17,6 +17,7 @@ import {
 import { EVIDENCE_ABSOLUTE_MAX_BYTES } from "./file-type.js";
 import {
   batchIdParamSchema,
+  evidenceFileQuerySchema,
   evidenceIdParamSchema,
   listEvidenceQuerySchema,
   uploadFieldsSchema,
@@ -133,10 +134,11 @@ evidenceRouter.get(
   requireRoles(...EVIDENCE_READ_ROLES),
   asyncHandler(async (req, res) => {
     const { id } = evidenceIdParamSchema.parse(req.params);
+    const { inline } = evidenceFileQuerySchema.parse(req.query);
     const doc = await loadReadableEvidence(req.user, id);
     // Logged first: a download that cannot be logged is not served.
     await recordDownload(req, doc);
-    const file = await openEvidenceFile(doc);
+    const file = await openEvidenceFile(doc, new Date(), { inline });
     if (file.url) {
       res.set("Cache-Control", "no-store");
       await res.status(200).json({
