@@ -63,6 +63,7 @@ describe("compliance constants", () => {
       QUESTION_REVIEW_INTERVAL_MONTHS: 12,
       QUESTION_REVIEW_INTERVAL_MIN_MONTHS: 1,
       QUESTION_REVIEW_INTERVAL_MAX_MONTHS: 60,
+      QUESTION_MIN_APPROVED_PER_PC: 5,
     });
     expect(Object.isFrozen(compliance)).toBe(true);
     expect(Object.isFrozen(compliance.WEEKEND_DAYS)).toBe(true);

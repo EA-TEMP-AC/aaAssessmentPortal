@@ -6,10 +6,13 @@ import { AppError, forbidden, notFound, validationError } from "../../lib/errors
 import { withTransaction } from "../../lib/mongo-session.js";
 import { Attempt } from "../../models/attempt.model.js";
 import { AuditLog } from "../../models/audit-log.model.js";
+import { AttendanceRecord } from "../../models/attendance-record.model.js";
 import { Batch } from "../../models/batch.model.js";
 import { Candidate } from "../../models/candidate.model.js";
 import { Question } from "../../models/question.model.js";
 import { TestPaper } from "../../models/test-paper.model.js";
+import { MAX_QUESTIONS_PER_PAGE } from "../../config/content-controls.js";
+import { istCalendarDate } from "../../lib/working-days.js";
 import { createRng, shuffle } from "../test-generator/seeded-random.js";
 import {
   AUTO_SCORED_TYPES,
@@ -121,10 +124,16 @@ async function closeAttempt(attempt, { reason, now, trigger }) {
     if (current.status !== "in_progress") return { attempt: current, closed: false };
     const keyDocs = await loadQuestionMap(current.questions.map((q) => q.questionId));
     const keys = new Map([...keyDocs].map(([id, d]) => [id, d.correctAnswer ?? null]));
-    const questions = scoreQuestions(current.questions, keys);
+    const optionsById = new Map([...keyDocs].map(([id, d]) => [id, d.options ?? []]));
+    const questions = scoreQuestions(current.questions, keys, optionsById);
     const scores = computeScores(questions);
     const status = reason === "timeout" ? "timed_out" : "submitted";
-    const set = { status, closedAt: now, closeReason: reason, questions, scores };
+    // A timeout closes at the deadline, not at the later moment a sweep or a read noticed it.
+    const closedAt =
+      reason === "timeout" && current.deadlineAt && new Date(current.deadlineAt) < now
+        ? new Date(current.deadlineAt)
+        : now;
+    const set = { status, closedAt, closeReason: reason, questions, scores };
 
     const run = async (session) => {
       const updated = await Attempt.findOneAndUpdate(
@@ -173,8 +182,8 @@ async function expireIfDue(attempt, now, trigger) {
 }
 
 /**
- * Closes every attempt whose accept window has passed. No scheduler calls this yet (Q423);
- * a job or an admin script can.
+ * Closes every attempt whose accept window has passed. Called by the attempt sweep job
+ * (attempt-sweep-job.js) and safe to call from a script.
  */
 export async function closeExpiredAttempts({ now = new Date(), limit = 200 } = {}) {
   const due = await Attempt.find({ status: "in_progress", acceptUntil: { $lt: now } })
@@ -211,6 +220,30 @@ export async function startAttempt(user, { batchId, testPaperId }) {
       status: batch.status,
     });
   }
+  const today = istCalendarDate(new Date());
+  if (today < batch.assessmentStartDate || today > batch.assessmentEndDate) {
+    throw new AppError(
+      409,
+      "ATTEMPT_OUTSIDE_ASSESSMENT_WINDOW",
+      "Today is outside the assessment dates of this batch",
+      {
+        assessmentStartDate: batch.assessmentStartDate,
+        assessmentEndDate: batch.assessmentEndDate,
+      },
+    );
+  }
+  const absent = await AttendanceRecord.exists({
+    batchId: batch._id,
+    candidateId: roster._id,
+    present: false,
+  });
+  if (absent) {
+    throw new AppError(
+      409,
+      "ATTEMPT_CANDIDATE_ABSENT",
+      "The candidate is marked absent for this batch",
+    );
+  }
   // A paper that is unknown, a draft, or for another qualification looks the same: not found.
   const paper = await TestPaper.findById(testPaperId).lean();
   if (
@@ -220,6 +253,13 @@ export async function startAttempt(user, { batchId, testPaperId }) {
     idStr(paper.qualificationId) !== idStr(batch.qualificationId)
   ) {
     throw notFound();
+  }
+  if (normaliseAnswer(paper.rules?.language) !== normaliseAnswer(batch.assessmentLanguage)) {
+    throw new AppError(
+      409,
+      "ATTEMPT_LANGUAGE_MISMATCH",
+      "The test paper language differs from the batch assessment language",
+    );
   }
 
   const ids = paper.items.map((i) => i.questionId);
@@ -280,7 +320,7 @@ export async function startAttempt(user, { batchId, testPaperId }) {
 /* ------------------------------------------------------------------- reads */
 
 /** The candidate's view: questions without keys, answers, no marks. */
-async function presentForCandidate(attempt, now, qmap) {
+async function presentForCandidate(attempt, now, qmap, questions = attempt.questions) {
   const open = attempt.status === "in_progress";
   return {
     id: idStr(attempt._id),
@@ -297,7 +337,7 @@ async function presentForCandidate(attempt, now, qmap) {
       ? Math.max(0, Math.ceil((new Date(attempt.deadlineAt).getTime() - now.getTime()) / 1000))
       : 0,
     totalMarks: round2(attempt.questions.reduce((s, q) => s + q.marks, 0)),
-    questions: attempt.questions.map((q, index) => {
+    questions: questions.map((q, index) => {
       const doc = qmap.get(String(q.questionId));
       return {
         questionId: idStr(q.questionId),
@@ -313,8 +353,8 @@ async function presentForCandidate(attempt, now, qmap) {
 }
 
 /** Staff view: adds NOS, marks and, once the attempt is closed, the key. */
-async function presentForStaff(attempt, now, qmap) {
-  const base = await presentForCandidate(attempt, now, qmap);
+async function presentForStaff(attempt, now, qmap, questions = attempt.questions) {
+  const base = await presentForCandidate(attempt, now, qmap, questions);
   const closed = attempt.status !== "in_progress";
   const candidate = await Candidate.findById(attempt.candidateId).select("name").lean();
   return {
@@ -325,7 +365,7 @@ async function presentForStaff(attempt, now, qmap) {
     candidateName: candidate?.name ?? null,
     scores: attempt.scores ?? null,
     questions: base.questions.map((q, index) => {
-      const raw = attempt.questions[index];
+      const raw = questions[index];
       const out = {
         ...q,
         nosId: raw.nosId,
@@ -343,14 +383,30 @@ async function presentForStaff(attempt, now, qmap) {
   };
 }
 
-export async function getAttempt(user, id) {
+/**
+ * The candidate gets every question (they need them all to sit the test). Staff get one page
+ * of at most MAX_QUESTIONS_PER_PAGE questions, with itemPage, itemPageSize and itemTotal.
+ */
+export async function getAttempt(user, id, { itemPage = 1 } = {}) {
   const { attempt: loaded } = await loadScoped(user, id);
   const now = new Date();
   const { attempt } = await expireIfDue(loaded, now, "read");
-  const qmap = await loadQuestionMap(attempt.questions.map((q) => q.questionId));
-  return user.role === "candidate"
-    ? presentForCandidate(attempt, now, qmap)
-    : presentForStaff(attempt, now, qmap);
+  if (user.role === "candidate") {
+    const qmap = await loadQuestionMap(attempt.questions.map((q) => q.questionId));
+    return presentForCandidate(attempt, now, qmap);
+  }
+  const pageQuestions = attempt.questions.slice(
+    (itemPage - 1) * MAX_QUESTIONS_PER_PAGE,
+    itemPage * MAX_QUESTIONS_PER_PAGE,
+  );
+  const qmap = await loadQuestionMap(pageQuestions.map((q) => q.questionId));
+  const view = await presentForStaff(attempt, now, qmap, pageQuestions);
+  return {
+    ...view,
+    itemPage,
+    itemPageSize: MAX_QUESTIONS_PER_PAGE,
+    itemTotal: attempt.questions.length,
+  };
 }
 
 function presentRow(a) {

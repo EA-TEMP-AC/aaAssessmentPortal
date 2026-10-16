@@ -101,15 +101,17 @@ export async function markOverdueSlaBreaches(now = new Date()) {
  * Process-local timer. Tests call markOverdueSlaBreaches directly.
  * Overlapping ticks in this process are skipped. A second process may also run;
  * $addToSet keeps each breach key once.
- * @param {{ intervalMs?: number, run?: typeof markOverdueSlaBreaches }} [options]
+ * With runOnStart the job also runs once right away, so a restart does not skip a day.
+ * @param {{ intervalMs?: number, run?: typeof markOverdueSlaBreaches, runOnStart?: boolean }} [options]
  * @returns {() => void} stop
  */
 export function startSlaBreachScheduler({
   intervalMs = SLA_BREACH_JOB_INTERVAL_MS,
   run = markOverdueSlaBreaches,
+  runOnStart = false,
 } = {}) {
   let running = false;
-  const timer = setInterval(() => {
+  const tick = () => {
     if (running) return;
     running = true;
     Promise.resolve()
@@ -120,7 +122,9 @@ export function startSlaBreachScheduler({
       .finally(() => {
         running = false;
       });
-  }, intervalMs);
+  };
+  const timer = setInterval(tick, intervalMs);
+  if (runOnStart) tick();
   if (typeof timer.unref === "function") timer.unref();
 
   return function stopSlaBreachScheduler() {

@@ -98,4 +98,9 @@ export const compliance = Object.freeze({
   /** project. Q-04. Lowest and highest interval a qualification may be given, in months. */
   QUESTION_REVIEW_INTERVAL_MIN_MONTHS: 1,
   QUESTION_REVIEW_INTERVAL_MAX_MONTHS: 60,
+  /**
+   * project. Q-06. A PC with fewer approved questions than this is flagged by the coverage
+   * endpoint. Was hard-coded as 5 in the service. Open question 580.
+   */
+  QUESTION_MIN_APPROVED_PER_PC: 5,
 });

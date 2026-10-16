@@ -93,6 +93,11 @@ const questionSchema = new mongoose.Schema(
 questionSchema.index({ qualificationId: 1, nosId: 1, pcId: 1, status: 1 });
 questionSchema.index({ qualificationId: 1, status: 1 });
 questionSchema.index({ rootQuestionId: 1, version: -1 });
+// Q-06: two edits at once cannot both create the same next version.
+questionSchema.index(
+  { rootQuestionId: 1, version: 1 },
+  { unique: true, partialFilterExpression: { rootQuestionId: { $type: "objectId" } } },
+);
 questionSchema.index({ isLatest: 1, status: 1 });
 questionSchema.index({ type: 1, language: 1 });
 

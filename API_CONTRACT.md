@@ -1123,7 +1123,8 @@ Roles: `aa_admin` and `sme` write and import; `ab_reviewer` reads and may approv
 ### POST /api/v1/question-bank/questions
 Roles: `aa_admin`, `sme`.
 Creates a new question document (starts at `version: 1`, `status: "draft"`, `isLatest: true`).
-National ID fields (`aadhaar`, `panNumber`, etc.) are rejected with 400 `VALIDATION_ERROR`.
+National ID fields (`aadhaar`, `panNumber`, etc.) are rejected with 400 `VALIDATION_ERROR`. `status` is not accepted (unknown key, 400); a new question is always `draft`.
+For `mcq`, `correctAnswer` may be an option key or the option text (case-insensitive) and is **stored as the option key**. Option keys that repeat when compared without case are refused (`400 VALIDATION_ERROR`; on update `400 DUPLICATE_OPTION_KEYS`; on import a row error). Import stores the key too.
 
 Request body:
 ```json
@@ -1168,22 +1169,25 @@ Response `200 OK`: question document.
 
 ### PUT|PATCH /api/v1/question-bank/questions/:id
 Roles: `aa_admin`, `sme`.
-Updates question content. Creates a new version (`version: previous.version + 1`), keeps the existing version with `isLatest: false`, and links `previousVersionId` and `rootQuestionId`. New version resets to `draft`.
-Response `200 OK`: new version document.
+Updates question content. Creates a new version (`version: previous.version + 1`), keeps the existing version with `isLatest: false`, and links `previousVersionId` and `rootQuestionId`. New version is always `draft`; `status` in the body is refused (400). `correctAnswer` is stored as the option key (see create).
+Only the latest version can be updated: an older one gives `409 QUESTION_NOT_LATEST`. Two edits at once: one wins, the other gets `409 QUESTION_NOT_LATEST` (compare-and-set on `isLatest`, plus a unique `{rootQuestionId, version}` index). Retired: `409 QUESTION_RETIRED`.
+Response `200 OK`: new version document. It counts against the daily content read cap and writes access-log rows, like `GET /questions/:id`.
 
 ### POST /api/v1/question-bank/questions/:id/retire (or DELETE)
 Roles: `aa_admin`, `sme`.
 Soft-deletes the question: sets `status: "retired"`, `retiredBy: user._id`, `retiredAt: Date`. Hard deletion is never performed.
-Response `200 OK`: updated question document.
+Errors: `409 QUESTION_NOT_LATEST` (not the latest version), `409 QUESTION_RETIRED` (already retired; was `200` before).
+Response `200 OK`: updated question document (counted against the content read cap and access-logged).
 
 ### POST /api/v1/question-bank/questions/:id/approve
 Roles: `aa_admin`, `ab_reviewer`.
 Sets `status: "approved"`, `approvedBy: user._id`, `approvedAt: Date`.
-Response `200 OK`: approved question document.
+Errors: `409 QUESTION_NOT_LATEST`, `409 QUESTION_RETIRED`, `409 QUESTION_ALREADY_APPROVED` (approvedBy and approvedAt are never overwritten).
+Response `200 OK`: approved question document (counted against the content read cap and access-logged).
 
 ### GET /api/v1/question-bank/coverage/:qualificationId
 Roles: `aa_admin`, `sme`, `ab_reviewer`.
-Coverage report for a qualification: lists every PC across its NOS with approved question counts and flags PCs with fewer than 5 approved questions (`flagged: true`).
+Coverage report for a qualification: lists every PC across its NOS with approved question counts and flags PCs with fewer than `QUESTION_MIN_APPROVED_PER_PC` (5, `server/src/config/compliance.js`) approved questions (`flagged: true`). Only approved **latest** versions are counted.
 Response `200 OK`:
 ```json
 {
@@ -1634,11 +1638,11 @@ All under `/api/v1/attempts`. An attempt is one candidate's go at one approved t
 ### POST /api/v1/attempts/start
 Role: `candidate` (on the active roster of the batch). Body `{ "batchId", "testPaperId" }`.
 `201` new attempt, `200` when the candidate already has one for that paper (same id, same timer, same order). Returns `{ id, testPaperId, batchId, status, durationMinutes, startedAt, deadlineAt, closedAt, closeReason, serverTime, remainingSeconds, totalMarks, questions[] }`; each question is `{ questionId, order, type, marks, stem, options[{key,text}], answer }`. No answer key, no NOS, no marks awarded.
-Errors: `403 FORBIDDEN` (not on the active roster), `404 NOT_FOUND` (unknown batch; paper unknown, draft, incomplete or for another qualification), `409 ATTEMPT_BATCH_NOT_IN_PROGRESS` (new attempts only; an existing attempt is still returned), `409 ATTEMPT_PAPER_UNAVAILABLE`.
+Errors: `403 FORBIDDEN` (not on the active roster), `404 NOT_FOUND` (unknown batch; paper unknown, draft, incomplete or for another qualification), `409 ATTEMPT_BATCH_NOT_IN_PROGRESS`, `409 ATTEMPT_OUTSIDE_ASSESSMENT_WINDOW` (today in IST is before `assessmentStartDate` or after `assessmentEndDate`; `details` has both dates), `409 ATTEMPT_CANDIDATE_ABSENT` (attendance row with `present: false`), `409 ATTEMPT_LANGUAGE_MISMATCH` (`paper.rules.language` differs from the batch `assessmentLanguage`, compared trimmed and without case), `409 ATTEMPT_PAPER_UNAVAILABLE`. These apply to new attempts only; an existing attempt is still returned.
 Audit: `attempt.start`, or `attempt.start_replay`.
 
 ### GET /api/v1/attempts/:id
-Roles: `candidate` (own attempt only), `aa_admin`, `assessor` (the batch's assessor), `ab_reviewer` (own awarding body). Anything else `403 FORBIDDEN`. An attempt past its accept window is closed as `timed_out` by this read. The candidate view is the start shape. The staff view adds `abId`, `candidateId`, `learnerId`, `candidateName`, `scores` and, per question, `nosId`, `pcId`, `awardedMarks`, `scoreStatus`, `scoredBy`, `markedBy`, `markedAt`, and `correctAnswer` only once the attempt is closed.
+Roles: `candidate` (own attempt only), `aa_admin`, `assessor` (the batch's assessor), `ab_reviewer` (own awarding body). Anything else `403 FORBIDDEN`. An attempt past its accept window is closed as `timed_out` by this read. The candidate view is the start shape. The staff view adds `abId`, `candidateId`, `learnerId`, `candidateName`, `scores` and, per question, `nosId`, `pcId`, `awardedMarks`, `scoreStatus`, `scoredBy`, `markedBy`, `markedAt`, and `correctAnswer` only once the attempt is closed. The staff view is paged like `GET /tests/:id`: `?itemPage=` (default 1), at most 50 questions per page, with `itemPage`, `itemPageSize` and `itemTotal` in the reply. It counts the questions returned against the daily content read cap and writes access-log rows. The candidate view is not paged. Who sees answer keys is unchanged.
 
 ### PUT /api/v1/attempts/:id/answers
 Role: `candidate`, own attempt. Body `{ "answers": [{ "questionId", "answer" }] }` (1 to 200 rows, no repeated question, `answer` up to 10000 characters, `null` or blank clears). For MCQ the answer must be an option key (case-insensitive; the stored key is kept). Last write wins per question. Accepted until `acceptUntil` (deadline plus grace). One bad row saves nothing. Returns `{ saved, savedAt, deadlineAt, remainingSeconds }`.
@@ -1661,4 +1665,4 @@ Roles: `aa_admin` (all), `assessor` (own batches), `ab_reviewer` (own awarding b
 Role: `aa_admin`. Read-only totals to copy into a result draft: `{ attemptId, batchId, candidateId, learnerId, testPaperId, status, closedAt, scoringComplete, maxMarks, obtainedMarks, pendingMarks, pendingCount, byNos[{nosId,...}], byType[{type,...}] }`. `409 ATTEMPT_NOT_CLOSED` while in progress. Writes nothing.
 
 ### Timer and timeout
-The server clock decides. `deadlineAt` = `startedAt` + duration (the paper's `durationMinutes`, else 60). Saves and submit are taken until `deadlineAt` + grace (30 s, env `ATTEMPT_GRACE_SECONDS`). A timeout is applied when the attempt is next read or written, or by `closeExpiredAttempts()` (no scheduler yet, Q423); it writes audit `attempt.timeout` (actor role `system`). `POST /tests/generate` takes an optional `durationMinutes` (1 to 600).
+The server clock decides. `deadlineAt` = `startedAt` + duration (the paper's `durationMinutes`, else 60). Saves and submit are taken until `deadlineAt` + grace (30 s, env `ATTEMPT_GRACE_SECONDS`). A timeout is applied when the attempt is next read or written, or by the attempt sweep job (`closeExpiredAttempts()`, every 5 minutes and once at startup); `closedAt` is the earlier of now and `deadlineAt`. It writes audit `attempt.timeout` (actor role `system`). `POST /tests/generate` takes an optional `durationMinutes` (1 to 600).
