@@ -714,8 +714,8 @@ Supports versioning: updates create a new version document (`version: n + 1`) an
 | difficulty | QuestionDifficulty | N | `easy`, `medium`, `tough` (optional until Q-02) |
 | bloomLevel | string | N | Trimmed, up to 64 chars (e.g. `remember`, `apply`) |
 | stem | string | Y | Trimmed question text, up to 10,000 characters |
-| options | Option[] | N | Array of `{ key, text }`. Required for MCQ (≥ 2 options) |
-| correctAnswer | string | N | Required for MCQ (matches option key or text). Rubric for others |
+| options | Option[] | N | Array of `{ key, text }`. Required for MCQ (≥ 2 options). Keys must be unique when compared without case (Q-06) |
+| correctAnswer | string | N | MCQ: required, stored as the **option key** (a submitted key or option text is matched case-insensitively and the key is saved; Q-06). Old rows may hold the option text; scoring maps it to the key. Rubric for others |
 | marks | number | Y | Positive number (≥ 0.5) |
 | status | QuestionStatus | Y | `draft`, `in_review`, `approved`, `retired`. Default `draft` |
 | version | number | Y | Integer ≥ 1. Incremented on update |
@@ -733,6 +733,7 @@ Indexes:
 - `{ qualificationId: 1, nosId: 1, pcId: 1, status: 1 }`
 - `{ qualificationId: 1, status: 1 }`
 - `{ rootQuestionId: 1, version: -1 }`
+- unique `{ rootQuestionId: 1, version: 1 }`, partial on `rootQuestionId` being an ObjectId (Q-06). Existing duplicate versions must be fixed before the index builds
 - `{ isLatest: 1, status: 1 }`
 - `{ type: 1, language: 1 }`
 
@@ -811,6 +812,8 @@ One candidate's attempt at one approved test paper. Holds the stored question or
 Indexes: unique `{ testPaperId: 1, candidateId: 1 }` (one attempt per paper), `{ batchId, status }`, `{ abId, startedAt }`, `{ status, acceptUntil }`.
 `testPapers` (§3.20) gains optional `durationMinutes` (1 to 600, default null).
 
+Start rules (Q-06): a new attempt needs today (IST) within the batch's `assessmentStartDate`..`assessmentEndDate`, no `attendanceRecords` row with `present: false` for the candidate, and `testPapers.rules.language` equal (trimmed, case-insensitive) to the batch `assessmentLanguage`. A timeout sets `closedAt` to the earlier of now and `deadlineAt`. Expired attempts are closed by the attempt sweep job (every 5 minutes, and once at startup).
+
 ### 3.25 `sectorConfigs` (phase 2) — Task Q-05
 
 One row per Annexure II sector on the recognition record. `sector` is a `SectorName`, never a `RatioClass`. Only a sector listed in `aaRecognition.sectors` can be added (`409 SECTOR_NOT_RECOGNISED`). Writes: `aa_admin`. Audited with before and after.
@@ -877,6 +880,8 @@ One row per reminder queued by the nightly job. The unique index is what keeps a
 | emailId | ObjectId | N | The `emailQueue` row |
 
 Indexes: unique `{ qualificationId: 1, abId: 1, anchorDate: 1, periodNo: 1 }`.
+
+A row with no `emailId` is a claim. The job removes a claim older than `REVIEW_REMINDER_CLAIM_TIMEOUT_MS` (10 minutes) at the start of each run, so a crash between claim and queue does not lose the period (Q-06). The "last completed review" date in the email is an IST date.
 
 Review due rule (`GET /question-bank/review-due` and the nightly job share it). Only approved, latest questions count. A question is past its interval when its current version was created, or its last `keep` decision in a closed cycle was made, `intervalMonths` or more ago (IST dates, whole months). A qualification is past its interval when `intervalMonths` have passed since its last complete cycle close (or its `createdAt`). A qualification is *due* when it, or any of its questions, is past the interval. The awarding bodies to tell are the active ones with a batch or a cycle for the qualification.
 

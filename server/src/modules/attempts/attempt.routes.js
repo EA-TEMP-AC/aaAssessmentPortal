@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { asyncHandler } from "../../lib/async-handler.js";
 import { requireAuth } from "../../middleware/require-auth.js";
+import { guardContentRead } from "../content-controls/content-guard.js";
 import { requireRoles } from "../../middleware/require-roles.js";
 import {
   ATTEMPT_CANDIDATE_ROLES,
@@ -11,6 +12,7 @@ import {
 } from "../../models/roles.js";
 import {
   answersSchema,
+  getQuerySchema,
   idParamSchema,
   listQuerySchema,
   manualMarksSchema,
@@ -141,6 +143,14 @@ attemptsRouter.get(
   requireRoles(...ATTEMPT_READ_ROLES),
   asyncHandler(async (req, res) => {
     const { id } = idParamSchema.parse(req.params);
-    res.status(200).json(await getAttempt(req.user, id));
+    const query = getQuerySchema.parse(req.query);
+    const view = await getAttempt(req.user, id, query);
+    if (req.user.role !== "candidate") {
+      await guardContentRead(req, {
+        questionIds: view.questions.map((q) => q.questionId),
+        kind: "detail",
+      });
+    }
+    res.status(200).json(view);
   }),
 );

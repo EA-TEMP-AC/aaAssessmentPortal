@@ -9,7 +9,11 @@ import { Candidate } from "../src/models/candidate.model.js";
 import { Question } from "../src/models/question.model.js";
 import { Result } from "../src/models/result.model.js";
 import { TestPaper } from "../src/models/test-paper.model.js";
+import { istCalendarDate } from "../src/lib/working-days.js";
 import { resetLoginRateLimit } from "../src/modules/auth/login-rate-limit.js";
+import { ContentReadCounter } from "../src/models/content-read-counter.model.js";
+import { AttendanceRecord } from "../src/models/attendance-record.model.js";
+import { startAttemptSweepScheduler } from "../src/modules/attempts/attempt-sweep-job.js";
 import { closeExpiredAttempts } from "../src/modules/attempts/attempt.service.js";
 import { clearCollections, startMongo, stopMongo } from "./helpers/db.js";
 import { createUser, webDevice } from "./helpers/fixtures.js";
@@ -116,14 +120,14 @@ async function world({ paper = {}, batch = {} } = {}) {
     qualificationId,
     type: "STT",
     mode: "offline",
-    assessmentStartDate: "2026-11-20",
-    assessmentEndDate: "2026-11-21",
+    assessmentStartDate: istCalendarDate(new Date(Date.now() - 86_400_000)),
+    assessmentEndDate: istCalendarDate(new Date(Date.now() + 86_400_000)),
     tpId: oid(),
     centreId: oid(),
     candidateCount: 2,
     sector: "Electronics",
     ratioClass: "manufacturing",
-    assessmentLanguage: "English",
+    assessmentLanguage: "en",
     state: "Maharashtra",
     status: "in_progress",
     statusVersion: 3,
@@ -975,6 +979,111 @@ describe("Attempt engine API (server/src/modules/attempts)", () => {
       const answered = stored.questions.find((q) => String(q.questionId) === qid(w, "mcq1"));
       // The save either landed before the close (and was scored) or was refused.
       expect(stored.scores.obtainedMarks).toBe(answered.awardedMarks);
+    });
+  });
+
+  describe("start rules (Q-06)", () => {
+    it("refuses a start before or after the assessment dates", async () => {
+      const day = (offset) => istCalendarDate(new Date(Date.now() + offset * 86_400_000));
+      await Batch.updateOne(
+        { _id: w.batch._id },
+        { assessmentStartDate: day(2), assessmentEndDate: day(3) },
+      );
+      expectError(await start(w.candidate, w), 409, "ATTEMPT_OUTSIDE_ASSESSMENT_WINDOW");
+      await Batch.updateOne(
+        { _id: w.batch._id },
+        { assessmentStartDate: day(-3), assessmentEndDate: day(-2) },
+      );
+      expectError(await start(w.candidate, w), 409, "ATTEMPT_OUTSIDE_ASSESSMENT_WINDOW");
+      expect(await Attempt.countDocuments()).toBe(0);
+    });
+
+    it("allows a start on the first and on the last day", async () => {
+      const today = istCalendarDate(new Date());
+      await Batch.updateOne(
+        { _id: w.batch._id },
+        { assessmentStartDate: today, assessmentEndDate: today },
+      );
+      expect((await start(w.candidate, w)).status).toBe(201);
+    });
+
+    it("refuses a paper whose language differs from the batch language", async () => {
+      await TestPaper.updateOne({ _id: w.testPaper._id }, { "rules.language": "hi" });
+      expectError(await start(w.candidate, w), 409, "ATTEMPT_LANGUAGE_MISMATCH");
+      await TestPaper.updateOne({ _id: w.testPaper._id }, { "rules.language": " EN " });
+      expect((await start(w.candidate, w)).status).toBe(201);
+    });
+
+    it("refuses a candidate marked absent, and still allows a present one", async () => {
+      await AttendanceRecord.create({
+        batchId: w.batch._id,
+        candidateId: w.roster._id,
+        present: false,
+        capturedAt: new Date(),
+        receivedAt: new Date(),
+        assessorId: w.assessorId,
+        recordedBy: oid(),
+      });
+      expectError(await start(w.candidate, w), 409, "ATTEMPT_CANDIDATE_ABSENT");
+      expect((await start(w.otherCandidate, w)).status).toBe(201);
+    });
+  });
+
+  describe("MCQ stored as option text (old rows)", () => {
+    it("gives full marks when the stored answer is the option text", async () => {
+      await Question.updateOne({ _id: w.questions.mcq1._id }, { correctAnswer: "secret-opt-a" });
+      const { body } = await start(w.candidate, w);
+      await putAnswers(w.candidate, body.id, [{ questionId: qid(w, "mcq1"), answer: "A" }]);
+      await submit(w.candidate, body.id);
+      const stored = await Attempt.findById(body.id).lean();
+      const item = stored.questions.find((q) => String(q.questionId) === qid(w, "mcq1"));
+      expect(item).toMatchObject({ awardedMarks: 1, scoreStatus: "scored" });
+    });
+  });
+
+  describe("sweep and staff view (Q-06)", () => {
+    it("closes an expired attempt at the deadline, not at sweep time", async () => {
+      const { body } = await start(w.candidate, w);
+      await shift(body.id, { deadline: -600, accept: -570 });
+      const before = (await Attempt.findById(body.id).lean()).deadlineAt;
+      await closeExpiredAttempts();
+      const stored = await Attempt.findById(body.id).lean();
+      expect(stored.status).toBe("timed_out");
+      expect(stored.closedAt.toISOString()).toBe(before.toISOString());
+    });
+
+    it("the sweep scheduler runs once at start and on its interval", async () => {
+      vi.useFakeTimers();
+      try {
+        const run = vi.fn().mockResolvedValue({ closed: 0 });
+        const stop = startAttemptSweepScheduler({ intervalMs: 1000, run, runOnStart: true });
+        await vi.advanceTimersByTimeAsync(0);
+        expect(run).toHaveBeenCalledTimes(1);
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(run).toHaveBeenCalledTimes(2);
+        stop();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("pages the staff view at 50 questions and counts the reads", async () => {
+      const { body } = await start(w.candidate, w);
+      const stored = await Attempt.findById(body.id).lean();
+      const many = Array.from({ length: 60 }, (_, i) => stored.questions[i % 6]);
+      await Attempt.updateOne({ _id: body.id }, { $set: { questions: many } });
+
+      const first = await getAttempt(w.admin, body.id);
+      expect(first.status).toBe(200);
+      expect(first.body.questions).toHaveLength(50);
+      expect(first.body).toMatchObject({ itemPage: 1, itemPageSize: 50, itemTotal: 60 });
+      expect((await ContentReadCounter.findOne({}).lean()).count).toBe(50);
+
+      const second = await request(app)
+        .get(`/api/v1/attempts/${body.id}?itemPage=2`)
+        .set(bearer(w.admin.token));
+      expect(second.body.questions).toHaveLength(10);
+      expect((await ContentReadCounter.findOne({}).lean()).count).toBe(60);
     });
   });
 });

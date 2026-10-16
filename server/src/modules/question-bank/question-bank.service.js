@@ -3,7 +3,13 @@ import ExcelJS from "exceljs";
 import { AppError } from "../../lib/errors.js";
 import { Qualification } from "../../models/qualification.model.js";
 import { Question, QUESTION_DIFFICULTIES, QUESTION_TYPES } from "../../models/question.model.js";
-import { containsNationalIdKey, normalizeOptions } from "./question-bank.schemas.js";
+import { compliance } from "../../config/compliance.js";
+import {
+  containsNationalIdKey,
+  hasDuplicateOptionKeys,
+  normalizeOptions,
+  resolveMcqKey,
+} from "./question-bank.schemas.js";
 
 /**
  * Resolves a qualification document by either ObjectId or qualification code,
@@ -69,6 +75,32 @@ export async function resolveQualificationAndPc(qualificationRef, nosRef, pcRef)
 }
 
 /**
+ * Checks an MCQ's options and returns the correct answer as the option key.
+ * The answer may be given as a key or as the option text (case-insensitive); the key is stored.
+ */
+function mcqKeyOrThrow(options, answer) {
+  if (options.length < 2) {
+    throw new AppError(400, "INVALID_OPTIONS", "MCQ questions must have at least 2 options");
+  }
+  if (hasDuplicateOptionKeys(options)) {
+    throw new AppError(
+      400,
+      "DUPLICATE_OPTION_KEYS",
+      "Option keys must be unique (compared without case)",
+    );
+  }
+  const key = resolveMcqKey(options, answer);
+  if (key === null) {
+    throw new AppError(
+      400,
+      "INVALID_CORRECT_ANSWER",
+      "MCQ correct answer must match one of the option keys or option text",
+    );
+  }
+  return key;
+}
+
+/**
  * Creates a new question in draft status (version 1).
  */
 export async function createQuestion(user, data) {
@@ -79,23 +111,9 @@ export async function createQuestion(user, data) {
   const { qualification, nos, pc } = await resolveQualificationAndPc(qualRef, nosRef, pcRef);
 
   const normalizedOptions = normalizeOptions(data.options);
+  let correctAnswer = data.correctAnswer ? String(data.correctAnswer).trim() : null;
   if (data.type === "mcq") {
-    if (normalizedOptions.length < 2) {
-      throw new AppError(400, "INVALID_OPTIONS", "MCQ questions must have at least 2 options");
-    }
-    const answer = String(data.correctAnswer || "")
-      .trim()
-      .toLowerCase();
-    const hasMatch = normalizedOptions.some(
-      (o) => o.key.toLowerCase() === answer || o.text.toLowerCase() === answer,
-    );
-    if (!hasMatch) {
-      throw new AppError(
-        400,
-        "INVALID_CORRECT_ANSWER",
-        "MCQ correct answer must match one of the option keys or option text",
-      );
-    }
+    correctAnswer = mcqKeyOrThrow(normalizedOptions, data.correctAnswer);
   }
 
   const question = new Question({
@@ -108,9 +126,9 @@ export async function createQuestion(user, data) {
     bloomLevel: data.bloomLevel ? String(data.bloomLevel).trim() : null,
     stem: String(data.stem).trim(),
     options: normalizedOptions,
-    correctAnswer: data.correctAnswer ? String(data.correctAnswer).trim() : null,
+    correctAnswer,
     marks: Number(data.marks),
-    status: data.status && data.status !== "approved" ? data.status : "draft",
+    status: "draft",
     version: 1,
     isLatest: true,
     createdBy: user._id,
@@ -207,6 +225,18 @@ export async function listQuestions(_user, filters) {
   };
 }
 
+function notLatestError(action) {
+  return new AppError(
+    409,
+    "QUESTION_NOT_LATEST",
+    `Cannot ${action} a question that is not the latest version`,
+  );
+}
+
+function assertLatest(question, action) {
+  if (!question.isLatest) throw notLatestError(action);
+}
+
 /**
  * Updates a question. Preserves the old version (setting isLatest: false)
  * and creates a new document with an incremented version number.
@@ -221,6 +251,7 @@ export async function updateQuestion(user, id, data) {
   if (existing.status === "retired") {
     throw new AppError(409, "QUESTION_RETIRED", "Cannot update a retired question");
   }
+  assertLatest(existing, "update");
 
   const qualRef = data.qualificationId || data.qualification || existing.qualificationId;
   const nosRef = data.nosId || data.nos || existing.nosId;
@@ -240,22 +271,7 @@ export async function updateQuestion(user, id, data) {
   }
 
   if (nextType === "mcq") {
-    if (nextOptions.length < 2) {
-      throw new AppError(400, "INVALID_OPTIONS", "MCQ questions must have at least 2 options");
-    }
-    const answer = String(nextCorrectAnswer || "")
-      .trim()
-      .toLowerCase();
-    const hasMatch = nextOptions.some(
-      (o) => o.key.toLowerCase() === answer || o.text.toLowerCase() === answer,
-    );
-    if (!hasMatch) {
-      throw new AppError(
-        400,
-        "INVALID_CORRECT_ANSWER",
-        "MCQ correct answer must match one of the option keys or option text",
-      );
-    }
+    nextCorrectAnswer = mcqKeyOrThrow(nextOptions, nextCorrectAnswer);
   }
 
   const newQuestion = new Question({
@@ -270,7 +286,7 @@ export async function updateQuestion(user, id, data) {
     options: nextOptions,
     correctAnswer: nextCorrectAnswer,
     marks: data.marks !== undefined ? Number(data.marks) : existing.marks,
-    status: data.status && data.status !== "approved" ? data.status : "draft",
+    status: "draft",
     version: existing.version + 1,
     rootQuestionId: existing.rootQuestionId || existing._id,
     previousVersionId: existing._id,
@@ -279,10 +295,23 @@ export async function updateQuestion(user, id, data) {
     updatedBy: user._id,
   });
 
-  existing.isLatest = false;
-  await Promise.all([existing.save(), newQuestion.save()]);
+  // Compare-and-set on isLatest, then insert the new version. Two edits at once: only one
+  // wins the flip; the unique {rootQuestionId, version} index is the second guard.
+  const flipped = await Question.findOneAndUpdate(
+    { _id: existing._id, isLatest: true },
+    { $set: { isLatest: false } },
+    { new: true },
+  );
+  if (!flipped) throw notLatestError("update");
+  try {
+    await newQuestion.save();
+  } catch (err) {
+    await Question.updateOne({ _id: existing._id }, { $set: { isLatest: true } });
+    if (err?.code === 11000) throw notLatestError("update");
+    throw err;
+  }
 
-  return { question: newQuestion, previous: existing };
+  return { question: newQuestion, previous: flipped };
 }
 
 /**
@@ -295,15 +324,18 @@ export async function retireQuestion(user, id) {
   }
 
   if (question.status === "retired") {
-    return question;
+    throw new AppError(409, "QUESTION_RETIRED", "The question is already retired");
   }
+  assertLatest(question, "retire");
 
-  question.status = "retired";
-  question.retiredBy = user._id;
-  question.retiredAt = new Date();
-  await question.save();
+  const retired = await Question.findOneAndUpdate(
+    { _id: question._id, isLatest: true, status: { $ne: "retired" } },
+    { $set: { status: "retired", retiredBy: user._id, retiredAt: new Date() } },
+    { new: true },
+  );
+  if (!retired) throw new AppError(409, "CONFLICT", "The question changed; reload and try again");
 
-  return question;
+  return retired;
 }
 
 /**
@@ -319,18 +351,25 @@ export async function approveQuestion(user, id) {
     throw new AppError(409, "QUESTION_RETIRED", "Cannot approve a retired question");
   }
 
-  question.status = "approved";
-  question.approvedBy = user._id;
-  question.approvedAt = new Date();
-  await question.save();
+  assertLatest(question, "approve");
+  if (question.status === "approved") {
+    throw new AppError(409, "QUESTION_ALREADY_APPROVED", "The question is already approved");
+  }
 
-  return question;
+  const approved = await Question.findOneAndUpdate(
+    { _id: question._id, isLatest: true, status: { $in: ["draft", "in_review"] } },
+    { $set: { status: "approved", approvedBy: user._id, approvedAt: new Date() } },
+    { new: true },
+  );
+  if (!approved) throw new AppError(409, "CONFLICT", "The question changed; reload and try again");
+
+  return approved;
 }
 
 /**
  * Coverage endpoint for a qualification:
  * Lists each PC with its approved question count, and flags PCs
- * with fewer than 5 approved questions.
+ * with fewer than QUESTION_MIN_APPROVED_PER_PC approved questions.
  */
 export async function getCoverage(_user, qualificationRef) {
   let qual = null;
@@ -354,6 +393,7 @@ export async function getCoverage(_user, qualificationRef) {
   const approvedDocs = await Question.find({
     qualificationId: qual._id,
     status: "approved",
+    isLatest: true,
   }).lean();
 
   const countByPc = new Map();
@@ -369,7 +409,7 @@ export async function getCoverage(_user, qualificationRef) {
       const pcCodeKey = String(pc.code || "").toLowerCase();
       const count =
         (countByPc.get(pcIdKey) || 0) + (pcCodeKey !== pcIdKey ? countByPc.get(pcCodeKey) || 0 : 0);
-      const flagged = count < 5;
+      const flagged = count < compliance.QUESTION_MIN_APPROVED_PER_PC;
 
       pcs.push({
         nosId: nos.nosId,
@@ -472,15 +512,18 @@ async function validateImportRow(row, rowIndex) {
       errors.push("MCQ must have at least 2 options (e.g. optionA, optionB)");
     }
 
+    if (hasDuplicateOptionKeys(options)) {
+      errors.push("Option keys must be unique (compared without case)");
+    }
+
     if (!correctAnswer) {
       errors.push("MCQ requires a correctAnswer");
     } else {
-      const answerClean = correctAnswer.toLowerCase();
-      const hasMatch = options.some(
-        (o) => o.key.toLowerCase() === answerClean || o.text.toLowerCase() === answerClean,
-      );
-      if (!hasMatch) {
+      const key = resolveMcqKey(options, correctAnswer);
+      if (key === null) {
         errors.push("MCQ correct answer does not match any provided option key or text");
+      } else {
+        correctAnswer = key;
       }
     }
   }

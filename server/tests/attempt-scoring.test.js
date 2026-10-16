@@ -128,3 +128,25 @@ describe("attempt timer maths", () => {
     expect(attempt.acceptUntil.getTime()).toBe(attempt.deadlineAt.getTime());
   });
 });
+
+describe("scoreMcq with old rows that stored the option text", () => {
+  const options = [
+    { key: "A", text: "Spanner" },
+    { key: "B", text: "Hammer" },
+  ];
+
+  it("maps the stored text to its key", () => {
+    expect(scoreMcq("B", "hammer", 2, options)).toBe(2);
+    expect(scoreMcq("A", "hammer", 2, options)).toBe(0);
+  });
+
+  it("still takes a stored key", () => {
+    expect(scoreMcq("a", "A", 2, options)).toBe(2);
+  });
+
+  it("scoreQuestions passes the options through", () => {
+    const items = [q({ questionId: "q1", answer: "B" })];
+    const out = scoreQuestions(items, new Map([["q1", "Hammer"]]), new Map([["q1", options]]));
+    expect(out[0]).toMatchObject({ awardedMarks: items[0].marks, scoreStatus: "scored" });
+  });
+});

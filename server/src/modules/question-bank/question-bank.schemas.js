@@ -1,11 +1,7 @@
 import { z } from "zod";
 import { MAX_QUESTIONS_PER_PAGE } from "../../config/content-controls.js";
 import { isNationalIdKey } from "../../lib/redact.js";
-import {
-  QUESTION_DIFFICULTIES,
-  QUESTION_STATUSES,
-  QUESTION_TYPES,
-} from "../../models/question.model.js";
+import { QUESTION_DIFFICULTIES, QUESTION_TYPES } from "../../models/question.model.js";
 
 export function containsNationalIdKey(value) {
   if (!value || typeof value !== "object") return false;
@@ -78,6 +74,32 @@ export function normalizeOptions(options) {
   });
 }
 
+/** True when two options share a key, compared case-insensitively. */
+export function hasDuplicateOptionKeys(options) {
+  const seen = new Set();
+  for (const o of options) {
+    const k = String(o.key).trim().toLowerCase();
+    if (seen.has(k)) return true;
+    seen.add(k);
+  }
+  return false;
+}
+
+/**
+ * The option key a stored or submitted MCQ answer points to: matches an option key first,
+ * then option text, case-insensitively. Returns null when nothing matches.
+ */
+export function resolveMcqKey(options, answer) {
+  const a = String(answer ?? "")
+    .trim()
+    .toLowerCase();
+  if (a === "") return null;
+  const byKey = options.find((o) => String(o.key).trim().toLowerCase() === a);
+  if (byKey) return byKey.key;
+  const byText = options.find((o) => String(o.text).trim().toLowerCase() === a);
+  return byText ? byText.key : null;
+}
+
 export const idParamSchema = z
   .object({
     id: z.string().regex(/^[a-fA-F0-9]{24}$/, "Invalid question ID"),
@@ -107,7 +129,6 @@ export const createQuestionSchema = nationalIdGuard(
       options: z.array(optionItemSchema).optional(),
       correctAnswer: z.string().trim().max(2000).nullable().optional(),
       marks: z.coerce.number().positive().min(0.5),
-      status: z.enum(QUESTION_STATUSES).optional(),
     })
     .strict()
     .refine((data) => data.qualificationId || data.qualification, {
@@ -132,6 +153,13 @@ export const createQuestionSchema = nationalIdGuard(
       },
       {
         message: "MCQ questions must have at least 2 options",
+        path: ["options"],
+      },
+    )
+    .refine(
+      (data) => data.type !== "mcq" || !hasDuplicateOptionKeys(normalizeOptions(data.options)),
+      {
+        message: "Option keys must be unique (compared without case)",
         path: ["options"],
       },
     )
@@ -171,7 +199,6 @@ export const updateQuestionSchema = nationalIdGuard(
       options: z.array(optionItemSchema).optional(),
       correctAnswer: z.string().trim().max(2000).nullable().optional(),
       marks: z.coerce.number().positive().min(0.5).optional(),
-      status: z.enum(QUESTION_STATUSES).optional(),
     })
     .strict(),
 );

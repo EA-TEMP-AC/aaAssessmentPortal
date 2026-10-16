@@ -144,6 +144,7 @@ const handleUpdate = asyncHandler(async (req, res) => {
     },
   };
 
+  await guardContentRead(req, { questionIds: [question._id], kind: "detail" });
   res.status(200).json(question);
 });
 
@@ -171,6 +172,7 @@ const handleRetire = asyncHandler(async (req, res) => {
     },
   };
 
+  await guardContentRead(req, { questionIds: [retired._id], kind: "detail" });
   res.status(200).json(retired);
 });
 
@@ -204,6 +206,7 @@ questionBankRouter.post(
       },
     };
 
+    await guardContentRead(req, { questionIds: [approved._id], kind: "detail" });
     res.status(200).json(approved);
   }),
 );

@@ -14,8 +14,19 @@ export function normaliseAnswer(value) {
     .toLowerCase();
 }
 
+/**
+ * The option key a stored answer stands for. New rows store the key. Old rows may hold the
+ * option text, so a value that is not a key is mapped to the key of the option with that text.
+ */
+export function mcqKeyOf(correctAnswer, options = []) {
+  const wanted = normaliseAnswer(correctAnswer);
+  if (options.some((o) => normaliseAnswer(o.key) === wanted)) return wanted;
+  const byText = options.find((o) => normaliseAnswer(o.text) === wanted);
+  return byText ? normaliseAnswer(byText.key) : wanted;
+}
+
 /** One MCQ against its key. A missing key cannot be scored (null). */
-export function scoreMcq(answer, correctAnswer, marks) {
+export function scoreMcq(answer, correctAnswer, marks, options = []) {
   if (
     correctAnswer === null ||
     correctAnswer === undefined ||
@@ -23,19 +34,25 @@ export function scoreMcq(answer, correctAnswer, marks) {
   ) {
     return null;
   }
-  return normaliseAnswer(answer) === normaliseAnswer(correctAnswer) ? marks : 0;
+  return normaliseAnswer(answer) === mcqKeyOf(correctAnswer, options) ? marks : 0;
 }
 
 /**
  * Scores the MCQ items and leaves the rest pending. Manual marks already given are kept.
  * @param {Array<object>} questions attempt items
  * @param {Map<string, string|null>} keys question id to correct answer
+ * @param {Map<string, Array<{key: string, text: string}>>} [optionsById] question id to options
  */
-export function scoreQuestions(questions, keys) {
+export function scoreQuestions(questions, keys, optionsById = new Map()) {
   return questions.map((q) => {
     if (q.scoreStatus === "scored" && q.scoredBy === "manual") return { ...q };
     if (!AUTO_SCORED_TYPES.includes(q.type)) return { ...q, scoreStatus: "pending" };
-    const awarded = scoreMcq(q.answer, keys.get(String(q.questionId)), q.marks);
+    const awarded = scoreMcq(
+      q.answer,
+      keys.get(String(q.questionId)),
+      q.marks,
+      optionsById.get(String(q.questionId)) ?? [],
+    );
     if (awarded === null) return { ...q, awardedMarks: null, scoreStatus: "pending" };
     return { ...q, awardedMarks: awarded, scoreStatus: "scored", scoredBy: "auto" };
   });

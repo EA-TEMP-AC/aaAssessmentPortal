@@ -1,3 +1,4 @@
+import { istCalendarDate } from "../../lib/working-days.js";
 import { safeErrorCode } from "../../lib/safe-error.js";
 import { AwardingBody } from "../../models/awarding-body.model.js";
 import { ReviewReminder } from "../../models/review-reminder.model.js";
@@ -7,11 +8,17 @@ import { computeReviewDue } from "./review-due.service.js";
 /** Once a day. Operational schedule, same as the SLA job. */
 export const REVIEW_REMINDER_JOB_INTERVAL_MS = 86_400_000;
 
+/**
+ * A claim row with no emailId older than this is treated as a crashed run: it is removed so
+ * the next run can queue the reminder. Operational value, not a compliance constant.
+ */
+export const REVIEW_REMINDER_CLAIM_TIMEOUT_MS = 600_000;
+
 export const REVIEW_REMINDER_EMAIL_KIND = "question_review_due";
 
 function reminderText(row) {
   const last = row.lastCompletedReviewAt
-    ? row.lastCompletedReviewAt.toISOString().slice(0, 10)
+    ? istCalendarDate(row.lastCompletedReviewAt)
     : "none recorded";
   return [
     "Question bank review reminder.",
@@ -33,6 +40,10 @@ function reminderText(row) {
  */
 export async function queueReviewReminders(now = new Date()) {
   const result = { queued: 0, alreadyReminded: 0, noAwardingBody: 0, failed: 0 };
+  await ReviewReminder.deleteMany({
+    emailId: null,
+    createdAt: { $lt: new Date(now.getTime() - REVIEW_REMINDER_CLAIM_TIMEOUT_MS) },
+  });
   const due = await computeReviewDue(now);
   if (due.length === 0) return result;
 
@@ -88,15 +99,17 @@ export async function queueReviewReminders(now = new Date()) {
 /**
  * Process-local timer. Tests call queueReviewReminders directly.
  * Overlapping ticks in this process are skipped; the unique reminder row covers a second process.
- * @param {{ intervalMs?: number, run?: typeof queueReviewReminders }} [options]
+ * With runOnStart the job also runs once right away.
+ * @param {{ intervalMs?: number, run?: typeof queueReviewReminders, runOnStart?: boolean }} [options]
  * @returns {() => void} stop
  */
 export function startReviewReminderScheduler({
   intervalMs = REVIEW_REMINDER_JOB_INTERVAL_MS,
   run = queueReviewReminders,
+  runOnStart = false,
 } = {}) {
   let running = false;
-  const timer = setInterval(() => {
+  const tick = () => {
     if (running) return;
     running = true;
     Promise.resolve()
@@ -107,7 +120,9 @@ export function startReviewReminderScheduler({
       .finally(() => {
         running = false;
       });
-  }, intervalMs);
+  };
+  const timer = setInterval(tick, intervalMs);
+  if (runOnStart) tick();
   if (typeof timer.unref === "function") timer.unref();
 
   return function stopReviewReminderScheduler() {
