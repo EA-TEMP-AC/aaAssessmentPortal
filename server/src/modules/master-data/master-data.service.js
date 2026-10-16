@@ -63,7 +63,10 @@ export function scopeFilter(user, resource) {
   if (resource === "awardingBody" && user?.role === "ab_reviewer") {
     return user.abId ? { _id: user.abId } : { _id: { $in: [] } };
   }
-  if (resource === "qualification" && user?.role === "ab_reviewer") return {};
+  // X-10: the question bank and paper screens need the qualification list for sme too.
+  if (resource === "qualification" && (user?.role === "ab_reviewer" || user?.role === "sme")) {
+    return {};
+  }
   if (resource === "trainingPartner" && user?.role === "tp") {
     return user.tpId ? { _id: user.tpId } : { _id: { $in: [] } };
   }

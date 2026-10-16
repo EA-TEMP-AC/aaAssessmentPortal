@@ -9,6 +9,7 @@ import { SCHEME_READ_ROLES } from "../../routing/access";
 import { SCHEME_DATA_KEY } from "../schemes/schemeData";
 import { visibleBatchActions, type BatchAction } from "./access";
 import { ActionDialog } from "./ActionDialog";
+import { TestPaperSection } from "./TestPaperSection";
 import { BATCH_ACTION_LABELS, BATCH_STATUS_LABELS } from "./labels";
 import { formatInstant } from "./sla";
 import { SlaTimeline } from "./SlaCountdown";
@@ -260,6 +261,7 @@ export function BatchDetailPage() {
                 </p>
               </>
             ) : null}
+            <TestPaperSection batch={batch} role={session.user.role} />
             <CandidateRoster batch={batch} role={session.user.role} />
             {canSeeResultSection(session.user.role) ? (
               <ResultSection batch={batch} role={session.user.role} />

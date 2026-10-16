@@ -94,7 +94,7 @@ async function performRefresh(): Promise<boolean> {
 
 async function readError(response: Response): Promise<ApiError> {
   try {
-    const body = (await response.json()) as Partial<ApiErrorBody>;
+    const body = (await response.json()) as Partial<ApiErrorBody> & { code?: unknown };
     if (body.error && typeof body.error.message === "string" && body.error.message.length > 0) {
       return new ApiError(
         response.status,
@@ -102,6 +102,10 @@ async function readError(response: Response): Promise<ApiError> {
         body.error.message,
         body.error.details,
       );
+    }
+    // The question import refuses with a flat body: { code, errors: [...] } (no `error` wrapper).
+    if (typeof body.code === "string" && body.code.length > 0) {
+      return new ApiError(response.status, body.code, "The request was refused.", body);
     }
   } catch {
     // Non-JSON bodies fall through to a generic error.
@@ -121,6 +125,8 @@ async function performRequest<T>(path: string, options: RequestOptions): Promise
   let requestBody: BodyInit | undefined;
   if (options.body !== undefined) {
     if (typeof FormData !== "undefined" && options.body instanceof FormData) {
+      requestBody = options.body;
+    } else if (typeof Blob !== "undefined" && options.body instanceof Blob) {
       requestBody = options.body;
     } else if (typeof options.body === "string" && headers.has("Content-Type")) {
       requestBody = options.body;

@@ -8,6 +8,7 @@ import {
   EXAM_ROLES,
   MASTER_DATA_ROLES,
   PROCTORING_ROLES,
+  QUESTION_BANK_ROLES,
   PUBLIC_SITE_ROLES,
   RECOGNITION_ROLES,
   REGISTRY_ROLES,
@@ -99,6 +100,20 @@ export const NAV_ITEMS: readonly NavItem[] = [
     to: "/recognition",
     description: "Recognised sectors, states or PAN India, and the recognition dates.",
     roles: RECOGNITION_ROLES,
+  },
+  {
+    id: "question-bank",
+    label: "Question bank",
+    to: "/question-bank",
+    description: "Questions by qualification, NOS and PC: import, edit, send for review and approve.",
+    roles: QUESTION_BANK_ROLES,
+  },
+  {
+    id: "papers",
+    label: "Papers",
+    to: "/papers",
+    description: "Generate test papers, send them for approval, and approve or send them back.",
+    roles: QUESTION_BANK_ROLES,
   },
   {
     id: "results",

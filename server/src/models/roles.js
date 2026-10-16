@@ -57,6 +57,7 @@ export const CENTRE_READ_ROLES = TRAINING_PARTNER_READ_ROLES;
 export const QUALIFICATION_READ_ROLES = Object.freeze([
   "aa_admin",
   "mis",
+  "sme",
   "ab_reviewer",
   "ncvet_viewer",
 ]);

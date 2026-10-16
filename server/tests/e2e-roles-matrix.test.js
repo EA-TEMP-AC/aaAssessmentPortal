@@ -110,10 +110,10 @@ const ROUTES = [
     source: SECTION5.master,
     scoped: true,
   }),
-  route("get", "/qualifications", ["aa_admin", "mis", "ab_reviewer", "ncvet_viewer"], {
+  route("get", "/qualifications", ["aa_admin", "mis", "sme", "ab_reviewer", "ncvet_viewer"], {
     source: SECTION5.master,
   }),
-  route("get", `/qualifications/${ID}`, ["aa_admin", "mis", "ab_reviewer", "ncvet_viewer"], {
+  route("get", `/qualifications/${ID}`, ["aa_admin", "mis", "sme", "ab_reviewer", "ncvet_viewer"], {
     source: SECTION5.master,
   }),
   ...["training-partners", "centres"].flatMap((name) => [

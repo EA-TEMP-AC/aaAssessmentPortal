@@ -15,6 +15,8 @@ import { ProctoringPage } from "./pages/ProctoringPage";
 import { ExamPage } from "./pages/ExamPage";
 import { FaceMatchDemoPage } from "./pages/FaceMatchDemoPage";
 import { MasterDataPage } from "./pages/MasterDataPage";
+import { PapersPage } from "./pages/papers/PapersPage";
+import { QuestionBankPage } from "./pages/questionBank/QuestionBankPage";
 import { PublicSiteAdminPage } from "./pages/PublicSiteAdminPage";
 import { RecognitionPage } from "./pages/RecognitionPage";
 import { RegistryPage } from "./pages/RegistryPage";
@@ -80,7 +82,9 @@ export function AppRoutes() {
                         ? "/batches/*"
                         : item.id === "registry"
                           ? "/registry/*"
-                          : item.to
+                          : item.id === "papers"
+                            ? "/papers/*"
+                            : item.to
                   }
                   element={
                     item.id === "ab-queue" ? (
@@ -113,6 +117,10 @@ export function AppRoutes() {
                       <WorkingDaysPage />
                     ) : item.id === "batches" ? (
                       <BatchesPage />
+                    ) : item.id === "question-bank" ? (
+                      <QuestionBankPage />
+                    ) : item.id === "papers" ? (
+                      <PapersPage />
                     ) : item.id === "public-site" ? (
                       <PublicSiteAdminPage />
                     ) : item.id === "settings" ? (

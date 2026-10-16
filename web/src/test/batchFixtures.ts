@@ -36,6 +36,7 @@ export function batchRecord(overrides: Partial<BatchRecord> = {}): BatchRecord {
     assessorId: null,
     proctorId: null,
     resultId: null,
+    testPaperId: null,
     rejectReason: null,
     cancelReason: null,
     isReassessment: false,

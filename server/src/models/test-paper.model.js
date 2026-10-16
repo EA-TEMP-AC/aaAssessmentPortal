@@ -78,6 +78,10 @@ const testPaperSchema = new mongoose.Schema(
     submittedAt: { type: Date, default: null },
     approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     approvedAt: { type: Date, default: null },
+    // X-10: set when the reviewer sends a submitted paper back to draft; cleared on the next submit.
+    returnReason: { type: String, trim: true, maxlength: 2000, default: null },
+    returnedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    returnedAt: { type: Date, default: null },
   },
   { timestamps: true },
 );
