@@ -366,6 +366,31 @@ describe("batch candidates", () => {
     expect((await AuditLog.find({ action: "candidate.import" })).length).toBeGreaterThanOrEqual(2);
   });
 
+  it("never stores the uploaded CSV in an audit row", async () => {
+    const m = await masters();
+    const admin = await sessionFor("aa_admin");
+    const batch = await createBatch(admin.token, m);
+    const before = await AuditLog.countDocuments({ action: "candidate.import" });
+
+    const multipart = await request(app)
+      .post(`/api/v1/batches/${batch.id}/candidates/import`)
+      .set(bearer(admin.token))
+      .attach("file", Buffer.from("name,externalRef\nSecretName Person,TP-SECRET-1\n"), "x.csv");
+    expect(multipart.status, JSON.stringify(multipart.body)).toBe(200);
+    const csv = await request(app)
+      .post(`/api/v1/batches/${batch.id}/candidates/import`)
+      .set({ ...bearer(admin.token), "Content-Type": "text/csv" })
+      .send("name,externalRef\nSecretName Two,TP-SECRET-2\n");
+    expect(csv.status).toBe(200);
+
+    const rows = await AuditLog.find({ action: "candidate.import" }).lean();
+    expect(rows).toHaveLength(before + 2);
+    const json = JSON.stringify(rows);
+    expect(json).not.toContain("SecretName");
+    expect(json).not.toContain("TP-SECRET");
+    expect(json).not.toContain("requestBody");
+  });
+
   it("rejects non-CSV and oversized imports", async () => {
     const m = await masters();
     const admin = await sessionFor("aa_admin");

@@ -1,5 +1,6 @@
 import { ZodError } from "zod";
 import { AppError } from "../lib/errors.js";
+import { safeErrorCode } from "../lib/safe-error.js";
 
 export function errorHandler(err, _req, res, _next) {
   if (err instanceof ZodError) {
@@ -34,7 +35,7 @@ export function errorHandler(err, _req, res, _next) {
     return;
   }
 
-  console.error(err);
+  console.error("unhandled error", safeErrorCode(err, "INTERNAL"));
   res.status(500).json({
     error: { code: "INTERNAL", message: "Internal server error" },
   });

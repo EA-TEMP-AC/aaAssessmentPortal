@@ -723,6 +723,76 @@ describe("Question Bank API (server/src/modules/question-bank)", () => {
       expect(res.body.error.code).toBe("EXTERNAL_LINKS_NOT_ALLOWED");
     });
 
+    it("stores no question content or file data in the import audit row", async () => {
+      const row = {
+        qualification: qual.code,
+        nos: "NOS-01",
+        pc: "PC-01",
+        type: "mcq",
+        language: "en",
+        stem: "STEM-LEAK-CHECK",
+        questionText: "QUESTIONTEXT-LEAK-CHECK",
+        marks: 1,
+        optionA: "OPTIONA-LEAK-CHECK",
+        optionB: "Option 2",
+        correctAnswer: "A",
+      };
+      const jsonRes = await request(app)
+        .post("/api/v1/question-bank/import?partial=true")
+        .set(bearer(smeSession.token))
+        .send({
+          rows: [row],
+          questionText: "QUESTIONTEXT-LEAK-CHECK",
+          optionA: "OPTIONA-LEAK-CHECK",
+          data: { bytes: Buffer.alloc(400, 0x41).toString("base64") },
+        });
+      expect(jsonRes.status, JSON.stringify(jsonRes.body)).toBe(201);
+
+      const workbook = await buildSampleWorkbook([
+        { ...row, stem: "BINARY-STEM-LEAK-CHECK", optionA: "BINARY-OPTION-LEAK-CHECK" },
+      ]);
+      const binRes = await request(app)
+        .post("/api/v1/question-bank/import")
+        .set(bearer(smeSession.token))
+        .set("Content-Type", "application/octet-stream")
+        .send(workbook);
+      expect(binRes.status, JSON.stringify(binRes.body)).toBe(201);
+
+      const rows = await AuditLog.find({ action: "question.import" }).lean();
+      expect(rows).toHaveLength(2);
+      const json = JSON.stringify(rows);
+      for (const leak of ["LEAK-CHECK", "AAAAAAAA", "UEsDB", "requestBody", "questionText"]) {
+        expect(json).not.toContain(leak);
+      }
+    });
+
+    it("keeps only allow-listed keys in question create audit rows", async () => {
+      const res = await request(app)
+        .post("/api/v1/question-bank/questions")
+        .set(bearer(smeSession.token))
+        .send({
+          qualificationId: String(qual._id),
+          nosId: "NOS-01",
+          pcId: "PC-01",
+          type: "mcq",
+          language: "en",
+          stem: "ALLOWLIST-STEM-CHECK",
+          options: [
+            { key: "A", text: "ALLOWLIST-OPTION-CHECK" },
+            { key: "B", text: "two" },
+          ],
+          correctAnswer: "A",
+          marks: 1,
+        });
+      expect(res.status, JSON.stringify(res.body)).toBe(201);
+      const row = await AuditLog.findOne({ action: "question.create" }).lean();
+      expect(JSON.stringify(row)).not.toContain("ALLOWLIST-");
+      expect(row.after.status).toBe("draft");
+      expect(row.after.stem).toBeUndefined();
+      expect(row.after.options).toBeUndefined();
+      expect(row.after.correctAnswer).toBeUndefined();
+    });
+
     it("rejects import exceeding 5,000 rows with 400 ROW_LIMIT_EXCEEDED", async () => {
       const tooManyRows = new Array(5001).fill(null).map((_, i) => ({
         qualification: qual.code,

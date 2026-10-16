@@ -94,6 +94,7 @@ sectorCoverageRouter.post(
     req.audit = {
       action: "nqr_qualification.import",
       entity: "nqr_qualification",
+      omitRequestBody: true,
       logOnFailure: true,
       meta: {
         totalRows: result.totalRows,

@@ -246,6 +246,7 @@ questionBankRouter.post(
     req.audit = {
       action: "question.import",
       entity: "question",
+      omitRequestBody: true,
       meta: {
         totalRows: result.totalRows,
         importedCount: result.importedCount,

@@ -1,5 +1,6 @@
 import { mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
+import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import mongoose from "mongoose";
@@ -215,6 +216,20 @@ describe("evidence vault", () => {
       expect(rows[0].meta.sha256).toBe(res.body.sha256);
     });
 
+    it("keeps exact latitude, longitude and deviceId out of the audit row", async () => {
+      const w = await world();
+      const res = await upload(w.assessorSession.token, w.batch._id);
+      expect(res.status).toBe(201);
+      expect(res.body.latitude).toBe(19.076);
+      const row = await AuditLog.findOne({ action: "evidence.upload" }).lean();
+      const json = JSON.stringify(row);
+      expect(json).not.toContain("19.076");
+      expect(json).not.toContain("72.8777");
+      expect(json).not.toContain("dev-9f3a");
+      expect(row.after.hasLocation).toBe(true);
+      expect(row.meta.requestBody).toBeUndefined();
+    });
+
     it("returns the stored row for a repeated clientEventId and stores the file once", async () => {
       const w = await world();
       const file = jpeg(200);
@@ -386,6 +401,40 @@ describe("evidence vault", () => {
   });
 
   describe("size limits", () => {
+    it("refuses by Content-Length before reading the body", async () => {
+      const w = await world();
+      const server = http.createServer(app);
+      await new Promise((resolve) => server.listen(0, resolve));
+      try {
+        const status = await new Promise((resolve, reject) => {
+          const req = http.request(
+            {
+              port: server.address().port,
+              method: "POST",
+              path: `/api/v1/batches/${w.batch._id}/evidence`,
+              headers: {
+                ...bearer(w.assessorSession.token),
+                "Content-Type": "multipart/form-data; boundary=x",
+                "Content-Length": String(300 * MB),
+              },
+            },
+            (res) => {
+              res.resume();
+              resolve(res.statusCode);
+              req.destroy();
+            },
+          );
+          req.on("error", (err) => (err.code === "ECONNRESET" ? undefined : reject(err)));
+          req.flushHeaders(); // headers only: the body is never sent
+        });
+        expect(status).toBe(413);
+      } finally {
+        server.closeAllConnections?.();
+        await new Promise((resolve) => server.close(resolve));
+      }
+      expect(await Evidence.countDocuments()).toBe(0);
+    });
+
     it("allows an image of exactly 25 MB and refuses one byte more", async () => {
       const w = await world();
       const token = w.assessorSession.token;
@@ -631,6 +680,34 @@ describe("evidence vault", () => {
         "FORBIDDEN",
       );
       expect(await AccessLog.countDocuments()).toBe(0);
+    });
+
+    it("keeps the role scope when ?uploaderId= names another user", async () => {
+      const w = await world();
+      const mine = await upload(w.assessorSession.token, w.batch._id);
+      await upload(w.proctorSession.token, w.batch._id);
+
+      const other = await request(app)
+        .get(`/api/v1/evidence?uploaderId=${w.proctorSession.userId}`)
+        .set(bearer(w.assessorSession.token));
+      expect(other.status).toBe(200);
+      expect(other.body.items).toEqual([]);
+      expect(other.body.total).toBe(0);
+
+      const own = await request(app)
+        .get(`/api/v1/evidence?uploaderId=${w.assessorSession.userId}`)
+        .set(bearer(w.assessorSession.token));
+      expect(own.body.items.map((i) => i.id)).toEqual([mine.body.id]);
+
+      const proctorSide = await request(app)
+        .get(`/api/v1/evidence?uploaderId=${w.assessorSession.userId}`)
+        .set(bearer(w.proctorSession.token));
+      expect(proctorSide.body.total).toBe(0);
+
+      const admin = await request(app)
+        .get(`/api/v1/evidence?uploaderId=${w.proctorSession.userId}`)
+        .set(bearer(w.admin.token));
+      expect(admin.body.total).toBe(1);
     });
 
     it("lets aa_admin, mis and ncvet_viewer read everything", async () => {

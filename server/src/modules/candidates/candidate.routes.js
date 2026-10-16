@@ -102,6 +102,7 @@ export function mountCandidateRoutes(router) {
       setAudit(req, {
         action: "candidate.import",
         entity: "candidate",
+        omitRequestBody: true,
         entityId: id,
         abId: result.abId,
         batchId: id,

@@ -267,7 +267,7 @@ function readScope(user) {
 }
 
 export async function listEvidence(user, query) {
-  const filter = { ...readScope(user) };
+  const filter = {};
   if (query.batchId) filter.batchId = toObjectIdOrNull(query.batchId);
   if (query.candidateId) filter.candidateId = toObjectIdOrNull(query.candidateId);
   if (query.kind) filter.kind = query.kind;
@@ -281,10 +281,12 @@ export async function listEvidence(user, query) {
     if (query.to) filter.capturedAt.$lte = new Date(query.to);
   }
 
+  // The caller's scope is ANDed with the filters, so no filter can widen it.
+  const scoped = { $and: [readScope(user), filter] };
   const skip = (query.page - 1) * query.pageSize;
   const [total, docs] = await Promise.all([
-    Evidence.countDocuments(filter),
-    Evidence.find(filter).sort({ capturedAt: -1, _id: -1 }).skip(skip).limit(query.pageSize).lean(),
+    Evidence.countDocuments(scoped),
+    Evidence.find(scoped).sort({ capturedAt: -1, _id: -1 }).skip(skip).limit(query.pageSize).lean(),
   ]);
   return {
     page: query.page,

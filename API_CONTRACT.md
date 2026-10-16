@@ -41,6 +41,7 @@ Phase 1 endpoints have examples. Phase 2+ stubs without full examples.
 | `UNSUPPORTED_FILE_TYPE` | 415 | Evidence file is not JPEG, PNG, PDF or MP4 by its bytes (V-01) |
 | `FILE_TYPE_MISMATCH` | 415 | Evidence file's real type differs from the type the client declared (V-01) |
 | `FILE_TOO_LARGE` | 413 | Evidence file over 25 MB (image, PDF) or 200 MB (video) (V-01) |
+| `MUST_CHANGE_PASSWORD` | 403 | The signed-in user still has `mustChangePassword: true`. Every route behind a login refuses except `POST /auth/change-password`, `POST /auth/logout`, `POST /auth/refresh` and `GET /auth/me` (B-17) |
 | `REASSESS_ALREADY_OPEN` | 409 | A learner being reassessed already has a live, unpublished reassessment batch from the same parent. `details.conflicts` names each learner and the existing batch |
 | `REASSESS_NOT_ELIGIBLE` | 409 | Reassessment rules failed. `details.reason`: `not_published`, `window`, `outcome`, or `type`. Window is one year from the original result’s publication date (Guidelines 4.7) |
 | `CONFLICT_IDEMPOTENT` | 409 | Same `clientEventId`, different payload, path, or user |
@@ -121,7 +122,7 @@ The new password is stored hashed and `mustChangePassword` becomes `false`. No n
 
 | Check, in this order | Failure |
 |---|---|
-| Access token | `401 UNAUTHORIZED` |
+| Access token | `401 UNAUTHORIZED` (a user with `mustChangePassword` may call this route; every other route returns `403 MUST_CHANGE_PASSWORD` until the password is changed, B-17) |
 | Body shape | `400 VALIDATION_ERROR` |
 | Rate limit: `LOGIN_RATE_LIMIT_MAX` attempts per `LOGIN_RATE_LIMIT_WINDOW_MS`, per user. Every attempt counts, right or wrong | `429 RATE_LIMITED` |
 | `currentPassword` is the user's password | `400 VALIDATION_ERROR` with `details.currentPassword`. Not `401`, so a client does not treat it as an expired session |
@@ -981,6 +982,12 @@ All holiday mutations **audit-logged**. Do **not** recompute existing batch `sla
 
 Secrets redacted. Append-only.
 
+Audit rules (B-17):
+- An uploaded file never reaches an audit row. Question import, candidate CSV import, NQR import, evidence upload and login events keep the request body out (`omitRequestBody`), and the audit middleware refuses to store a Buffer, a typed array or a long base64 string on any route.
+- Question routes (`/question-bank/*`) store only an allow-list of safe keys (ids, type, status, version, marks, counts and similar). Everything else, such as `stem`, `options`, `correctAnswer`, comments and question text, is dropped and the row carries `content: "[redacted]"`.
+- Evidence and login-event rows carry no exact `latitude`, `longitude`, `lat`, `lng` or `deviceId`. The API response still returns them to those who may read them.
+- If the audit insert fails after the change is saved, the success response is kept. Only the error code is logged on the server.
+
 ### GET /audit/access-log?subjectType=&subjectId=&actorId=&actorRole=&kind=&from=&to=&page=&pageSize=
 
 `aa_admin` only (others `403`). Who read personal data of which person (S-01, TR s20). Rows are written by the list and detail endpoints that return personal data: `GET /users`, `/users/:id`, `/learners`, `/learners/:id`, `/assessors`, `/assessors/:id`, `/assessors/available`, `/proctors`, `/proctors/:id`, and `GET /batches/:id/candidates` (logged against the learner). One row per person returned; a list of 20 writes 20 rows with the same `requestId`. Rows hold ids and field names only, never the data. A read that cannot be logged returns `500` and no data.
@@ -1362,6 +1369,8 @@ Parts:
 | `latitude`, `longitude`, `accuracy` | no | `latitude` -90 to 90, `longitude` -180 to 180, `accuracy` metres, 0 or more. Latitude and longitude go together; `accuracy` needs them |
 | `locationStatus` | no | `captured` or `unavailable`. `unavailable` needs `locationUnavailableReason` (up to 200 characters) and no coordinates. A reason with a fix is `400` |
 
+A request whose `Content-Length` header is over 200 MB plus 64 KB for the form is refused with `413 FILE_TOO_LARGE` before the body is read (B-17). The per-type limit (25 MB for images and PDFs) is still checked once the real type is known. A request with no `Content-Length` (chunked) is stopped by the upload limit while it streams.
+
 No location at all is allowed and stored as `locationStatus: "not_provided"`. Unknown parts, and server-owned ones (`uploadedAt`, `sha256`, `size`, `uploaderId`), are `400`.
 
 The server computes `sha256` and `size`, sets `uploadedAt`, and records the uploader and their role.
@@ -1385,7 +1394,7 @@ Audit: `evidence.upload` (or `evidence.replay`) with the response fields and `me
 
 ### GET /evidence?batchId=&candidateId=&kind=&uploaderId=&from=&to=&hasLocation=&page=&pageSize=
 
-Read roles above. All filters optional; an unknown filter or bad value is `400`. `from` and `to` are ISO dates or times applied to `capturedAt`. `uploaderId` is a user id. `hasLocation=true` means `locationStatus` is `captured`; `false` is every other status. `page` default 1, `pageSize` default 20, max 100. Newest `capturedAt` first.
+Read roles above. All filters optional; an unknown filter or bad value is `400`. `from` and `to` are ISO dates or times applied to `capturedAt`. `uploaderId` is a user id. `hasLocation=true` means `locationStatus` is `captured`; `false` is every other status. `page` default 1, `pageSize` default 20, max 100. Newest `capturedAt` first. The filters are ANDed with the caller's scope and never replace it: an assessor or proctor who passes another user's `uploaderId` gets an empty list (B-17).
 
 `200`: `{ "page": 1, "pageSize": 20, "total": 3, "items": [ <evidence row as above, without replayed> ] }`
 
