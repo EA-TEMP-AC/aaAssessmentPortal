@@ -210,6 +210,9 @@ it("runs the whole flow: pre-check, start, answer, submit, finished", async () =
     const method = init?.method ?? "GET";
     if (u.pathname.endsWith("/attempts/available")) return jsonResponse(200, list([available()]));
     if (u.pathname.endsWith("/health")) return jsonResponse(200, { status: "ok" });
+    if (u.pathname.endsWith("/candidate-info/mine")) {
+      return jsonResponse(200, { batchId: BATCH_ID, enabled: false, fields: [], submitted: false });
+    }
     if (u.pathname.endsWith("/attempts/start")) return jsonResponse(201, attemptBody());
     if (u.pathname.endsWith("/answers")) return jsonResponse(200, { saved: 1, savedAt: "t", deadlineAt: null, remainingSeconds: 10 });
     if (u.pathname.endsWith("/submit")) {

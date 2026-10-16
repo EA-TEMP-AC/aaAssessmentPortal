@@ -28,6 +28,8 @@ export interface ProctorConfig {
   detectionIntervalMs: number;
   flagCooldownSeconds: number;
   sustainedSeconds: Record<string, number>;
+  /** B-20: the batch's start-and-end photo switch. Carried here for the engine; not acted on yet. */
+  snapshotAtStartAndEnd?: boolean;
 }
 
 export type ProctorStatus = { state: "starting" | "running" | "degraded" | "stopped"; message?: string };

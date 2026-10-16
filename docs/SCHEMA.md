@@ -22,6 +22,7 @@ Phases tag each collection: `1` = Phase 1, `2` = Phase 2, `3` = Phase 3.
 | `assessors` | `email` | `emailHash` | equality only |
 | `proctors` | `email` | `emailHash` | equality only |
 | `learners` | `phone` | none | no |
+| `candidateInfo` | `email`, `fatherName`, `gender`, `dateOfBirth` | none | no |
 
 Not encrypted, on purpose or not yet: names, `externalRef`, `accommodations`, training-partner and centre contact fields, `awardingBodies.notificationEmails`, and `loginEvents` (location). See decisions 260 and 261. Raw emails and phones in `auditLogs` snapshots are masked, `emailQueue` masks `to` and clears `text` once sent or failed, and historical rows can be masked via `npm run scrub:logs` (B-16). The schema has no candidate or learner date of birth, address or email; the plugin can take such a field when one is added (decision 260).
 
@@ -385,6 +386,7 @@ Indexes: `{ code: 1 }` unique; `{ sector: 1 }`.
 | assessmentLanguage | string | Y | Trimmed, 1–80 characters. Scheduled language of this batch |
 | state | StateUt | Y | Copied from `centres.state` at create |
 | learnerFeedback | { collected: bool, reason: string\|null, note: string\|null, collectedOn: string\|null, recordedBy: ObjectId, recordedAt: Date } \| null | N | Null until recorded; one record, replaced on each PUT. Reason required when `collected` is false, otherwise null. `note` ≤2000 characters. `collectedOn` is `YYYY-MM-DD` IST, only when `collected` is true. Written by B-10 once the batch is `assessment_completed` or later (not `rejected` or `cancelled`). NCVET:FR §J; Annexure IX(a) Governance sub-parameter 4; docs/ERF.md row 26 |
+| settings | object | N | B-20. Per-batch settings, set by aa_admin with `PATCH /batches/:id/settings`. Absent on a batch nobody changed, which behaves exactly as before. Once set, the full shape below is stored. See "Batch settings" under this table |
 | recognitionOverride | { byUserId, reason, at, checks: string[] } \| null | N | Set when `aa_admin` overrides §4.3 |
 | status | BatchStatus | Y | |
 | statusVersion | number | Y | |
@@ -404,6 +406,23 @@ Indexes: `{ code: 1 }` unique; `{ sector: 1 }`.
 | acceptedAt | Date | N | |
 | assignedAt | Date | N | |
 | cancelledAt | Date | N | |
+
+**Batch settings (`batches.settings`, B-20).** No personal data. A missing key means the default, which is today's behaviour. `server/src/config/batch-settings.js` holds the defaults and limits.
+
+| Key | Type | Default | Notes |
+|---|---|---|---|
+| shuffleQuestions | bool | true | Order is drawn when the attempt starts, seeded by the new attempt's id, and stored in `attempts.questions`. A resume shows the stored order. Today's start already shuffled, so the default stays on |
+| shuffleOptions | bool | false | Copied to `attempts.shuffleOptions` at start. Options are shown in an order seeded by the attempt id and the question id; marking and answers use the option key |
+| showMarksToCandidate | bool | false | After the attempt closes, the candidate's responses carry `marks {obtainedMarks, maxMarks, complete}`. Totals only |
+| questionsMandatory | bool | false | `POST /attempts/:id/submit` is refused with `ATTEMPT_UNANSWERED_QUESTIONS` while any question has no answer. A timeout still closes the attempt |
+| flagPolicy.action | `record` \| `pause` | `record` | See pause below |
+| flagPolicy.pauseAfterFlags | integer 1 to 20 | 3 | Counted flags that pause the attempt |
+| flagPolicy.countSeverities | `["high"]` or `["medium","high"]` | `["high"]` | Low is never counted |
+| imageCapture.intervalSeconds | integer 10 to 120 | `PROCTOR_SNAPSHOT_INTERVAL_SECONDS` (30) | Becomes `config.snapshotIntervalSeconds` of a new proctoring session |
+| imageCapture.atStartAndEnd | bool | true | Delivered as `config.snapshotAtStartAndEnd`; the engine does not act on it yet (Q807) |
+| candidateInfoPopup.enabled | bool | false | |
+| candidateInfoPopup.fields | subset of `email`, `fatherName`, `gender`, `dateOfBirth` | [] | Required when enabled. There is no national ID field, and none can be added through the API |
+| captureLocation | bool | false | Only the field and the API. X-07 uses it |
 
 Indexes: `{ status: 1, assessmentStartDate: 1 }`; `{ assessorId: 1, assessmentStartDate: 1, assessmentEndDate: 1 }`; `{ tpId: 1 }`; `{ abId: 1 }`; `{ schemeId: 1 }` sparse; `{ projectId: 1 }` sparse; `{ sector: 1 }`; `{ reassessmentOf: 1 }` sparse; `{ firstAssessmentBatchId: 1 }`; `{ assessmentStartDate: 1 }` (N-01: every analytics query starts with a range on this field; the result join uses the existing unique `results.batchId` index, and the `abId` filter for `ab_reviewer` uses `{ abId: 1 }`).
 
@@ -818,6 +837,8 @@ One candidate's attempt at one approved test paper. Holds the stored question or
 | closedAt, closeReason | Date, enum | N | `submit` or `timeout` |
 | questions[] | {questionId, version, nosId, pcId, type, marks, answer, answeredAt, awardedMarks, scoreStatus, scoredBy, markedBy, markedAt} | Y | In the stored (shuffled) order. `scoreStatus` is `pending` or `scored`; `scoredBy` is `auto` or `manual` |
 | scores | {maxMarks, obtainedMarks, pendingMarks, pendingCount, complete, byNos[], byType[]} | N | Set when the attempt closes, recomputed after manual marks. Groups are {key, maxMarks, obtainedMarks, pendingMarks, pendingCount}, sorted by key |
+| shuffleOptions | bool | N | B-20. The batch's `shuffleOptions` when the attempt started; a later settings change does not move an open attempt. Default false |
+| pause | {active, pausedAt, timesPaused, lastUnlockedAt, lastUnlockedBy} | N | B-20. Absent until the flag policy first pauses the attempt. While `active`, answer saves and submit are refused with `ATTEMPT_PAUSED`. The clock, `deadlineAt` and `acceptUntil` are not touched; a timeout still closes the attempt. A pause never changes scores, status or a result |
 | rev | Number | Y | Bumped by every write; closing and marking compare it so a save is never lost |
 
 Indexes: unique `{ testPaperId: 1, candidateId: 1 }` (one attempt per paper), `{ batchId, status }`, `{ abId, startedAt }`, `{ status, acceptUntil }`.
@@ -977,6 +998,8 @@ Prototype. Detection runs in the candidate's browser; the server stores sessions
 | batchId, abId | ObjectId | Y | Copied from the attempt, for scoping |
 | candidateId, learnerId, userId | ObjectId | Y | Roster row, learner and the candidate's login user (the owner) |
 | lastSeenAt | Date | N | Server time of the last heartbeat; set at start |
+| snapshotIntervalSeconds | Number | N | B-20. The batch's `imageCapture.intervalSeconds` when the session began; the feed-lost time uses it. Missing means `PROCTOR_SNAPSHOT_INTERVAL_SECONDS` |
+| policyFlagCount | Number | N | B-20. Flags the batch's flag policy counts since the session began or the last unlock. Incremented with the flag; set to 0 by an unlock. Default 0 |
 | flagCounts | {low, medium, high} | Y | Incremented with each new flag (same transaction) |
 | warnings[] | {_id, flagId, message (max 300), createdAt, createdBy} | Y | Added by a `warn` decision; the candidate reads them |
 | invalidationRecommendedAt, invalidationRecommendedBy, invalidationRecommendedFlagId | Date, ObjectId, ObjectId | N | Set by the first `invalidate_recommended` decision; a mark only |
@@ -1005,6 +1028,25 @@ X-06: no new field. The staff response adds `sustainedSeconds`, read from `PROCT
 Indexes: `{ sessionId: 1, clientEventId: 1 }` unique; `{ sessionId: 1, capturedAt: 1 }`; `{ batchId: 1, severity: 1 }`.
 
 Scope: the candidate writes and reads warnings for their own session only; aa_admin and ncvet_viewer read all; proctor and assessor read their assigned batches; ab_reviewer reads its own `abId`. Review: aa_admin, and proctor on their own batches; `invalidate_recommended` is aa_admin only.
+
+### 3.43 `candidateInfo` (phase 2) — Task B-20
+
+What a candidate typed into the pre-exam pop-up of their batch (`batches.settings.candidateInfoPopup`). One row per roster candidate, replaced when they save again. No national ID field exists.
+
+| Field | Type | Req | Notes |
+|---|---|---|---|
+| batchId | ObjectId | Y | |
+| candidateId | ObjectId | Y | Roster row (`candidates`) |
+| learnerId | ObjectId | Y | For the access log |
+| email | string | N | Encrypted at rest (§7), lower case, not searchable |
+| fatherName | string | N | Encrypted at rest, 1 to 200 characters |
+| gender | string | N | Encrypted at rest; `female`, `male` or `other` |
+| dateOfBirth | string | N | Encrypted at rest; `YYYY-MM-DD` |
+| submittedAt | Date | Y | |
+| createdAt, updatedAt | Date | Y | |
+
+Only the fields the batch lists are stored. Visible only to aa_admin and the tp of the batch (`GET /batches/:id/candidate-info`, access-logged as a `learner` list read with field names). The values never go into `auditLogs` (the save is audited with field names only) or logs.
+Indexes: unique `{ batchId: 1, candidateId: 1 }`.
 
 ## 4. Business rules
 
@@ -1054,6 +1096,9 @@ Schema and contract only. **B-10** writes `learnerFeedback` once the batch is `a
 | Batch list/get + child GETs | A | R | D | R | R | R | R | R | R | row scope |
 | Candidates CUD / CSV | A | A | D | R | D | D | R | R | R | scoped |
 | Accept/reject/assign/reassign/cancel/complete/reassess | A | D | D | D | D | D | D | D | D | lateReason aa_admin; complete needs reason |
+| Batch settings read / change (B-20) | A | R | D | R | R | D | R | R | R | change: aa_admin only; read follows batch row scope; the candidate gets the settings it needs inside the attempt |
+| Unlock a paused exam (B-20) | A | D | D | D | A | D | D | D | D | proctor only on their own batches; audited |
+| Candidate pop-up answers (B-20) | R | D | D | D | D | W | R | D | D | candidate writes their own; aa_admin and the batch's tp read; reads are access-logged |
 | Submit result | A | D | D | D | D | D | D | D | D | |
 | Validate / publish | D | D | D | D | D | D | D | A | D | own abId |
 | Login-event write | D | D | D | A | A | D† | D | D | D | assigned |

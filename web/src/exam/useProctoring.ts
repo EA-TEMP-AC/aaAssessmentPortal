@@ -26,6 +26,8 @@ export type ProctoringView = {
   /** X-05: the flag type to tell the candidate about now, or null. Repeats inside the cooldown are merged. */
   notice: ProctorFlagType | null;
   dismissNotice: () => void;
+  /** B-20: from the heartbeat. null until the first answer. */
+  paused: boolean | null;
   stop: () => void;
 };
 
@@ -38,6 +40,7 @@ export function useProctoring({ attemptId, batchId, stream, face }: Input): Proc
   const [status, setStatus] = useState<ProctorStatus>({ state: "starting" });
   const [warnings, setWarnings] = useState<ProctorWarning[]>([]);
   const [notices, setNotices] = useState<NoticeState>(NO_NOTICES);
+  const [paused, setPaused] = useState<boolean | null>(null);
   const cooldownMs = useRef(15000);
   const seen = useRef(new Set<string>());
   const engine = useRef<ProctorEngine | null>(null);
@@ -114,7 +117,11 @@ export function useProctoring({ attemptId, batchId, stream, face }: Input): Proc
 
       timers.current.push(
         setInterval(() => {
-          void sendHeartbeat(session.id).catch(() => {});
+          void sendHeartbeat(session.id)
+            .then((beat) => {
+              if (live && !stopped.current) setPaused(beat.paused);
+            })
+            .catch(() => {});
         }, HEARTBEAT_MS),
         setInterval(() => void poll(session.id), WARNING_POLL_MS),
       );
@@ -166,5 +173,14 @@ export function useProctoring({ attemptId, batchId, stream, face }: Input): Proc
 
   const dismiss = useCallback(() => setNotices((cur) => dismissNotice(cur)), []);
 
-  return { unavailable, status, warnings, acknowledge, notice: notices.queue[0] ?? null, dismissNotice: dismiss, stop };
+  return {
+    unavailable,
+    status,
+    warnings,
+    acknowledge,
+    notice: notices.queue[0] ?? null,
+    dismissNotice: dismiss,
+    paused,
+    stop,
+  };
 }

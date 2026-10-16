@@ -6,6 +6,7 @@ import {
   PROCTORING_CANDIDATE_ROLES,
   PROCTORING_READ_ROLES,
   PROCTORING_REVIEW_ROLES,
+  PROCTORING_UNLOCK_ROLES,
 } from "../../models/roles.js";
 import {
   createSessionSchema,
@@ -24,6 +25,7 @@ import {
   listWarnings,
   recordFlag,
   reviewFlag,
+  unlockSession,
 } from "./proctoring.service.js";
 
 export const proctoringRouter = Router();
@@ -152,6 +154,28 @@ proctoringRouter.patch(
       entityId: flag._id,
       abId: flag.abId,
       batchId: flag.batchId,
+      omitRequestBody: true,
+      before,
+      after,
+    };
+    res.status(200).json(body);
+  }),
+);
+
+/** POST /api/v1/proctoring/sessions/:id/unlock. B-20. Lifts a flag-policy pause. */
+proctoringRouter.post(
+  "/sessions/:id/unlock",
+  requireRoles(...PROCTORING_UNLOCK_ROLES),
+  asyncHandler(async (req, res) => {
+    const { id } = idParamSchema.parse(req.params);
+    heartbeatSchema.parse(req.body ?? {});
+    const { session, before, after, body } = await unlockSession(req.user, id);
+    req.audit = {
+      action: "proctoring.unlock",
+      entity: "proctoringSession",
+      entityId: session._id,
+      abId: session.abId,
+      batchId: session.batchId,
       omitRequestBody: true,
       before,
       after,

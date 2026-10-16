@@ -10,12 +10,14 @@ import {
   listProctoringSessions,
   reviewProctoringFlag,
   SESSION_STATUSES,
+  unlockProctoringSession,
   SEVERITIES,
   SEVERITY_LABELS,
   STATUS_LABELS,
   type Decision,
   type Flag,
   type FlagCounts,
+  type SessionDetail,
   type SessionItem,
   type Severity,
 } from "../api/proctoring";
@@ -53,6 +55,7 @@ function StatusTag({ item }: { item: SessionItem }) {
   return (
     <>
       <span className={`session-status session-${item.status}`}>{STATUS_LABELS[item.status]}</span>
+      {item.paused ? <span className="session-flagged"> Exam paused</span> : null}
       {item.invalidationRecommended ? <span className="session-flagged"> Invalidation recommended</span> : null}
     </>
   );
@@ -250,6 +253,64 @@ function FlagEntry({
   );
 }
 
+/** B-20. Shows whether the flag policy has paused the exam, and lets aa_admin or the proctor unlock it. */
+function LockSection({
+  sessionId,
+  lock,
+  canUnlock,
+  onUnlocked,
+}: {
+  sessionId: string;
+  lock: NonNullable<SessionDetail["lock"]>;
+  canUnlock: boolean;
+  onUnlocked: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const policyText =
+    lock.policy.action === "pause"
+      ? `Pause after ${lock.policy.pauseAfterFlags} ${lock.policy.countSeverities.join(" and ")} flags`
+      : "Record only: flags never pause the exam";
+
+  async function unlock() {
+    setBusy(true);
+    setError(null);
+    try {
+      await unlockProctoringSession(sessionId);
+      onUnlocked();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section aria-labelledby={`lock-heading-${sessionId}`}>
+      <h3 id={`lock-heading-${sessionId}`}>Exam lock</h3>
+      <p role="status">
+        {lock.paused
+          ? `The exam is paused${lock.pausedAt ? ` since ${formatTime(lock.pausedAt)}` : ""}. The candidate sees: Your test is paused. Please contact your proctor.`
+          : "The exam is not paused."}
+      </p>
+      <p className="field-hint">
+        {policyText}. Counted flags now: {lock.countedFlags}. The clock keeps running while paused, and unlocking
+        starts the count again from zero.
+      </p>
+      {lock.paused && canUnlock ? (
+        <button type="button" onClick={() => void unlock()} disabled={busy}>
+          {busy ? "Unlocking…" : "Unlock exam"}
+        </button>
+      ) : null}
+      {error ? (
+        <p className="form-error" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
 function SessionPanel({
   id,
   canReview,
@@ -290,6 +351,11 @@ function SessionPanel({
   }
 
   const data = detail.data;
+  function unlocked() {
+    setNotice("The exam was unlocked. The candidate can carry on.");
+    void queryClient.invalidateQueries({ queryKey: ["proctoring-session", id] });
+    void queryClient.invalidateQueries({ queryKey: ["proctoring-sessions"] });
+  }
   const headingId = `proctoring-session-${id}`;
   return (
     <div
@@ -350,6 +416,9 @@ function SessionPanel({
               <dd>{data.warnings.length}</dd>
             </div>
           </dl>
+          {data.lock ? (
+            <LockSection sessionId={id} lock={data.lock} canUnlock={canReview} onUnlocked={unlocked} />
+          ) : null}
           <p className="field-hint">
             Flags only record what the browser saw. Nothing is decided automatically; each flag waits for a person.
           </p>

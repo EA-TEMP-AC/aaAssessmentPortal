@@ -1,5 +1,16 @@
 import { z } from "zod";
 import { isCalendarDate } from "../../lib/working-days.js";
+import {
+  CANDIDATE_INFO_FIELDS,
+  CANDIDATE_INFO_GENDERS,
+  FLAG_COUNT_SEVERITIES,
+  FLAG_PAUSE_AFTER_MAX,
+  FLAG_PAUSE_AFTER_MIN,
+  FLAG_POLICY_ACTIONS,
+  IMAGE_INTERVAL_MAX_SECONDS,
+  IMAGE_INTERVAL_MIN_SECONDS,
+} from "../../config/batch-settings.js";
+import { assertNoNationalIdKeys } from "../question-bank/question-bank.schemas.js";
 import { BATCH_MODES, BATCH_STATUSES, BATCH_TYPES } from "./batch-transitions.js";
 
 const objectIdSchema = z.string().regex(/^[a-fA-F0-9]{24}$/, "Invalid id");
@@ -148,3 +159,78 @@ export const learnerFeedbackBodySchema = z
       });
     }
   });
+
+const guard = (schema) =>
+  z.preprocess((val) => {
+    assertNoNationalIdKeys(val);
+    return val;
+  }, schema);
+
+/** Counted severities: exactly ["high"] or ["medium", "high"], in either order, no repeats. */
+const countSeveritiesSchema = z
+  .array(z.enum(FLAG_COUNT_SEVERITIES))
+  .refine(
+    (list) => new Set(list).size === list.length && list.includes("high"),
+    'Use ["high"] or ["medium","high"]',
+  )
+  .transform((list) => FLAG_COUNT_SEVERITIES.filter((s) => list.includes(s)));
+
+/**
+ * PATCH /batches/:id/settings. B-20. Any subset of the groups; inside a group any subset of the
+ * keys. Unknown keys are rejected, and there is no national ID field anywhere.
+ */
+export const batchSettingsBodySchema = guard(
+  z
+    .object({
+      shuffleQuestions: z.boolean(),
+      shuffleOptions: z.boolean(),
+      showMarksToCandidate: z.boolean(),
+      questionsMandatory: z.boolean(),
+      flagPolicy: z
+        .object({
+          action: z.enum(FLAG_POLICY_ACTIONS),
+          pauseAfterFlags: z.number().int().min(FLAG_PAUSE_AFTER_MIN).max(FLAG_PAUSE_AFTER_MAX),
+          countSeverities: countSeveritiesSchema,
+        })
+        .partial()
+        .strict(),
+      imageCapture: z
+        .object({
+          intervalSeconds: z
+            .number()
+            .int()
+            .min(IMAGE_INTERVAL_MIN_SECONDS)
+            .max(IMAGE_INTERVAL_MAX_SECONDS),
+          atStartAndEnd: z.boolean(),
+        })
+        .partial()
+        .strict(),
+      candidateInfoPopup: z
+        .object({
+          enabled: z.boolean(),
+          fields: z
+            .array(z.enum(CANDIDATE_INFO_FIELDS))
+            .max(CANDIDATE_INFO_FIELDS.length)
+            .refine((list) => new Set(list).size === list.length, "No repeated fields"),
+        })
+        .partial()
+        .strict(),
+      captureLocation: z.boolean(),
+    })
+    .partial()
+    .strict()
+    .refine((body) => Object.keys(body).length > 0, "Send at least one setting"),
+);
+
+/** PUT /batches/:id/candidate-info. Which keys are needed depends on the batch settings. */
+export const candidateInfoBodySchema = guard(
+  z
+    .object({
+      email: z.string().trim().toLowerCase().email().max(254),
+      fatherName: z.string().trim().min(1).max(200),
+      gender: z.enum(CANDIDATE_INFO_GENDERS),
+      dateOfBirth: calendarDate,
+    })
+    .partial()
+    .strict(),
+);

@@ -1,5 +1,5 @@
-import { randomInt } from "node:crypto";
 import mongoose from "mongoose";
+import { resolveBatchSettings } from "../../config/batch-settings.js";
 import { compliance } from "../../config/compliance.js";
 import { env } from "../../config/env.js";
 import { AppError, forbidden, notFound, validationError } from "../../lib/errors.js";
@@ -53,6 +53,59 @@ function timeUpError() {
   return new AppError(409, "ATTEMPT_TIME_UP", "The time for this attempt has ended", {
     status: "timed_out",
   });
+}
+
+function pausedError(attempt) {
+  return new AppError(409, "ATTEMPT_PAUSED", "Your test is paused. Please contact your proctor.", {
+    status: attempt.status,
+  });
+}
+
+/** Stable 32-bit seed from ids: the same ids give the same order on every read and resume. */
+function seedFrom(...parts) {
+  let h = 2166136261;
+  for (const ch of parts.map(String).join(":")) {
+    h ^= ch.charCodeAt(0);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+const isPaused = (attempt) => attempt.pause?.active === true;
+
+/** B-20: options in a per-attempt stable order. Marking uses option keys, never positions. */
+function orderedOptions(attempt, questionId, options) {
+  if (attempt.shuffleOptions !== true) return options;
+  return shuffle(options, createRng(seedFrom(attempt._id, questionId)));
+}
+
+async function loadBatchSettings(batchId) {
+  const batch = await Batch.findById(batchId).select("settings").lean();
+  return resolveBatchSettings(batch?.settings);
+}
+
+/** What the exam page needs from the batch settings. No flag limits, no thresholds. */
+function candidateSettingsView(settings) {
+  return {
+    questionsMandatory: settings.questionsMandatory,
+    showMarksToCandidate: settings.showMarksToCandidate,
+    flagPolicy: { action: settings.flagPolicy.action },
+    imageCapture: { ...settings.imageCapture },
+    candidateInfoPopup: { ...settings.candidateInfoPopup },
+    captureLocation: settings.captureLocation,
+  };
+}
+
+/** The totals a candidate may see when the batch shows marks. Closed attempts only. */
+function candidateMarksView(attempt, settings) {
+  if (!settings.showMarksToCandidate || attempt.status === "in_progress" || !attempt.scores) {
+    return null;
+  }
+  return {
+    obtainedMarks: attempt.scores.obtainedMarks,
+    maxMarks: attempt.scores.maxMarks,
+    complete: attempt.scores.complete,
+  };
 }
 
 async function loadQuestionMap(ids) {
@@ -126,6 +179,8 @@ async function closeAttempt(attempt, { reason, now, trigger }) {
   let current = attempt;
   for (let i = 0; i < MAX_CAS_TRIES; i += 1) {
     if (current.status !== "in_progress") return { attempt: current, closed: false };
+    // A paused attempt cannot be submitted; a timeout still closes it (the clock keeps running).
+    if (reason === "submit" && isPaused(current)) throw pausedError(current);
     const keyDocs = await loadQuestionMap(current.questions.map((q) => q.questionId));
     const keys = new Map([...keyDocs].map(([id, d]) => [id, d.correctAnswer ?? null]));
     const optionsById = new Map([...keyDocs].map(([id, d]) => [id, d.options ?? []]));
@@ -141,7 +196,12 @@ async function closeAttempt(attempt, { reason, now, trigger }) {
 
     const run = async (session) => {
       const updated = await Attempt.findOneAndUpdate(
-        { _id: current._id, status: "in_progress", rev: current.rev },
+        {
+          _id: current._id,
+          status: "in_progress",
+          rev: current.rev,
+          ...(reason === "submit" ? { "pause.active": { $ne: true } } : {}),
+        },
         { $set: set, $inc: { rev: 1 } },
         { new: true, session },
       ).lean();
@@ -450,7 +510,12 @@ export async function startAttempt(user, { batchId, testPaperId }) {
   });
   if (blocker) throw new AppError(blocker.status, blocker.code, blocker.message, blocker.details);
 
-  const order = shuffle([...paper.items], createRng(randomInt(0, 4294967296)));
+  // B-20: the order is seeded by the new attempt's id and stored, so a resume shows the same one.
+  const attemptId = new mongoose.Types.ObjectId();
+  const settings = resolveBatchSettings(batch.settings);
+  const order = settings.shuffleQuestions
+    ? shuffle([...paper.items], createRng(seedFrom(attemptId)))
+    : [...paper.items];
   const questions = order.map((i) => ({
     questionId: i.questionId,
     version: i.version,
@@ -474,6 +539,8 @@ export async function startAttempt(user, { batchId, testPaperId }) {
 
   try {
     const doc = await Attempt.create({
+      _id: attemptId,
+      shuffleOptions: settings.shuffleOptions,
       testPaperId: paper._id,
       batchId: batch._id,
       abId: batch.abId,
@@ -502,7 +569,13 @@ export async function startAttempt(user, { batchId, testPaperId }) {
 /* ------------------------------------------------------------------- reads */
 
 /** The candidate's view: questions without keys, answers, no marks. */
-async function presentForCandidate(attempt, now, qmap, questions = attempt.questions) {
+async function presentForCandidate(
+  attempt,
+  now,
+  qmap,
+  questions = attempt.questions,
+  batchSettings = null,
+) {
   const open = attempt.status === "in_progress";
   return {
     id: idStr(attempt._id),
@@ -514,6 +587,14 @@ async function presentForCandidate(attempt, now, qmap, questions = attempt.quest
     deadlineAt: iso(attempt.deadlineAt),
     closedAt: iso(attempt.closedAt),
     closeReason: attempt.closeReason ?? null,
+    paused: open && isPaused(attempt),
+    shuffleOptions: attempt.shuffleOptions === true,
+    ...(batchSettings
+      ? {
+          settings: candidateSettingsView(batchSettings),
+          marks: candidateMarksView(attempt, batchSettings),
+        }
+      : {}),
     serverTime: now.toISOString(),
     remainingSeconds: open
       ? Math.max(0, Math.ceil((new Date(attempt.deadlineAt).getTime() - now.getTime()) / 1000))
@@ -527,7 +608,10 @@ async function presentForCandidate(attempt, now, qmap, questions = attempt.quest
         type: q.type,
         marks: q.marks,
         stem: doc?.stem ?? "",
-        options: (doc?.options ?? []).map((o) => ({ key: o.key, text: o.text })),
+        options: orderedOptions(attempt, q.questionId, doc?.options ?? []).map((o) => ({
+          key: o.key,
+          text: o.text,
+        })),
         answer: q.answer ?? null,
       };
     }),
@@ -574,8 +658,11 @@ export async function getAttempt(user, id, { itemPage = 1 } = {}) {
   const now = new Date();
   const { attempt } = await expireIfDue(loaded, now, "read");
   if (user.role === "candidate") {
-    const qmap = await loadQuestionMap(attempt.questions.map((q) => q.questionId));
-    return presentForCandidate(attempt, now, qmap);
+    const [qmap, settings] = await Promise.all([
+      loadQuestionMap(attempt.questions.map((q) => q.questionId)),
+      loadBatchSettings(attempt.batchId),
+    ]);
+    return presentForCandidate(attempt, now, qmap, attempt.questions, settings);
   }
   const pageQuestions = attempt.questions.slice(
     (itemPage - 1) * MAX_QUESTIONS_PER_PAGE,
@@ -685,6 +772,7 @@ export async function saveAnswers(user, id, answers) {
   const { attempt, timedOut } = await expireIfDue(loaded, now, "answers");
   if (timedOut) throw timeUpError();
   if (attempt.status !== "in_progress") throw closedError(attempt);
+  if (isPaused(attempt)) throw pausedError(attempt);
 
   const byId = new Map(attempt.questions.map((q) => [String(q.questionId), q]));
   const qmap = await loadQuestionMap(answers.map((a) => a.questionId));
@@ -719,7 +807,12 @@ export async function saveAnswers(user, id, answers) {
   }
 
   const res = await Attempt.updateOne(
-    { _id: attempt._id, status: "in_progress", acceptUntil: { $gte: now } },
+    {
+      _id: attempt._id,
+      status: "in_progress",
+      acceptUntil: { $gte: now },
+      "pause.active": { $ne: true },
+    },
     { $set: set, $inc: { rev: 1 } },
     { arrayFilters },
   );
@@ -728,6 +821,9 @@ export async function saveAnswers(user, id, answers) {
     const fresh = await Attempt.findById(attempt._id).lean();
     const after = await expireIfDue(fresh, new Date(), "answers");
     if (after.timedOut) throw timeUpError();
+    if (after.attempt.status === "in_progress" && isPaused(after.attempt)) {
+      throw pausedError(after.attempt);
+    }
     throw closedError(after.attempt);
   }
   return {
@@ -755,6 +851,19 @@ export async function submitAttempt(user, id) {
     const { attempt } = await expireIfDue(loaded, now, "submit");
     return { attempt, outcome: "late" };
   }
+  if (isPaused(loaded)) throw pausedError(loaded);
+  const settings = await loadBatchSettings(loaded.batchId);
+  if (settings.questionsMandatory) {
+    const unanswered = loaded.questions.filter((q) => q.answer == null).length;
+    if (unanswered > 0) {
+      throw new AppError(
+        409,
+        "ATTEMPT_UNANSWERED_QUESTIONS",
+        "Every question must be answered before you submit",
+        { unansweredCount: unanswered },
+      );
+    }
+  }
   const { attempt, closed } = await closeAttempt(loaded, {
     reason: "submit",
     now,
@@ -763,14 +872,16 @@ export async function submitAttempt(user, id) {
   return { attempt, outcome: closed ? "submitted" : "replay" };
 }
 
-/** What the candidate gets back from a submit: status and times, never marks. */
-export function presentClosed(attempt) {
+/** What the candidate gets back from a submit: status and times. Marks only when the batch shows them. */
+export async function presentClosed(attempt) {
+  const settings = await loadBatchSettings(attempt.batchId);
   return {
     id: idStr(attempt._id),
     status: attempt.status,
     closeReason: attempt.closeReason ?? null,
     closedAt: iso(attempt.closedAt),
     deadlineAt: iso(attempt.deadlineAt),
+    marks: candidateMarksView(attempt, settings),
   };
 }
 
@@ -873,7 +984,7 @@ export async function applyManualMarks(user, id, marks) {
 export async function presentAttempt(user, attempt) {
   const now = new Date();
   const qmap = await loadQuestionMap(attempt.questions.map((q) => q.questionId));
-  return user.role === "candidate"
-    ? presentForCandidate(attempt, now, qmap)
-    : presentForStaff(attempt, now, qmap);
+  if (user.role !== "candidate") return presentForStaff(attempt, now, qmap);
+  const settings = await loadBatchSettings(attempt.batchId);
+  return presentForCandidate(attempt, now, qmap, attempt.questions, settings);
 }

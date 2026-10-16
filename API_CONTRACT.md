@@ -1664,6 +1664,7 @@ All under `/api/v1/attempts`. An attempt is one candidate's go at one approved t
 Role: `candidate` (on the active roster of the batch). Body `{ "batchId", "testPaperId" }`.
 `201` new attempt, `200` when the candidate already has one for that paper (same id, same timer, same order). Returns `{ id, testPaperId, batchId, status, durationMinutes, startedAt, deadlineAt, closedAt, closeReason, serverTime, remainingSeconds, totalMarks, questions[] }`; each question is `{ questionId, order, type, marks, stem, options[{key,text}], answer }`. No answer key, no NOS, no marks awarded.
 Errors: `403 FORBIDDEN` (not on the active roster), `404 NOT_FOUND` (unknown batch; paper unknown, not approved, incomplete, for another qualification, or not the paper set on the batch), `409 ATTEMPT_NO_TEST_PAPER` (D5: the batch has no `testPaperId`), `409 ATTEMPT_BATCH_NOT_IN_PROGRESS`, `409 ATTEMPT_OUTSIDE_ASSESSMENT_WINDOW` (today in IST is before `assessmentStartDate` or after `assessmentEndDate`; `details` has both dates), `409 ATTEMPT_CANDIDATE_ABSENT` (attendance row with `present: false`), `409 ATTEMPT_LANGUAGE_MISMATCH` (`paper.rules.language` differs from the batch `assessmentLanguage`, compared trimmed and without case), `409 ATTEMPT_PAPER_UNAVAILABLE`. These apply to new attempts only; an existing attempt is still returned.
+B-20: the response also carries `paused` (bool), `shuffleOptions` (bool), `settings` and `marks` (see "Batch settings" below). The question order follows the batch's `shuffleQuestions` and is stored; options follow `shuffleOptions`.
 Audit: `attempt.start`, or `attempt.start_replay`.
 
 ### GET /api/v1/attempts/available
@@ -1681,11 +1682,12 @@ Roles: `candidate` (own attempt only), `aa_admin`, `assessor` (the batch's asses
 
 ### PUT /api/v1/attempts/:id/answers
 Role: `candidate`, own attempt. Body `{ "answers": [{ "questionId", "answer" }] }` (1 to 200 rows, no repeated question, `answer` up to 10000 characters, `null` or blank clears). For MCQ the answer must be an option key (case-insensitive; the stored key is kept). Last write wins per question. Accepted until `acceptUntil` (deadline plus grace). One bad row saves nothing. Returns `{ saved, savedAt, deadlineAt, remainingSeconds }`.
-Errors: `400 VALIDATION_ERROR`, `409 ATTEMPT_CLOSED`, `409 ATTEMPT_TIME_UP` (the attempt is closed as `timed_out` and scored on what was saved).
+Errors: `400 VALIDATION_ERROR`, `409 ATTEMPT_CLOSED`, `409 ATTEMPT_TIME_UP` (the attempt is closed as `timed_out` and scored on what was saved), `409 ATTEMPT_PAUSED` (B-20: the flag policy paused the attempt; nothing is saved and `Your test is paused. Please contact your proctor.` is the message; saved answers are kept).
 Audit: `attempt.answers_save`, `meta.savedCount` only.
 
 ### POST /api/v1/attempts/:id/submit
-Role: `candidate`, own attempt. No body. Closes and scores the attempt: MCQ by the stored key (full marks or 0, no negative marking), every other type `pending`. Idempotent: a closed attempt returns its state again. A submit after the accept window is a timeout. Returns `{ id, status, closeReason, closedAt, deadlineAt }`, never marks.
+Role: `candidate`, own attempt. No body. Closes and scores the attempt: MCQ by the stored key (full marks or 0, no negative marking), every other type `pending`. Idempotent: a closed attempt returns its state again. A submit after the accept window is a timeout. Returns `{ id, status, closeReason, closedAt, deadlineAt, marks }`; `marks` is `null` unless the batch has `showMarksToCandidate` (B-20), then `{ obtainedMarks, maxMarks, complete }`, totals only.
+B-20 errors: `409 ATTEMPT_PAUSED`, and `409 ATTEMPT_UNANSWERED_QUESTIONS` (`details.unansweredCount`) when the batch has `questionsMandatory` and a question has no answer. A submit after the accept window is still a timeout and is not blocked.
 Audit: `attempt.submit`, `attempt.submit_replay`, or `attempt.submit_late` (which also writes `attempt.timeout`).
 
 ### PUT /api/v1/attempts/:id/manual-marks
@@ -1721,7 +1723,7 @@ Errors: `403 FORBIDDEN` (another user's attempt, any other role), `404 NOT_FOUND
 Audit: `proctoring.session_start` or `proctoring.session_replay`.
 
 ### POST /api/v1/proctoring/sessions/:id/heartbeat
-Role: `candidate`, own session. Body `{}` (any key is `400`). Sets `lastSeenAt` to the server time. `200 { id, status, lastSeenAt, serverTime }`. Send it at least every `snapshotIntervalSeconds`.
+Role: `candidate`, own session. Body `{}` (any key is `400`). Sets `lastSeenAt` to the server time. `200 { id, status, paused, lastSeenAt, serverTime }` (`paused`: B-20, whether the flag policy has paused the attempt). Send it at least every `snapshotIntervalSeconds`.
 Audit: `proctoring.heartbeat` with `before.lastSeenAt` and `after.lastSeenAt` (open question 622).
 
 ### POST /api/v1/proctoring/sessions/:id/flags
@@ -1740,7 +1742,7 @@ Role: `candidate`, own session.
 
 The **server** sets `severity` (a `severity` key in the body is `400`): low `tab_hidden`, `fullscreen_exit`, `window_blur`, `permission_revoked`, `object_detected`; medium `face_not_present`, `id_unreadable`; high `multiple_faces`, `person_detected`, `phone_detected`, `camera_blocked`, `camera_frozen`, `face_mismatch`, `id_mismatch`.
 
-`201` new, `200` replay: `{ id, sessionId, clientEventId, type, severity, capturedAt, receivedAt, evidenceId, replayed }`. The same `clientEventId` with a different `type`, `capturedAt`, `detail` or `evidenceId` is `409 CONFLICT_IDEMPOTENT`. The server does not enforce the cooldown.
+`201` new, `200` replay: `{ paused, id, sessionId, clientEventId, type, severity, capturedAt, receivedAt, evidenceId, replayed }` (`paused`: B-20, true when this flag made the batch's flag policy pause the attempt, or it already was). The same `clientEventId` with a different `type`, `capturedAt`, `detail` or `evidenceId` is `409 CONFLICT_IDEMPOTENT`. The server does not enforce the cooldown.
 Audit: `proctoring.flag` or `proctoring.flag_replay` (session, type, severity, time, evidence id; no request body).
 
 Storage (X-06): the flag and the session's `flagCounts` are written in one transaction. A MongoDB that is not a replica set refuses transactions with code 20 (IllegalOperation); the server then writes the flag and the count as two plain writes and logs one warning, so the flag is not lost. The supported set-up is still the replica set in docker-compose.yml.
@@ -1759,7 +1761,7 @@ Roles: `aa_admin` and `ncvet_viewer` (all), `proctor` (batches whose `proctorId`
 ```
 
 ### GET /api/v1/proctoring/sessions/:id
-Same roles and scope (`403` outside scope, `404` unknown). The list item plus `serverTime`, `warnings[{ id, message, createdAt }]` and `flags[]`, oldest `capturedAt` first: `{ id, sessionId, clientEventId, type, severity, capturedAt, receivedAt, detail, sustainedSeconds, evidenceId, review }`, where `sustainedSeconds` (X-06) is how long the condition must last before the browser raises this type (`PROCTOR_SUSTAINED_SECONDS`: `face_not_present` 2, `camera_blocked` 2, `camera_frozen` 8), and `null` for one-off events such as `tab_hidden`; it is the rule, not a measured duration, and it is also on the review response. In `review` is `null` or `{ decision, note, decidedAt, decidedBy, decidedByRole }`. Load a snapshot with `GET /evidence/:evidenceId/file` (access-logged). The proctor page lists a session's photos with `GET /evidence?sessionId=<session id>&kind=proctor_snapshot&pageSize=100` (X-06) and shows those that no flag points at as the "Snapshots" strip. The same read roles and scope apply; no image bytes or links are written to any audit row.
+Same roles and scope (`403` outside scope, `404` unknown). B-20: list items and this detail also carry `paused`; the detail adds `lock { paused, pausedAt, timesPaused, lastUnlockedAt, countedFlags, policy { action, pauseAfterFlags, countSeverities } }`. The list item plus `serverTime`, `warnings[{ id, message, createdAt }]` and `flags[]`, oldest `capturedAt` first: `{ id, sessionId, clientEventId, type, severity, capturedAt, receivedAt, detail, sustainedSeconds, evidenceId, review }`, where `sustainedSeconds` (X-06) is how long the condition must last before the browser raises this type (`PROCTOR_SUSTAINED_SECONDS`: `face_not_present` 2, `camera_blocked` 2, `camera_frozen` 8), and `null` for one-off events such as `tab_hidden`; it is the rule, not a measured duration, and it is also on the review response. In `review` is `null` or `{ decision, note, decidedAt, decidedBy, decidedByRole }`. Load a snapshot with `GET /evidence/:evidenceId/file` (access-logged). The proctor page lists a session's photos with `GET /evidence?sessionId=<session id>&kind=proctor_snapshot&pageSize=100` (X-06) and shows those that no flag points at as the "Snapshots" strip. The same read roles and scope apply; no image bytes or links are written to any audit row.
 
 ### GET /api/v1/proctoring/sessions/:id/report (P-04)
 Same roles and scope. Writes nothing.
@@ -1783,8 +1785,60 @@ Roles: `aa_admin` (any flag) and `proctor` (flags of their batches). Body `{ "de
 One decision per flag: a second review is `409 PROCTORING_FLAG_REVIEWED` (open question 625). `200` the flag as in the detail view.
 Audit: `proctoring.review_dismiss`, `proctoring.review_warn` or `proctoring.review_invalidate_recommended`, with `before` and `after` `{ flag: { sessionId, type, severity, capturedAt, evidenceId, detail, decision, noteLength }, session: { attemptId, batchId, candidateId, lastSeenAt, flagCounts, warningCount, invalidationRecommended } }`. The note text, the warning message, the snapshot and the candidate's name are never written to the audit row.
 
+### POST /api/v1/proctoring/sessions/:id/unlock (B-20)
+Roles: `aa_admin` (any session) and `proctor` (sessions of their own batches); anyone else, or a proctor of another batch, `403 FORBIDDEN`. Body `{}`. Lifts a flag-policy pause: the attempt can save and submit again and the session's counted flags restart from zero. The exam clock is not changed. `200 { sessionId, attemptId, lock }`, `lock` as in the session detail.
+Errors: `404 NOT_FOUND`, `409 PROCTORING_NOT_PAUSED`, `409 PROCTORING_ATTEMPT_CLOSED`.
+Audit: `proctoring.unlock`, `before { paused: true, countedFlags }`, `after { paused: false, countedFlags: 0 }`.
+
 ### GET /api/v1/proctoring/sessions/:id/warnings
 Role: `candidate`, own session only (staff read warnings in the session detail). `200 [ { "id", "message", "createdAt" } ]`, oldest first.
+## Batch settings (task B-20)
+
+Per-batch settings, edited by `aa_admin` only. A batch nobody changed behaves exactly as before: the defaults below are today's behaviour. Defaults and limits live in `server/src/config/batch-settings.js`. Unknown keys are `400 VALIDATION_ERROR`; national ID keys are refused. The settings hold no personal data.
+
+### GET /api/v1/batches/:id/settings
+Roles: `aa_admin`, `mis`, `assessor`, `proctor`, `tp`, `ab_reviewer`, `ncvet_viewer`, with the usual batch row scope (`403` outside it, `404` unknown). `candidate` and `sme` get `403`. `200 { batchId, settings }`; `settings` is always the full shape:
+```json
+{ "shuffleQuestions": true, "shuffleOptions": false, "showMarksToCandidate": false, "questionsMandatory": false,
+  "flagPolicy": { "action": "record", "pauseAfterFlags": 3, "countSeverities": ["high"] },
+  "imageCapture": { "intervalSeconds": 30, "atStartAndEnd": true },
+  "candidateInfoPopup": { "enabled": false, "fields": [] },
+  "captureLocation": false }
+```
+
+### PATCH /api/v1/batches/:id/settings
+Role: `aa_admin` only (`403` for every other role). Body: any non-empty subset of the keys above; inside `flagPolicy`, `imageCapture` and `candidateInfoPopup` any subset of their keys. Limits: `flagPolicy.action` is `record` or `pause`; `pauseAfterFlags` an integer 1 to 20; `countSeverities` exactly `["high"]` or `["medium","high"]`; `imageCapture.intervalSeconds` an integer 10 to 120; `candidateInfoPopup.fields` a list without repeats from `email`, `fatherName`, `gender`, `dateOfBirth`, and at least one when `enabled` is true (checked on the merged result). Returns `200` like GET. The full merged shape is stored.
+Errors: `400 VALIDATION_ERROR`, `403 FORBIDDEN`, `404 NOT_FOUND`.
+Audit: `batch.settings_update` with `before { settings }` and `after { settings }`.
+
+What each setting does:
+- `shuffleQuestions` (default true): the question order is drawn when an attempt starts, seeded by the attempt id, and stored; a resume shows the same order. `false` keeps the paper order.
+- `shuffleOptions` (default false): options are shown in an order seeded by the attempt id and question id, the same on every read. Answers and marking use the option key, never the position. Copied to the attempt at start.
+- `showMarksToCandidate` (default false): after the attempt closes, the submit response and `GET /attempts/:id` carry `marks { obtainedMarks, maxMarks, complete }` (totals; `complete` is false while hand-marked answers are pending). Never per-question marks or keys.
+- `questionsMandatory` (default false): see `POST /attempts/:id/submit`.
+- `flagPolicy`: `record` only saves flags for review. `pause`: when the flags of the attempt with a counted severity reach `pauseAfterFlags`, the attempt is paused. While paused, `PUT /attempts/:id/answers` and `POST /attempts/:id/submit` return `409 ATTEMPT_PAUSED`, saved answers stay, the clock keeps running (a timeout still closes the attempt as `timed_out`), and a pause never fails or changes a result. `aa_admin` or the batch's proctor unlocks with `POST /proctoring/sessions/:id/unlock`; the count then restarts from zero. The pause writes audit `attempt.pause` (actor role `system`; counts and ids only). Flags are still recorded while paused.
+- `imageCapture`: `intervalSeconds` becomes `config.snapshotIntervalSeconds` of a proctoring session created afterwards (a running session keeps its own); `atStartAndEnd` is delivered as `config.snapshotAtStartAndEnd`.
+- `captureLocation` (default false): the field and the API only. It is returned in the attempt `settings` for X-07.
+
+Attempt responses for the candidate (`POST /attempts/start`, `GET /attempts/:id`) add: `paused`, `shuffleOptions` and
+```json
+"settings": { "questionsMandatory": false, "showMarksToCandidate": false, "flagPolicy": { "action": "record" },
+  "imageCapture": { "intervalSeconds": 30, "atStartAndEnd": true },
+  "candidateInfoPopup": { "enabled": false, "fields": [] }, "captureLocation": false },
+"marks": null
+```
+The pause limit and the counted severities are not sent to the candidate.
+
+### GET /api/v1/batches/:id/candidate-info/mine
+Role: `candidate`, active on the roster of the batch (`403` otherwise). `200 { batchId, enabled, fields, submitted }`. No values.
+
+### PUT /api/v1/batches/:id/candidate-info
+Role: `candidate`, active on the roster. Body: exactly the fields in `candidateInfoPopup.fields`, no others: `email` (valid address), `fatherName` (1 to 200 characters), `gender` (`female`, `male`, `other`), `dateOfBirth` (`YYYY-MM-DD`). Any other key, a missing field or a national ID key is `400 VALIDATION_ERROR`; `409 CANDIDATE_INFO_NOT_ENABLED` when the batch does not ask. Saves (or replaces) the candidate's row, encrypted. `200 { batchId, submitted: true, fields }`.
+Audit: `batch.candidate_info_save`, `meta.fields` (names only; no request body, no values).
+
+### GET /api/v1/batches/:id/candidate-info
+Roles: `aa_admin`, and `tp` of the batch (`403` for everyone else, including other tps). `200 { batchId, enabled, fields, items[{ candidateId, learnerId, candidateName, submittedAt, email, fatherName, gender, dateOfBirth }] }`, newest first; fields the batch does not ask are `null`. Personal data: every call writes `accessLogs` rows (subject type `learner`, field names only).
+
 ## Proctoring sessions (planned; the candidate exam page, task F-05, calls these)
 
 The server side is a separate task. These are the shapes the web client (`web/src/api/proctoringSession.ts`) is built against; that task should confirm or correct them (DECISIONS Q645). All need the `candidate` role and the candidate's own attempt.

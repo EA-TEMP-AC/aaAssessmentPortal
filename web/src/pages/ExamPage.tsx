@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ApiError, errorMessage } from "../api/client";
-import { startAttempt, type Attempt } from "../api/attempts";
+import { getAttempt, startAttempt, type Attempt, type AttemptMarks } from "../api/attempts";
+import { getCandidateInfoStatus, type InfoField } from "../api/batchSettings";
+import { CandidateInfoForm } from "../exam/CandidateInfoForm";
 import { listAvailableAssessments, type AvailableAssessment } from "../api/availableAssessments";
 import { ExamScreen, type ExamOutcome } from "../exam/ExamScreen";
 import { exitExamFullscreen, requestExamFullscreen } from "../exam/fullscreen";
@@ -14,8 +16,9 @@ type Choice = { batchId: string; paperId: string; heading: string };
 type Phase =
   | { name: "choose" }
   | { name: "precheck"; choice: Choice }
+  | { name: "info"; choice: Choice; stream: MediaStream; face: FaceStart; fields: InfoField[] }
   | { name: "exam"; attempt: Attempt; stream: MediaStream; face: FaceStart }
-  | { name: "finished"; outcome: ExamOutcome };
+  | { name: "finished"; outcome: ExamOutcome; attemptId: string | null; showMarks: boolean };
 
 type Props = {
   /** Tests swap the frame reader; the page uses the real one. */
@@ -198,7 +201,35 @@ function AssessmentList({ onChoose }: { onChoose: (choice: Choice) => void }) {
   );
 }
 
-function Finished({ outcome, onBack }: { outcome: ExamOutcome; onBack: () => void }) {
+/** B-20. The candidate's total, only when the batch shows marks and the server returns them. */
+function MarksLine({ attemptId }: { attemptId: string }) {
+  const query = useQuery({
+    queryKey: ["exam", "marks", attemptId],
+    queryFn: ({ signal }) => getAttempt(attemptId, signal),
+    retry: false,
+  });
+  const marks: AttemptMarks | null | undefined = query.data?.marks;
+  if (query.isPending) return <p role="status">Loading your marks…</p>;
+  if (!marks) return null;
+  return (
+    <p role="status">
+      Your marks: {marks.obtainedMarks} out of {marks.maxMarks}.
+      {marks.complete ? "" : " Some answers are still to be marked by hand, so this total can change."}
+    </p>
+  );
+}
+
+function Finished({
+  outcome,
+  attemptId,
+  showMarks,
+  onBack,
+}: {
+  outcome: ExamOutcome;
+  attemptId: string | null;
+  showMarks: boolean;
+  onBack: () => void;
+}) {
   const headingRef = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     headingRef.current?.focus();
@@ -217,6 +248,7 @@ function Finished({ outcome, onBack }: { outcome: ExamOutcome; onBack: () => voi
         {title}
       </h1>
       <p>{text}</p>
+      {showMarks && attemptId ? <MarksLine attemptId={attemptId} /> : null}
       <p>The camera has been turned off. You may close this page.</p>
       <button type="button" onClick={onBack}>
         Back to my exams
@@ -231,6 +263,7 @@ export function ExamPage({ frameCheck, faceChecks, autosaveDebounceMs }: Props) 
   const [startError, setStartError] = useState<string | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const faceRef = useRef<FaceStart | null>(null);
+  const attemptRef = useRef<Attempt | null>(null);
 
   useEffect(
     () => () => {
@@ -247,14 +280,25 @@ export function ExamPage({ frameCheck, faceChecks, autosaveDebounceMs }: Props) 
     faceRef.current?.matcher?.clear();
     faceRef.current = null;
     exitExamFullscreen();
-    setPhase({ name: "finished", outcome });
+    const last = attemptRef.current;
+    setPhase({
+      name: "finished",
+      outcome,
+      attemptId: last?.id ?? null,
+      showMarks: last?.settings.showMarksToCandidate === true,
+    });
   }, []);
 
-  async function start(choice: Choice, stream: MediaStream, face: FaceStart) {
-    streamRef.current = stream;
-    faceRef.current = face;
-    // Full screen has to be asked for inside the click, before anything is awaited.
-    requestExamFullscreen();
+  function release() {
+    stopStream(streamRef.current);
+    streamRef.current = null;
+    faceRef.current?.matcher?.clear();
+    faceRef.current = null;
+    exitExamFullscreen();
+  }
+
+  /** Starts the attempt. The clock starts here, so the candidate's details are asked before this. */
+  async function begin(choice: Choice, stream: MediaStream, face: FaceStart) {
     setStarting(true);
     setStartError(null);
     try {
@@ -263,6 +307,7 @@ export function ExamPage({ frameCheck, faceChecks, autosaveDebounceMs }: Props) 
         testPaperId: choice.paperId,
       });
       setStarting(false);
+      attemptRef.current = attempt;
       if (attempt.status !== "in_progress") {
         finish("closed");
         return;
@@ -273,6 +318,33 @@ export function ExamPage({ frameCheck, faceChecks, autosaveDebounceMs }: Props) 
       setStarting(false);
       setStartError(startErrorText(error));
     }
+  }
+
+  async function start(choice: Choice, stream: MediaStream, face: FaceStart) {
+    streamRef.current = stream;
+    faceRef.current = face;
+    // Full screen has to be asked for inside the click, before anything is awaited.
+    requestExamFullscreen();
+    setStarting(true);
+    setStartError(null);
+    // B-20: when the batch asks for the candidate's details, they come after the camera check
+    // and before the exam clock starts. Not found means nothing is asked; the start reports it.
+    try {
+      const popup = await getCandidateInfoStatus(choice.batchId);
+      if (popup.enabled && !popup.submitted && popup.fields.length > 0) {
+        setStarting(false);
+        setPhase({ name: "info", choice, stream, face, fields: popup.fields });
+        return;
+      }
+    } catch (error) {
+      if (!(error instanceof ApiError && (error.status === 404 || error.status === 403))) {
+        exitExamFullscreen();
+        setStarting(false);
+        setStartError("Could not check whether the exam needs more details from you. Try again.");
+        return;
+      }
+    }
+    await begin(choice, stream, face);
   }
 
   if (phase.name === "precheck") {
@@ -291,6 +363,20 @@ export function ExamPage({ frameCheck, faceChecks, autosaveDebounceMs }: Props) 
       />
     );
   }
+  if (phase.name === "info") {
+    return (
+      <CandidateInfoForm
+        batchId={phase.choice.batchId}
+        fields={phase.fields}
+        onDone={() => void begin(phase.choice, phase.stream, phase.face)}
+        onCancel={() => {
+          release();
+          setStartError(null);
+          setPhase({ name: "choose" });
+        }}
+      />
+    );
+  }
   if (phase.name === "exam") {
     return (
       <ExamScreen
@@ -303,7 +389,14 @@ export function ExamPage({ frameCheck, faceChecks, autosaveDebounceMs }: Props) 
     );
   }
   if (phase.name === "finished") {
-    return <Finished outcome={phase.outcome} onBack={() => setPhase({ name: "choose" })} />;
+    return (
+      <Finished
+        outcome={phase.outcome}
+        attemptId={phase.attemptId}
+        showMarks={phase.showMarks}
+        onBack={() => setPhase({ name: "choose" })}
+      />
+    );
   }
   return (
     <AssessmentList

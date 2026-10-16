@@ -124,7 +124,7 @@ attemptsRouter.post(
       batchId: attempt.batchId,
       after: auditView(attempt),
     };
-    res.status(200).json(presentClosed(attempt));
+    res.status(200).json(await presentClosed(attempt));
   }),
 );
 

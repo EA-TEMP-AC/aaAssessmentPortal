@@ -54,6 +54,23 @@ const scoresSchema = new mongoose.Schema(
   { _id: false },
 );
 
+/**
+ * B-20. Set when the batch's flag policy pauses the attempt. While `active` the server refuses
+ * answer saves and submit. The clock is not touched. Unlocking clears `active` and keeps the
+ * history counters.
+ */
+const attemptPauseSchema = new mongoose.Schema(
+  {
+    active: { type: Boolean, required: true, default: false },
+    pausedAt: { type: Date, default: null },
+    /** How many times this attempt has been paused. */
+    timesPaused: { type: Number, default: 0, min: 0 },
+    lastUnlockedAt: { type: Date, default: null },
+    lastUnlockedBy: { type: mongoose.Schema.Types.ObjectId, default: null, ref: "User" },
+  },
+  { _id: false },
+);
+
 const attemptSchema = new mongoose.Schema(
   {
     testPaperId: {
@@ -75,6 +92,9 @@ const attemptSchema = new mongoose.Schema(
     acceptUntil: { type: Date, required: true },
     closedAt: { type: Date, default: null },
     closeReason: { type: String, enum: [...ATTEMPT_CLOSE_REASONS, null], default: null },
+    /** B-20: the batch's shuffleOptions at the start, so a later settings change keeps this order. */
+    shuffleOptions: { type: Boolean, default: false },
+    pause: { type: attemptPauseSchema, default: undefined },
     questions: { type: [attemptQuestionSchema], default: [] },
     scores: { type: scoresSchema, default: null },
     /** Bumped by every write. Closing and marking compare it so a save is never overwritten. */

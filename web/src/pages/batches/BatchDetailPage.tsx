@@ -251,6 +251,15 @@ export function BatchDetailPage() {
                 ))}
               </div>
             )}
+            {session.user.role === "aa_admin" ? (
+              <>
+                <h2>Settings</h2>
+                <p>
+                  <Link to={`/batches/${batch.id}/settings`}>Batch settings</Link>: shuffling, marks shown to the
+                  candidate, flags, camera images, the candidate pop-up and location.
+                </p>
+              </>
+            ) : null}
             <CandidateRoster batch={batch} role={session.user.role} />
             {canSeeResultSection(session.user.role) ? (
               <ResultSection batch={batch} role={session.user.role} />

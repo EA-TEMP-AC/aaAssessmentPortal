@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { resolveBatchSettings } from "../../config/batch-settings.js";
 import { compliance } from "../../config/compliance.js";
 import {
   AppError,
@@ -11,6 +12,7 @@ import { withTransaction } from "../../lib/mongo-session.js";
 import { toObjectIdOrNull } from "../../lib/object-id.js";
 import { batchQueryFilter, batchScopeFor, isInBatchScope } from "../../middleware/scope.js";
 import { Attempt } from "../../models/attempt.model.js";
+import { AuditLog } from "../../models/audit-log.model.js";
 import { Batch } from "../../models/batch.model.js";
 import { Candidate } from "../../models/candidate.model.js";
 import { Evidence } from "../../models/evidence.model.js";
@@ -27,10 +29,14 @@ const idStr = (v) => (v == null ? null : String(v));
 const iso = (v) => (v ? new Date(v).toISOString() : null);
 const SEVERITY_RANK = { low: 1, medium: 2, high: 3 };
 
-/** The numbers the candidate's browser works with. All from compliance.js. */
-export function proctoringConfig() {
+/**
+ * The numbers the candidate's browser works with. From compliance.js, except the snapshot
+ * interval and the start-and-end photos, which the batch settings (B-20) can change.
+ */
+export function proctoringConfig(settings = resolveBatchSettings(null)) {
   return {
-    snapshotIntervalSeconds: compliance.PROCTOR_SNAPSHOT_INTERVAL_SECONDS,
+    snapshotIntervalSeconds: settings.imageCapture.intervalSeconds,
+    snapshotAtStartAndEnd: settings.imageCapture.atStartAndEnd,
     detectionIntervalMs: compliance.PROCTOR_DETECTION_INTERVAL_MS,
     flagCooldownSeconds: compliance.PROCTOR_FLAG_COOLDOWN_SECONDS,
     sustainedSeconds: { ...compliance.PROCTOR_SUSTAINED_SECONDS },
@@ -41,10 +47,9 @@ export function severityOf(type) {
   return compliance.PROCTOR_FLAG_SEVERITY[type];
 }
 
-function feedLostMs() {
-  return (
-    compliance.PROCTOR_FEED_LOST_INTERVALS * compliance.PROCTOR_SNAPSHOT_INTERVAL_SECONDS * 1000
-  );
+function feedLostMs(session) {
+  const interval = session.snapshotIntervalSeconds ?? compliance.PROCTOR_SNAPSHOT_INTERVAL_SECONDS;
+  return compliance.PROCTOR_FEED_LOST_INTERVALS * interval * 1000;
 }
 
 /**
@@ -54,7 +59,7 @@ function feedLostMs() {
 export function displayStatus(session, attemptStatus, now = new Date()) {
   if (attemptStatus && attemptStatus !== "in_progress") return "ended";
   const seen = new Date(session.lastSeenAt ?? session.createdAt).getTime();
-  return now.getTime() - seen > feedLostMs() ? "feed_lost" : "active";
+  return now.getTime() - seen > feedLostMs(session) ? "feed_lost" : "active";
 }
 
 function counts(session) {
@@ -131,13 +136,28 @@ async function attemptStatusOf(attemptId) {
   return attempt?.status ?? null;
 }
 
-function presentForCandidate(session, attemptStatus, now) {
+const isOpenAndPaused = (attempt) =>
+  attempt?.status === "in_progress" && attempt.pause?.active === true;
+
+async function batchSettingsOf(batchId) {
+  const batch = await Batch.findById(batchId).select("settings").lean();
+  return resolveBatchSettings(batch?.settings);
+}
+
+function presentForCandidate(session, attemptStatus, now, settings, paused = false) {
   return {
     id: idStr(session._id),
     attemptId: idStr(session.attemptId),
     batchId: idStr(session.batchId),
     status: displayStatus(session, attemptStatus, now),
-    config: proctoringConfig(),
+    paused,
+    config: {
+      ...proctoringConfig(settings),
+      // The session keeps the interval it began with, so a settings change mid-exam is not applied.
+      ...(session.snapshotIntervalSeconds
+        ? { snapshotIntervalSeconds: session.snapshotIntervalSeconds }
+        : {}),
+    },
   };
 }
 
@@ -150,12 +170,14 @@ export async function createSession(user, { attemptId }, now = new Date()) {
   if (!attempt) throw notFound();
   if (idStr(attempt.userId) !== idStr(user._id)) throw forbidden();
 
+  const settings = await batchSettingsOf(attempt.batchId);
+  const paused = isOpenAndPaused(attempt);
   const existing = await ProctoringSession.findOne({ attemptId: attempt._id }).lean();
   if (existing) {
     return {
       session: existing,
       created: false,
-      body: presentForCandidate(existing, attempt.status, now),
+      body: presentForCandidate(existing, attempt.status, now, settings, paused),
     };
   }
   if (attempt.status !== "in_progress") {
@@ -173,6 +195,7 @@ export async function createSession(user, { attemptId }, now = new Date()) {
       learnerId: attempt.learnerId,
       userId: user._id,
       lastSeenAt: now,
+      snapshotIntervalSeconds: settings.imageCapture.intervalSeconds,
     });
     session = doc.toObject();
   } catch (err) {
@@ -182,10 +205,14 @@ export async function createSession(user, { attemptId }, now = new Date()) {
     return {
       session: winner,
       created: false,
-      body: presentForCandidate(winner, attempt.status, now),
+      body: presentForCandidate(winner, attempt.status, now, settings, paused),
     };
   }
-  return { session, created: true, body: presentForCandidate(session, attempt.status, now) };
+  return {
+    session,
+    created: true,
+    body: presentForCandidate(session, attempt.status, now, settings, paused),
+  };
 }
 
 async function loadOwnSession(user, id) {
@@ -203,7 +230,8 @@ export async function heartbeat(user, id, now = new Date()) {
     { $set: { lastSeenAt: now } },
     { new: true },
   ).lean();
-  const attemptStatus = await attemptStatusOf(session.attemptId);
+  const attempt = await Attempt.findById(session.attemptId).select("status pause").lean();
+  const attemptStatus = attempt?.status ?? null;
   return {
     session,
     before: { lastSeenAt: iso(before.lastSeenAt) },
@@ -211,6 +239,7 @@ export async function heartbeat(user, id, now = new Date()) {
     body: {
       id: idStr(session._id),
       status: displayStatus(session, attemptStatus, now),
+      paused: isOpenAndPaused(attempt),
       lastSeenAt: iso(session.lastSeenAt),
       serverTime: now.toISOString(),
     },
@@ -232,8 +261,9 @@ function flagPayloadHash(session, body) {
     .digest("hex");
 }
 
-function presentFlagForCandidate(flag, replayed) {
+function presentFlagForCandidate(flag, replayed, paused = false) {
   return {
+    paused,
     id: idStr(flag._id),
     sessionId: idStr(flag.sessionId),
     clientEventId: flag.clientEventId,
@@ -246,9 +276,58 @@ function presentFlagForCandidate(flag, replayed) {
   };
 }
 
-function replayFlag(existing, hashValue) {
+async function replayFlag(existing, hashValue) {
   if (existing.payloadHash !== hashValue) throw conflictIdempotent();
-  return { flag: existing, replayed: true, body: presentFlagForCandidate(existing, true) };
+  const attempt = await Attempt.findById(existing.attemptId).select("status pause").lean();
+  return {
+    flag: existing,
+    replayed: true,
+    body: presentFlagForCandidate(existing, true, isOpenAndPaused(attempt)),
+  };
+}
+
+/**
+ * B-20 flag policy. Called after a new flag was saved. With action "pause", when the counted
+ * flags since the start (or the last unlock) reach the limit, the attempt is paused. Never
+ * touches the result or the clock. The audit row has ids and numbers only.
+ * @returns {Promise<boolean>} whether the attempt is paused now
+ */
+async function applyFlagPolicy(session, settings, now) {
+  const attempt = await Attempt.findById(session.attemptId).select("status pause").lean();
+  if (!attempt || attempt.status !== "in_progress") return false;
+  if (isOpenAndPaused(attempt)) return true;
+  const { action, pauseAfterFlags } = settings.flagPolicy;
+  if (action !== "pause") return false;
+  const fresh = await ProctoringSession.findById(session._id).select("policyFlagCount").lean();
+  const counted = fresh?.policyFlagCount ?? 0;
+  if (counted < pauseAfterFlags) return false;
+  const updated = await Attempt.findOneAndUpdate(
+    { _id: attempt._id, status: "in_progress", "pause.active": { $ne: true } },
+    {
+      $set: { "pause.active": true, "pause.pausedAt": now },
+      $inc: { "pause.timesPaused": 1, rev: 1 },
+    },
+    { new: true },
+  ).lean();
+  if (updated) {
+    await AuditLog.create({
+      actorRole: "system",
+      action: "attempt.pause",
+      entity: "attempt",
+      entityId: String(updated._id),
+      abId: updated.abId,
+      batchId: updated.batchId,
+      before: { paused: false },
+      after: { paused: true, timesPaused: updated.pause.timesPaused },
+      meta: {
+        trigger: "flag_policy",
+        sessionId: idStr(session._id),
+        countedFlags: counted,
+        limit: pauseAfterFlags,
+      },
+    });
+  }
+  return true;
 }
 
 const TRANSACTIONS_UNSUPPORTED = 20;
@@ -291,7 +370,7 @@ export async function recordFlag(user, id, body, now = new Date()) {
     sessionId: session._id,
     clientEventId: body.clientEventId,
   }).lean();
-  if (existing) return { ...replayFlag(existing, hashValue), session };
+  if (existing) return { ...(await replayFlag(existing, hashValue)), session };
 
   let evidenceId = null;
   if (body.evidenceId) {
@@ -325,10 +404,15 @@ export async function recordFlag(user, id, body, now = new Date()) {
     evidenceId,
     payloadHash: hashValue,
   };
-  const bump = { $inc: { [`flagCounts.${severity}`]: 1 } };
+  const settings = await batchSettingsOf(session.batchId);
+  const counts = settings.flagPolicy.countSeverities.includes(severity);
+  const bump = {
+    $inc: { [`flagCounts.${severity}`]: 1, ...(counts ? { policyFlagCount: 1 } : {}) },
+  };
   try {
     const flag = await saveFlagAndCount(session._id, flagDoc, bump);
-    return { flag, replayed: false, session, body: presentFlagForCandidate(flag, false) };
+    const paused = await applyFlagPolicy(session, settings, now);
+    return { flag, replayed: false, session, body: presentFlagForCandidate(flag, false, paused) };
   } catch (err) {
     if (err?.code !== 11000) throw err;
     const winner = await ProctoringFlag.findOne({
@@ -336,7 +420,7 @@ export async function recordFlag(user, id, body, now = new Date()) {
       clientEventId: body.clientEventId,
     }).lean();
     if (!winner) throw err;
-    return { ...replayFlag(winner, hashValue), session };
+    return { ...(await replayFlag(winner, hashValue)), session };
   }
 }
 
@@ -380,8 +464,25 @@ async function candidateNames(ids) {
   return new Map(docs.map((d) => [String(d._id), d.name]));
 }
 
-function presentForStaff(session, { attemptStatus, name, unreviewed, now }) {
+function presentLock(session, attempt, settings) {
+  const pause = attempt?.pause;
   return {
+    paused: isOpenAndPaused(attempt),
+    pausedAt: iso(pause?.active ? pause.pausedAt : null),
+    timesPaused: pause?.timesPaused ?? 0,
+    lastUnlockedAt: iso(pause?.lastUnlockedAt),
+    countedFlags: session.policyFlagCount ?? 0,
+    policy: {
+      action: settings.flagPolicy.action,
+      pauseAfterFlags: settings.flagPolicy.pauseAfterFlags,
+      countSeverities: settings.flagPolicy.countSeverities,
+    },
+  };
+}
+
+function presentForStaff(session, { attemptStatus, paused, name, unreviewed, now }) {
+  return {
+    paused: paused === true,
     id: idStr(session._id),
     attemptId: idStr(session.attemptId),
     batchId: idStr(session.batchId),
@@ -435,9 +536,10 @@ export async function listSessions(user, query, now = new Date()) {
 
   const sessions = await ProctoringSession.find(filter).sort({ createdAt: -1, _id: -1 }).lean();
   const attempts = await Attempt.find({ _id: { $in: sessions.map((s) => s.attemptId) } })
-    .select("status")
+    .select("status pause")
     .lean();
   const statusById = new Map(attempts.map((a) => [String(a._id), a.status]));
+  const pausedById = new Map(attempts.map((a) => [String(a._id), isOpenAndPaused(a)]));
   const withStatus = sessions
     .map((s) => ({ session: s, attemptStatus: statusById.get(String(s.attemptId)) ?? null }))
     .filter(
@@ -464,6 +566,7 @@ export async function listSessions(user, query, now = new Date()) {
     items: page.map(({ session, attemptStatus }) =>
       presentForStaff(session, {
         attemptStatus,
+        paused: pausedById.get(String(session.attemptId)),
         name: names.get(String(session.candidateId)),
         unreviewed: pendingById.get(String(session._id)) ?? 0,
         now,
@@ -479,18 +582,22 @@ async function loadFlags(sessionId) {
 /** GET /proctoring/sessions/:id with every flag, oldest first. */
 export async function getSessionDetail(user, id, now = new Date()) {
   const { session } = await loadReadableSession(user, id);
-  const [attemptStatus, names, flags] = await Promise.all([
-    attemptStatusOf(session.attemptId),
+  const [attempt, names, flags, settings] = await Promise.all([
+    Attempt.findById(session.attemptId).select("status pause").lean(),
     candidateNames([session.candidateId]),
     loadFlags(session._id),
+    batchSettingsOf(session.batchId),
   ]);
+  const attemptStatus = attempt?.status ?? null;
   return {
     ...presentForStaff(session, {
       attemptStatus,
+      paused: isOpenAndPaused(attempt),
       name: names.get(String(session.candidateId)),
       unreviewed: flags.filter((f) => !f.review).length,
       now,
     }),
+    lock: presentLock(session, attempt, settings),
     serverTime: now.toISOString(),
     warnings: (session.warnings ?? []).map(presentWarning),
     flags: flags.map(presentFlag),
@@ -645,5 +752,55 @@ export async function reviewFlag(user, flagId, { decision, note }, now = new Dat
       session: sessionAuditView(result.sessionAfter),
     },
     body: presentFlag(result.updated),
+  };
+}
+
+/**
+ * POST /proctoring/sessions/:id/unlock. B-20. aa_admin, or the proctor of the batch. Lifts the
+ * pause of the attempt and restarts the counted flags from zero. The clock is not changed and
+ * nothing about the result is. Audit: ids, counts and the paused state only.
+ */
+export async function unlockSession(user, id, now = new Date()) {
+  const { session } = await loadReadableSession(user, id);
+  const attempt = await Attempt.findById(session.attemptId).select("status pause abId").lean();
+  if (!attempt) throw notFound();
+  if (attempt.status !== "in_progress") {
+    throw new AppError(409, "PROCTORING_ATTEMPT_CLOSED", "The attempt is already closed", {
+      status: attempt.status,
+    });
+  }
+  if (attempt.pause?.active !== true) {
+    throw new AppError(409, "PROCTORING_NOT_PAUSED", "This attempt is not paused");
+  }
+  const updated = await Attempt.findOneAndUpdate(
+    { _id: attempt._id, status: "in_progress", "pause.active": true },
+    {
+      $set: {
+        "pause.active": false,
+        "pause.lastUnlockedAt": now,
+        "pause.lastUnlockedBy": user._id,
+      },
+      $inc: { rev: 1 },
+    },
+    { new: true },
+  ).lean();
+  if (!updated) {
+    throw new AppError(409, "PROCTORING_NOT_PAUSED", "This attempt is not paused");
+  }
+  const after = await ProctoringSession.findOneAndUpdate(
+    { _id: session._id },
+    { $set: { policyFlagCount: 0 } },
+    { new: true },
+  ).lean();
+  const settings = await batchSettingsOf(session.batchId);
+  return {
+    session: after,
+    before: { paused: true, countedFlags: session.policyFlagCount ?? 0 },
+    after: { paused: false, countedFlags: 0 },
+    body: {
+      sessionId: idStr(session._id),
+      attemptId: idStr(session.attemptId),
+      lock: presentLock(after, updated, settings),
+    },
   };
 }

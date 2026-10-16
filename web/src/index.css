@@ -993,3 +993,9 @@ button.button-danger {
 .proctor-photo-large { display: block; max-width: 100%; max-height: 70vh; margin: 0 auto 0.75rem; }
 .proctor-strip { list-style: none; padding: 0; margin: 0 0 0.75rem; display: grid; grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr)); gap: 0.75rem; }
 .exam-proctor-debug { border: 1px dashed #5c6670; padding: 0.5rem 0.75rem; }
+
+/* B-20 batch settings */
+.settings-group { border: 1px solid #d5dbe3; border-radius: 6px; margin: 0 0 1rem; padding: 0.5rem 1rem 0.75rem; }
+.settings-group > legend { font-weight: 700; padding: 0 0.4rem; }
+.exam-paused { text-align: center; }
+.exam-info-form { max-width: 32rem; }

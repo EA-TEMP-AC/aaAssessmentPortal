@@ -1,4 +1,13 @@
 import mongoose from "mongoose";
+import {
+  CANDIDATE_INFO_FIELDS,
+  FLAG_COUNT_SEVERITIES,
+  FLAG_PAUSE_AFTER_MAX,
+  FLAG_PAUSE_AFTER_MIN,
+  FLAG_POLICY_ACTIONS,
+  IMAGE_INTERVAL_MAX_SECONDS,
+  IMAGE_INTERVAL_MIN_SECONDS,
+} from "../config/batch-settings.js";
 import { RATIO_CLASSES, RECOGNITION_CHECKS, SECTOR_NAMES, STATE_UTS } from "../config/annexure.js";
 import {
   BATCH_MODES,
@@ -68,6 +77,59 @@ const learnerFeedbackSchema = new mongoose.Schema(
   { _id: false },
 );
 
+/**
+ * B-20. Only values an aa_admin has set are stored; a missing key means the default in
+ * config/batch-settings.js. No personal data here: the pop-up only lists which fields to ask.
+ */
+const batchSettingsSchema = new mongoose.Schema(
+  {
+    shuffleQuestions: { type: Boolean },
+    shuffleOptions: { type: Boolean },
+    showMarksToCandidate: { type: Boolean },
+    questionsMandatory: { type: Boolean },
+    flagPolicy: {
+      type: new mongoose.Schema(
+        {
+          action: { type: String, enum: FLAG_POLICY_ACTIONS },
+          pauseAfterFlags: { type: Number, min: FLAG_PAUSE_AFTER_MIN, max: FLAG_PAUSE_AFTER_MAX },
+          countSeverities: {
+            type: [{ type: String, enum: FLAG_COUNT_SEVERITIES }],
+            default: undefined,
+          },
+        },
+        { _id: false },
+      ),
+      default: undefined,
+    },
+    imageCapture: {
+      type: new mongoose.Schema(
+        {
+          intervalSeconds: {
+            type: Number,
+            min: IMAGE_INTERVAL_MIN_SECONDS,
+            max: IMAGE_INTERVAL_MAX_SECONDS,
+          },
+          atStartAndEnd: { type: Boolean },
+        },
+        { _id: false },
+      ),
+      default: undefined,
+    },
+    candidateInfoPopup: {
+      type: new mongoose.Schema(
+        {
+          enabled: { type: Boolean },
+          fields: { type: [{ type: String, enum: CANDIDATE_INFO_FIELDS }], default: undefined },
+        },
+        { _id: false },
+      ),
+      default: undefined,
+    },
+    captureLocation: { type: Boolean },
+  },
+  { _id: false },
+);
+
 const batchSchema = new mongoose.Schema(
   {
     abId: { type: mongoose.Schema.Types.ObjectId, required: true, ref: "AwardingBody" },
@@ -90,6 +152,7 @@ const batchSchema = new mongoose.Schema(
     assessmentLanguage: { type: String, required: true, trim: true, minlength: 1, maxlength: 80 },
     state: { type: String, required: true, enum: STATE_UTS },
     learnerFeedback: { type: learnerFeedbackSchema, default: null },
+    settings: { type: batchSettingsSchema, default: undefined },
     recognitionOverride: { type: recognitionOverrideSchema, default: null },
     status: { type: String, required: true, enum: BATCH_STATUSES },
     statusVersion: { type: Number, required: true, min: 1 },

@@ -6,7 +6,11 @@ import { requireRoles } from "../../middleware/require-roles.js";
 import {
   BATCH_CREATE_ROLES,
   BATCH_READ_ROLES,
+  BATCH_SETTINGS_READ_ROLES,
+  BATCH_SETTINGS_WRITE_ROLES,
   BATCH_TEST_PAPER_ROLES,
+  CANDIDATE_INFO_READ_ROLES,
+  CANDIDATE_INFO_WRITE_ROLES,
   LEARNER_FEEDBACK_READ_ROLES,
   LEARNER_FEEDBACK_WRITE_ROLES,
   REASSESSMENT_CREATE_ROLES,
@@ -16,6 +20,8 @@ import {
   acceptBodySchema,
   assignBodySchema,
   batchIdParamSchema,
+  batchSettingsBodySchema,
+  candidateInfoBodySchema,
   createBatchBodySchema,
   learnerFeedbackBodySchema,
   listBatchesQuerySchema,
@@ -32,6 +38,9 @@ import { mountCandidateRoutes } from "../candidates/candidate.routes.js";
 import { mountResultRoutes } from "../results/result.routes.js";
 import { assignAssessor, reassignAssessor } from "./assign.service.js";
 import { setBatchTestPaper } from "./batch-test-paper.service.js";
+import { recordAccess } from "../audit/access-log.service.js";
+import { getBatchSettings, updateBatchSettings } from "./batch-settings.service.js";
+import { getOwnPopup, listBatchInfo, saveOwnInfo } from "./candidate-info.service.js";
 import { createBatch, getBatch, listBatches, transitionBatch } from "./batch.service.js";
 import { getLearnerFeedback, saveLearnerFeedback } from "./learner-feedback.service.js";
 import { createReassessment } from "./reassessment.service.js";
@@ -201,6 +210,81 @@ batchesRouter.get(
   asyncHandler(async (req, res) => {
     const { id } = batchIdParamSchema.parse(req.params);
     await res.status(200).json(await getLearnerFeedback(req.user, id));
+  }),
+);
+
+batchesRouter.get(
+  "/:id/settings",
+  requireRoles(...BATCH_SETTINGS_READ_ROLES),
+  asyncHandler(async (req, res) => {
+    const { id } = batchIdParamSchema.parse(req.params);
+    await res.status(200).json(await getBatchSettings(req.user, id));
+  }),
+);
+
+batchesRouter.patch(
+  "/:id/settings",
+  requireRoles(...BATCH_SETTINGS_WRITE_ROLES),
+  asyncHandler(async (req, res) => {
+    const { id } = batchIdParamSchema.parse(req.params);
+    const patch = batchSettingsBodySchema.parse(req.body ?? {});
+    const saved = await updateBatchSettings(req.user, id, patch);
+    setAudit(req, {
+      action: "batch.settings_update",
+      entity: "batch",
+      entityId: id,
+      abId: saved.abId,
+      batchId: id,
+      before: { settings: saved.before },
+      after: { settings: saved.after },
+    });
+    await res.status(200).json(saved.body);
+  }),
+);
+
+// Candidate pop-up (B-20). The answers are personal data: the audit row gets field names only.
+batchesRouter.get(
+  "/:id/candidate-info/mine",
+  requireRoles(...CANDIDATE_INFO_WRITE_ROLES),
+  asyncHandler(async (req, res) => {
+    const { id } = batchIdParamSchema.parse(req.params);
+    await res.status(200).json(await getOwnPopup(req.user, id));
+  }),
+);
+
+batchesRouter.put(
+  "/:id/candidate-info",
+  requireRoles(...CANDIDATE_INFO_WRITE_ROLES),
+  asyncHandler(async (req, res) => {
+    const { id } = batchIdParamSchema.parse(req.params);
+    const body = candidateInfoBodySchema.parse(req.body ?? {});
+    const saved = await saveOwnInfo(req.user, id, body);
+    setAudit(req, {
+      action: "batch.candidate_info_save",
+      entity: "batch",
+      entityId: id,
+      abId: saved.abId,
+      batchId: id,
+      omitRequestBody: true,
+      meta: { fields: saved.fields },
+    });
+    await res.status(200).json(saved.body);
+  }),
+);
+
+batchesRouter.get(
+  "/:id/candidate-info",
+  requireRoles(...CANDIDATE_INFO_READ_ROLES),
+  asyncHandler(async (req, res) => {
+    const { id } = batchIdParamSchema.parse(req.params);
+    const body = await listBatchInfo(req.user, id);
+    await recordAccess(req, {
+      subjectType: "learner",
+      subjectIds: body.items.map((item) => item.learnerId),
+      kind: "list",
+      fields: body.fields,
+    });
+    await res.status(200).json(body);
   }),
 );
 

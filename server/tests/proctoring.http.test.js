@@ -197,8 +197,10 @@ describe("Proctoring API (server/src/modules/proctoring)", () => {
         attemptId: String(w.asha.attempt._id),
         batchId: String(w.batch._id),
         status: "active",
+        paused: false,
         config: {
           snapshotIntervalSeconds: 30,
+          snapshotAtStartAndEnd: true,
           detectionIntervalMs: 1000,
           flagCooldownSeconds: 15,
           sustainedSeconds: { face_not_present: 2, camera_blocked: 2, camera_frozen: 8 },

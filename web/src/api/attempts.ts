@@ -19,6 +19,27 @@ export type AttemptQuestion = {
   answer: string | null;
 };
 
+/** B-20: what the exam page needs from the batch settings. */
+export type AttemptSettings = {
+  questionsMandatory: boolean;
+  showMarksToCandidate: boolean;
+  flagPolicy: { action: "record" | "pause" };
+  imageCapture: { intervalSeconds: number; atStartAndEnd: boolean };
+  candidateInfoPopup: { enabled: boolean; fields: string[] };
+  captureLocation: boolean;
+};
+
+export type AttemptMarks = { obtainedMarks: number; maxMarks: number; complete: boolean };
+
+export const DEFAULT_ATTEMPT_SETTINGS: AttemptSettings = {
+  questionsMandatory: false,
+  showMarksToCandidate: false,
+  flagPolicy: { action: "record" },
+  imageCapture: { intervalSeconds: 30, atStartAndEnd: true },
+  candidateInfoPopup: { enabled: false, fields: [] },
+  captureLocation: false,
+};
+
 export type Attempt = {
   id: string;
   testPaperId: string;
@@ -32,6 +53,13 @@ export type Attempt = {
   serverTime: string | null;
   remainingSeconds: number | null;
   questions: AttemptQuestion[];
+  /** B-20: the flag policy has paused this attempt. Answers and submit are refused until an unlock. */
+  paused: boolean;
+  /** B-20: true when options were shuffled, so the page labels them A, B, C by position. */
+  shuffleOptions: boolean;
+  settings: AttemptSettings;
+  /** B-20: totals, only when the batch shows marks and the attempt is closed. */
+  marks: AttemptMarks | null;
 };
 
 export type SaveAnswersResult = {
@@ -47,6 +75,7 @@ export type ClosedAttempt = {
   closeReason: string | null;
   closedAt: string | null;
   deadlineAt: string | null;
+  marks: AttemptMarks | null;
 };
 
 const STATUSES: readonly string[] = ["in_progress", "submitted", "timed_out"];
@@ -95,6 +124,36 @@ function parseQuestion(value: unknown, index: number): AttemptQuestion {
   };
 }
 
+function parseMarks(value: unknown): AttemptMarks | null {
+  if (!isRecord(value)) return null;
+  const obtainedMarks = num(value.obtainedMarks);
+  const maxMarks = num(value.maxMarks);
+  if (obtainedMarks === null || maxMarks === null) return null;
+  return { obtainedMarks, maxMarks, complete: value.complete === true };
+}
+
+function parseSettings(value: unknown): AttemptSettings {
+  const d = DEFAULT_ATTEMPT_SETTINGS;
+  if (!isRecord(value)) return { ...d };
+  const image = isRecord(value.imageCapture) ? value.imageCapture : {};
+  const info = isRecord(value.candidateInfoPopup) ? value.candidateInfoPopup : {};
+  const policy = isRecord(value.flagPolicy) ? value.flagPolicy : {};
+  return {
+    questionsMandatory: value.questionsMandatory === true,
+    showMarksToCandidate: value.showMarksToCandidate === true,
+    flagPolicy: { action: policy.action === "pause" ? "pause" : "record" },
+    imageCapture: {
+      intervalSeconds: num(image.intervalSeconds) ?? d.imageCapture.intervalSeconds,
+      atStartAndEnd: image.atStartAndEnd !== false,
+    },
+    candidateInfoPopup: {
+      enabled: info.enabled === true,
+      fields: Array.isArray(info.fields) ? info.fields.filter((f): f is string => typeof f === "string") : [],
+    },
+    captureLocation: value.captureLocation === true,
+  };
+}
+
 export function parseAttempt(value: unknown): Attempt {
   if (!isRecord(value)) throw bad("Attempt");
   const id = str(value.id);
@@ -119,6 +178,10 @@ export function parseAttempt(value: unknown): Attempt {
     serverTime: str(value.serverTime),
     remainingSeconds: num(value.remainingSeconds),
     questions,
+    paused: value.paused === true,
+    shuffleOptions: value.shuffleOptions === true,
+    settings: parseSettings(value.settings),
+    marks: parseMarks(value.marks),
   };
 }
 
@@ -163,6 +226,7 @@ export async function submitAttempt(id: string): Promise<ClosedAttempt> {
     closeReason: str(body.closeReason),
     closedAt: str(body.closedAt),
     deadlineAt: str(body.deadlineAt),
+    marks: parseMarks(body.marks),
   };
 }
 

@@ -12,6 +12,8 @@ type Options = {
   debounceMs?: number;
   /** The server says the attempt is over (ATTEMPT_TIME_UP or ATTEMPT_CLOSED). */
   onClosed: (reason: ClosedReason) => void;
+  /** B-20: the server refused the save because the flag policy paused the attempt. The answers stay queued. */
+  onPaused?: () => void;
 };
 
 /**
@@ -19,18 +21,20 @@ type Options = {
  * PUT. A failed save keeps the queue, shows an error, and is sent again on
  * Retry or on the next change. Answers live only in memory.
  */
-export function useAutosave(attemptId: string, { debounceMs = AUTOSAVE_DEBOUNCE_MS, onClosed }: Options) {
+export function useAutosave(attemptId: string, { debounceMs = AUTOSAVE_DEBOUNCE_MS, onClosed, onPaused }: Options) {
   const pending = useRef(new Map<string, string | null>());
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inFlight = useRef<Promise<boolean> | null>(null);
   const closed = useRef(false);
   const onClosedRef = useRef(onClosed);
+  const onPausedRef = useRef(onPaused);
   const [state, setState] = useState<SaveState>("idle");
   const [savedAt, setSavedAt] = useState<string | null>(null);
 
   useEffect(() => {
     onClosedRef.current = onClosed;
-  }, [onClosed]);
+    onPausedRef.current = onPaused;
+  }, [onClosed, onPaused]);
 
   const clearTimer = () => {
     if (timer.current) clearTimeout(timer.current);
@@ -66,6 +70,7 @@ export function useAutosave(attemptId: string, { debounceMs = AUTOSAVE_DEBOUNCE_
           closed.current = true;
           onClosedRef.current(error.code === "ATTEMPT_TIME_UP" ? "time_up" : "closed");
         }
+        if (error instanceof ApiError && error.code === "ATTEMPT_PAUSED") onPausedRef.current?.();
         setState("error");
         return false;
       }

@@ -346,3 +346,26 @@ export const PROCTORING_REVIEW_ROLES = Object.freeze(["aa_admin", "proctor"]);
 
 /** P-08: only aa_admin may record `invalidate_recommended`. */
 export const PROCTORING_INVALIDATE_ROLES = Object.freeze(["aa_admin"]);
+
+/** PATCH /batches/:id/settings. B-20: aa_admin only. */
+export const BATCH_SETTINGS_WRITE_ROLES = Object.freeze(["aa_admin"]);
+
+/** GET /batches/:id/settings. B-20: staff with batch scope; the candidate gets them in the attempt. */
+export const BATCH_SETTINGS_READ_ROLES = Object.freeze([
+  "aa_admin",
+  "mis",
+  "assessor",
+  "proctor",
+  "tp",
+  "ab_reviewer",
+  "ncvet_viewer",
+]);
+
+/** PUT /batches/:id/candidate-info. B-20: the candidate fills in their own details. */
+export const CANDIDATE_INFO_WRITE_ROLES = Object.freeze(["candidate"]);
+
+/** GET /batches/:id/candidate-info. B-20: personal data, so aa_admin and the batch's tp only. */
+export const CANDIDATE_INFO_READ_ROLES = Object.freeze(["aa_admin", "tp"]);
+
+/** POST /proctoring/sessions/:id/unlock. B-20: aa_admin, or the proctor of that batch. */
+export const PROCTORING_UNLOCK_ROLES = Object.freeze(["aa_admin", "proctor"]);

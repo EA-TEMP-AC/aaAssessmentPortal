@@ -61,6 +61,8 @@ export type SessionItem = {
   unreviewedCount: number;
   warningCount: number;
   invalidationRecommended: boolean;
+  /** B-20: the batch's flag policy has paused this exam. */
+  paused: boolean;
 };
 
 export type SessionPage = { page: number; pageSize: number; total: number; items: SessionItem[] };
@@ -86,7 +88,15 @@ export type Flag = {
 
 export type Warning = { id: string; message: string; createdAt: string };
 
-export type SessionDetail = SessionItem & { flags: Flag[]; warnings: Warning[] };
+export type SessionLock = {
+  paused: boolean;
+  pausedAt: string | null;
+  timesPaused: number;
+  countedFlags: number;
+  policy: { action: "record" | "pause"; pauseAfterFlags: number; countSeverities: string[] };
+};
+
+export type SessionDetail = SessionItem & { flags: Flag[]; warnings: Warning[]; lock: SessionLock | null };
 
 export type SessionQuery = { batchId?: string; status?: string; minSeverity?: string };
 
@@ -141,6 +151,25 @@ function parseItem(value: unknown): SessionItem {
     unreviewedCount: num(value.unreviewedCount),
     warningCount: num(value.warningCount),
     invalidationRecommended: value.invalidationRecommended === true,
+    paused: value.paused === true,
+  };
+}
+
+export function parseLock(value: unknown): SessionLock | null {
+  if (!isRecord(value)) return null;
+  const policy = isRecord(value.policy) ? value.policy : {};
+  return {
+    paused: value.paused === true,
+    pausedAt: str(value.pausedAt),
+    timesPaused: num(value.timesPaused),
+    countedFlags: num(value.countedFlags),
+    policy: {
+      action: policy.action === "pause" ? "pause" : "record",
+      pauseAfterFlags: num(policy.pauseAfterFlags),
+      countSeverities: Array.isArray(policy.countSeverities)
+        ? policy.countSeverities.filter((s): s is string => typeof s === "string")
+        : [],
+    },
   };
 }
 
@@ -214,7 +243,16 @@ export async function getProctoringSession(id: string, signal?: AbortSignal): Pr
     warnings: Array.isArray(body.warnings)
       ? body.warnings.map(parseWarning).filter((w): w is Warning => w !== null)
       : [],
+    lock: parseLock(body.lock),
   };
+}
+
+/** B-20: lifts a flag-policy pause. aa_admin, or the proctor of the batch. */
+export async function unlockProctoringSession(id: string): Promise<SessionLock | null> {
+  const body = await apiRequest<unknown>(`/proctoring/sessions/${encodeURIComponent(id)}/unlock`, {
+    method: "POST",
+  });
+  return isRecord(body) ? parseLock(body.lock) : null;
 }
 
 /**

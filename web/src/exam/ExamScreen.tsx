@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { errorMessage } from "../api/client";
-import { submitAttempt, type Attempt, type AttemptQuestion } from "../api/attempts";
+import { ApiError, errorMessage } from "../api/client";
+import { getAttempt, submitAttempt, type Attempt, type AttemptQuestion } from "../api/attempts";
 import { useAutosave, type ClosedReason } from "./useAutosave";
 import { formatRemaining, spokenRemaining, useExamClock, WARN_SECONDS } from "./useExamClock";
 import { debugStripWanted } from "../proctoring/debug";
@@ -14,6 +14,11 @@ import { QuestionPalette } from "./QuestionPalette";
 
 /** Text size steps for the A- and A+ buttons, in percent. Not saved anywhere. */
 const TEXT_SIZES = [100, 115, 130, 150] as const;
+
+/** While paused, the page asks the server this often whether an unlock has happened. */
+export const PAUSE_POLL_MS = 10_000;
+
+const OPTION_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
 export type ExamOutcome = "submitted" | "timed_out" | "closed";
 
@@ -41,18 +46,21 @@ function QuestionBody({
   question,
   value,
   disabled,
+  positional,
   onChange,
 }: {
   question: AttemptQuestion;
   value: string;
   disabled: boolean;
+  /** B-20: options are shuffled, so label them A, B, C by position. The answer sent is still the option key. */
+  positional: boolean;
   onChange: (value: string) => void;
 }) {
   if (question.type === "mcq") {
     return (
       <fieldset className="exam-options bare-fieldset">
         <legend className="visually-hidden">Choose one answer</legend>
-        {question.options.map((option) => (
+        {question.options.map((option, position) => (
           <label key={option.key} className="exam-option">
             <input
               type="radio"
@@ -62,7 +70,8 @@ function QuestionBody({
               onChange={() => onChange(option.key)}
               disabled={disabled}
             />
-            <span className="exam-option-key">{option.key}.</span> {option.text}
+            <span className="exam-option-key">{positional ? (OPTION_LETTERS[position] ?? option.key) : option.key}.</span>{" "}
+            {option.text}
           </label>
         ))}
       </fieldset>
@@ -102,6 +111,7 @@ export function ExamScreen({ attempt, stream, face, onFinished, autosaveDebounce
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState("");
+  const [paused, setPaused] = useState(attempt.paused);
   const [isFullscreen, setIsFullscreen] = useState(() => Boolean(document.fullscreenElement));
   const finished = useRef(false);
   const timeUpStarted = useRef(false);
@@ -109,6 +119,8 @@ export function ExamScreen({ attempt, stream, face, onFinished, autosaveDebounce
   const questionHeading = useRef<HTMLHeadingElement>(null);
   const confirmHeading = useRef<HTMLHeadingElement>(null);
   const warningButton = useRef<HTMLButtonElement>(null);
+  const pausedHeading = useRef<HTMLHeadingElement>(null);
+  const wasPaused = useRef(attempt.paused);
   const firstRender = useRef(true);
 
   const remaining = useExamClock(attempt.deadlineAt, attempt.serverTime);
@@ -129,7 +141,8 @@ export function ExamScreen({ attempt, stream, face, onFinished, autosaveDebounce
     (reason: ClosedReason) => finish(reason === "time_up" ? "timed_out" : "closed"),
     [finish],
   );
-  const autosave = useAutosave(attempt.id, { debounceMs: autosaveDebounceMs, onClosed });
+  const onPaused = useCallback(() => setPaused(true), []);
+  const autosave = useAutosave(attempt.id, { debounceMs: autosaveDebounceMs, onClosed, onPaused });
   const { flush, close: closeAutosave } = autosave;
 
   // Time up: send what is waiting (the server takes saves for a short grace period),
@@ -153,6 +166,45 @@ export function ExamScreen({ attempt, stream, face, onFinished, autosaveDebounce
       }
     }
   }, [remaining]);
+
+  // B-20: the heartbeat is the usual way to learn about a pause or an unlock.
+  const heartbeatPaused = proctoring.paused;
+  useEffect(() => {
+    if (heartbeatPaused !== null) setPaused(heartbeatPaused);
+  }, [heartbeatPaused]);
+
+  useEffect(() => {
+    if (paused && !wasPaused.current) {
+      setConfirming(false);
+      setSubmitting(false);
+      setAnnouncement("Your test is paused. Please contact your proctor.");
+    }
+    if (!paused && wasPaused.current) {
+      setAnnouncement("Your test is unlocked. You can carry on.");
+      void flush();
+    }
+    wasPaused.current = paused;
+    if (paused) pausedHeading.current?.focus();
+  }, [paused, flush]);
+
+  // While paused, ask the server whether it was unlocked or the attempt ended meanwhile.
+  useEffect(() => {
+    if (!paused) return undefined;
+    const timer = setInterval(() => {
+      void getAttempt(attempt.id)
+        .then((fresh) => {
+          if (finished.current) return;
+          if (fresh.status !== "in_progress") {
+            closeAutosave();
+            finish(fresh.status === "timed_out" ? "timed_out" : "closed");
+          } else if (!fresh.paused) {
+            setPaused(false);
+          }
+        })
+        .catch(() => {});
+    }, PAUSE_POLL_MS);
+    return () => clearInterval(timer);
+  }, [paused, attempt.id, closeAutosave, finish]);
 
   useEffect(() => {
     const onChange = () => setIsFullscreen(Boolean(document.fullscreenElement));
@@ -181,6 +233,8 @@ export function ExamScreen({ attempt, stream, face, onFinished, autosaveDebounce
   const timeUp = remaining <= 0;
   const answeredCount = questions.filter((q) => isAnswered(answers[q.questionId])).length;
   const unanswered = questions.length - answeredCount;
+  const mustAnswerAll = attempt.settings.questionsMandatory;
+  const blockedByMandatory = mustAnswerAll && unanswered > 0;
   const level = remaining <= 60 ? "exam-timer-critical" : remaining <= 300 ? "exam-timer-warn" : "";
 
   function toggleIn(set: ReadonlySet<string>, id: string, on: boolean): ReadonlySet<string> {
@@ -205,12 +259,13 @@ export function ExamScreen({ attempt, stream, face, onFinished, autosaveDebounce
   }
 
   function change(value: string) {
-    if (!question || timeUp || submitting) return;
+    if (!question || timeUp || submitting || paused) return;
     setAnswers((current) => ({ ...current, [question.questionId]: value }));
     autosave.queue(question.questionId, value);
   }
 
   async function confirmSubmit() {
+    if (blockedByMandatory) return;
     setSubmitting(true);
     setSubmitError(null);
     const saved = await flush();
@@ -226,8 +281,19 @@ export function ExamScreen({ attempt, stream, face, onFinished, autosaveDebounce
       finish(result.status === "timed_out" ? "timed_out" : "submitted");
     } catch (error) {
       setSubmitting(false);
+      if (error instanceof ApiError && error.code === "ATTEMPT_PAUSED") {
+        setPaused(true);
+        return;
+      }
       setSubmitError(errorMessage(error));
     }
+  }
+
+  function goToFirstUnanswered() {
+    const target = questions.findIndex((q) => !isAnswered(answers[q.questionId]));
+    setConfirming(false);
+    setSubmitError(null);
+    if (target >= 0) goTo(target);
   }
 
   if (questions.length === 0) {
@@ -314,7 +380,8 @@ export function ExamScreen({ attempt, stream, face, onFinished, autosaveDebounce
         <QuestionBody
           question={question}
           value={answers[question.questionId] ?? ""}
-          disabled={timeUp || submitting}
+          disabled={timeUp || submitting || paused}
+          positional={attempt.shuffleOptions}
           onChange={change}
         />
       </article>
@@ -331,7 +398,7 @@ export function ExamScreen({ attempt, stream, face, onFinished, autosaveDebounce
         <button
           type="button"
           onClick={() => change("")}
-          disabled={timeUp || submitting || !isAnswered(answers[question.questionId])}
+          disabled={timeUp || submitting || paused || !isAnswered(answers[question.questionId])}
         >
           Reset
         </button>
@@ -359,13 +426,16 @@ export function ExamScreen({ attempt, stream, face, onFinished, autosaveDebounce
         <button type="button" onClick={() => goTo(index - 1)} disabled={index === 0}>
           Previous
         </button>
-        <button type="button" onClick={() => void saveAndNext()} disabled={submitting}>
+        <button type="button" onClick={() => void saveAndNext()} disabled={submitting || paused}>
           Save and Next
         </button>
-        <button type="button" onClick={() => setConfirming(true)} disabled={timeUp || submitting}>
+        <button type="button" onClick={() => setConfirming(true)} disabled={timeUp || submitting || paused}>
           Submit exam
         </button>
       </div>
+      {mustAnswerAll ? (
+        <p className="field-hint">You must answer every question before you can submit.</p>
+      ) : null}
 
       {confirming ? (
         <div className="dialog-backdrop">
@@ -377,16 +447,29 @@ export function ExamScreen({ attempt, stream, face, onFinished, autosaveDebounce
               You have answered {answeredCount} of {questions.length} questions.
               {unanswered > 0 ? ` ${unanswered} ${unanswered === 1 ? "question is" : "questions are"} not answered.` : ""}
             </p>
-            <p>After you submit you cannot change your answers.</p>
+            {blockedByMandatory ? (
+              <p role="alert" className="form-error">
+                You must answer every question before you submit. {unanswered}{" "}
+                {unanswered === 1 ? "question is" : "questions are"} not answered.
+              </p>
+            ) : (
+              <p>After you submit you cannot change your answers.</p>
+            )}
             {submitError ? (
               <p role="alert" className="form-error">
                 {submitError}
               </p>
             ) : null}
             <div className="dialog-actions">
-              <button type="button" onClick={() => void confirmSubmit()} disabled={submitting}>
-                {submitting ? "Submitting…" : "Submit now"}
-              </button>
+              {blockedByMandatory ? (
+                <button type="button" onClick={goToFirstUnanswered}>
+                  Go to the first unanswered question
+                </button>
+              ) : (
+                <button type="button" onClick={() => void confirmSubmit()} disabled={submitting}>
+                  {submitting ? "Submitting…" : "Submit now"}
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => {
@@ -402,11 +485,29 @@ export function ExamScreen({ attempt, stream, face, onFinished, autosaveDebounce
         </div>
       ) : null}
 
-      {proctoring.notice && !currentWarning ? (
+      {paused ? (
+        <div className="dialog-backdrop">
+          <div
+            className="dialog-panel exam-paused"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="paused-heading"
+            aria-describedby="paused-text"
+          >
+            <h2 id="paused-heading" ref={pausedHeading} tabIndex={-1}>
+              Test paused
+            </h2>
+            <p id="paused-text">Your test is paused. Please contact your proctor.</p>
+            <p>Your saved answers are safe. The timer keeps running. This page carries on when your proctor unlocks it.</p>
+          </div>
+        </div>
+      ) : null}
+
+      {proctoring.notice && !currentWarning && !paused ? (
         <FlagNotice type={proctoring.notice} onDismiss={proctoring.dismissNotice} />
       ) : null}
 
-      {currentWarning ? (
+      {currentWarning && !paused ? (
         <div className="dialog-backdrop">
           <div
             className="dialog-panel"

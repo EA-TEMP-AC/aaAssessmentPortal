@@ -50,6 +50,9 @@ export function parseProctorConfig(value: unknown): ProctorConfig {
     detectionIntervalMs: positive(value.detectionIntervalMs, DEFAULT_PROCTOR_CONFIG.detectionIntervalMs),
     flagCooldownSeconds: positive(value.flagCooldownSeconds, DEFAULT_PROCTOR_CONFIG.flagCooldownSeconds),
     sustainedSeconds,
+    ...(typeof value.snapshotAtStartAndEnd === "boolean"
+      ? { snapshotAtStartAndEnd: value.snapshotAtStartAndEnd }
+      : {}),
   };
 }
 
@@ -61,8 +64,12 @@ export async function createProctoringSession(attemptId: string): Promise<Procto
   return { id, status: str(body.status) ?? "active", config: parseProctorConfig(body.config) };
 }
 
-export async function sendHeartbeat(sessionId: string): Promise<void> {
-  await apiRequest<unknown>(`/proctoring/sessions/${encodeURIComponent(sessionId)}/heartbeat`, { method: "POST" });
+/** B-20: the heartbeat also says whether the flag policy has paused the attempt. */
+export async function sendHeartbeat(sessionId: string): Promise<{ paused: boolean }> {
+  const body = await apiRequest<unknown>(`/proctoring/sessions/${encodeURIComponent(sessionId)}/heartbeat`, {
+    method: "POST",
+  });
+  return { paused: isRecord(body) && body.paused === true };
 }
 
 export async function listWarnings(sessionId: string, signal?: AbortSignal): Promise<ProctorWarning[]> {

@@ -33,6 +33,10 @@ const proctoringSessionSchema = new mongoose.Schema(
     learnerId: { type: mongoose.Schema.Types.ObjectId, required: true },
     userId: { type: mongoose.Schema.Types.ObjectId, required: true, ref: "User" },
     lastSeenAt: { type: Date, default: null },
+    /** B-20: the batch's snapshot interval when the session began. Missing means compliance.js. */
+    snapshotIntervalSeconds: { type: Number, min: 1 },
+    /** B-20: flags counted by the batch's flag policy since the start or the last unlock. */
+    policyFlagCount: { type: Number, default: 0, min: 0 },
     flagCounts: { type: flagCountsSchema, default: () => ({}) },
     warnings: { type: [warningSchema], default: [] },
     invalidationRecommendedAt: { type: Date, default: null },
