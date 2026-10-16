@@ -357,12 +357,20 @@ describe("GET /api/v1/attempts/available (B-19)", () => {
       expect(item.startable).toEqual({ ok: false, reason: "ATTEMPT_TIME_UP" });
     });
 
-    it("a closed attempt is not listed once the batch is no longer in progress", async () => {
+    it("a closed attempt stays listed as completed after the batch is no longer in progress (X-13)", async () => {
       const started = await start(w.candidate, w.batch._id, w.paper._id);
       await request(app)
         .post(`/api/v1/attempts/${started.body.id}/submit`)
         .set(bearer(w.candidate.token))
         .send({});
+      await Batch.updateOne({ _id: w.batch._id }, { status: "assessment_completed" });
+      const items = await itemsOf(w.candidate);
+      expect(items).toHaveLength(1);
+      expect(items[0].attempt.status).toBe("submitted");
+      expect(items[0].startable).toEqual({ ok: false, reason: "ATTEMPT_CLOSED" });
+    });
+
+    it("a batch with no attempt of this candidate is still not listed once it has moved on (X-13)", async () => {
       await Batch.updateOne({ _id: w.batch._id }, { status: "assessment_completed" });
       expect(await itemsOf(w.candidate)).toEqual([]);
     });

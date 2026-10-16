@@ -375,7 +375,7 @@ const shortCode = (id) => String(id).slice(-6).toUpperCase();
 /**
  * GET /attempts/available. The one test paper (D5) of each in-progress batch where this
  * candidate is on the active roster, plus any paper with an attempt of theirs still open, even
- * when the batch is no longer in progress (Q702). Ids, labels, counts and the own attempt state
+ * when the batch is no longer in progress (Q702), and (X-13) any paper with a finished attempt of theirs, so the Completed tab keeps its history. Ids, labels, counts and the own attempt state
  * of the candidate only: never question ids, text, options, keys or marks. A batch with no paper
  * set lists nothing.
  */
@@ -394,6 +394,8 @@ export async function listAvailable(user) {
     .lean();
   const attemptByKey = new Map();
   const openByBatch = new Map();
+  // X-13: a finished attempt keeps its paper on the Completed tab after the batch itself has closed.
+  const doneByBatch = new Map();
   for (const row of rows) {
     let attempt = row;
     // Lazy timeout, as on any other read: an open attempt past its accept window closes here.
@@ -406,6 +408,10 @@ export async function listAvailable(user) {
       const key = idStr(attempt.batchId);
       if (!openByBatch.has(key)) openByBatch.set(key, []);
       openByBatch.get(key).push(idStr(attempt.testPaperId));
+    } else {
+      const key = idStr(attempt.batchId);
+      if (!doneByBatch.has(key)) doneByBatch.set(key, []);
+      doneByBatch.get(key).push(idStr(attempt.testPaperId));
     }
   }
 
@@ -413,6 +419,7 @@ export async function listAvailable(user) {
     $or: [
       { _id: { $in: rosters.map((r) => r.batchId) }, status: "in_progress" },
       { _id: { $in: [...openByBatch.keys()] } },
+      { _id: { $in: [...doneByBatch.keys()] } },
     ],
   })
     .select(
@@ -423,9 +430,13 @@ export async function listAvailable(user) {
   if (batches.length === 0) return { items: [] };
 
   const paperIdsOf = (batch) =>
-    [...new Set([idStr(batch.testPaperId), ...(openByBatch.get(idStr(batch._id)) ?? [])])].filter(
-      Boolean,
-    );
+    [
+      ...new Set([
+        idStr(batch.testPaperId),
+        ...(openByBatch.get(idStr(batch._id)) ?? []),
+        ...(doneByBatch.get(idStr(batch._id)) ?? []),
+      ]),
+    ].filter(Boolean);
   const wantedPaperIds = [...new Set(batches.flatMap(paperIdsOf))];
   const qualificationIds = [...new Set(batches.map((b) => idStr(b.qualificationId)))];
   const [papers, qualifications, absences] = await Promise.all([
@@ -465,7 +476,7 @@ export async function listAvailable(user) {
       const attempt = attemptByKey.get(`${idStr(roster._id)}:${paperId}`) ?? null;
       const open = attempt?.status === "in_progress";
       // Without an open attempt only an approved, complete paper is listed.
-      if (!open && (paper.status !== "approved" || paper.complete !== true)) continue;
+      if (!attempt && (paper.status !== "approved" || paper.complete !== true)) continue;
       const blocker = startBlocker({
         batch,
         paper,
