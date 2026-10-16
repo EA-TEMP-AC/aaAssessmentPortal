@@ -875,3 +875,57 @@ textarea {
   flex-wrap: wrap;
   gap: 0.5rem;
 }
+
+/* Proctoring (P-01, P-08). Severity is always written as text; colour only supports it. */
+.severity-tag,
+.session-status {
+  display: inline-block;
+  padding: 0 0.4rem;
+  border: 1px solid;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.severity-high { color: #8a1c1c; border-color: #8a1c1c; background: #fdecec; }
+.severity-medium { color: #7a4b00; border-color: #7a4b00; background: #fff4de; }
+.severity-low { color: #1b1f24; border-color: #5c6670; background: #ffffff; }
+
+.session-active { color: #1b6e3c; border-color: #1b6e3c; background: #eaf6ee; }
+.session-feed_lost { color: #8a1c1c; border-color: #8a1c1c; background: #fdecec; }
+.session-ended { color: #1b1f24; border-color: #5c6670; background: #ffffff; }
+.session-flagged { font-weight: 600; color: #8a1c1c; }
+
+.proctor-timeline {
+  padding-left: 1.25rem;
+}
+
+.proctor-flag {
+  margin-bottom: 1rem;
+  padding: 0.5rem 0.75rem;
+  border-left: 0.35rem solid #5c6670;
+  background: #ffffff;
+}
+
+.proctor-flag-high { border-left-color: #8a1c1c; }
+.proctor-flag-medium { border-left-color: #7a4b00; }
+
+.proctor-flag-head { margin: 0 0 0.25rem; }
+
+.proctor-review .row-actions,
+.proctor-confirm .row-actions,
+.proctor-warn .row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.proctor-warn textarea {
+  width: 100%;
+  max-width: 32rem;
+  font: inherit;
+}
+
+button.button-danger {
+  background: #8a1c1c;
+  border-color: #8a1c1c;
+}

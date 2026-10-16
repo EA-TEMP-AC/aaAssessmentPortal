@@ -13,6 +13,8 @@ export const EVIDENCE_KINDS = Object.freeze([
   "equipment",
   "other",
   "video",
+  // P-01: a JPEG the candidate's browser takes during a proctored attempt. Needs a sessionId.
+  "proctor_snapshot",
 ]);
 export const EVIDENCE_CONTENT_TYPES = Object.freeze([
   "image/jpeg",
@@ -45,6 +47,8 @@ const evidenceSchema = new mongoose.Schema(
     batchId: { type: mongoose.Schema.Types.ObjectId, required: true, ref: "Batch" },
     abId: { type: mongoose.Schema.Types.ObjectId, required: true },
     candidateId: { type: mongoose.Schema.Types.ObjectId, ref: "Candidate", default: null },
+    /** P-01: the proctoring session of a `proctor_snapshot`. Null for every other kind. */
+    sessionId: { type: mongoose.Schema.Types.ObjectId, ref: "ProctoringSession", default: null },
     kind: { type: String, required: true, enum: EVIDENCE_KINDS },
     contentType: { type: String, required: true, enum: EVIDENCE_CONTENT_TYPES },
     size: { type: Number, required: true, min: 1 },
@@ -77,6 +81,7 @@ evidenceSchema.index({ candidateId: 1, capturedAt: -1 });
 evidenceSchema.index({ abId: 1, capturedAt: -1 });
 evidenceSchema.index({ uploaderUserId: 1, capturedAt: -1 });
 evidenceSchema.index({ sha256: 1 });
+evidenceSchema.index({ sessionId: 1, capturedAt: -1 });
 
 const BLOCKED_QUERY_HOOKS = [
   "updateMany",

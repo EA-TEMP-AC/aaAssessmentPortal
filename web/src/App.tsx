@@ -11,6 +11,7 @@ import { AnalyticsPage } from "./pages/AnalyticsPage";
 import { AuditLogPage } from "./pages/AuditLogPage";
 import { ChangePasswordPage } from "./pages/ChangePasswordPage";
 import { EvidencePage } from "./pages/EvidencePage";
+import { ProctoringPage } from "./pages/ProctoringPage";
 import { MasterDataPage } from "./pages/MasterDataPage";
 import { PublicSiteAdminPage } from "./pages/PublicSiteAdminPage";
 import { RecognitionPage } from "./pages/RecognitionPage";
@@ -77,6 +78,8 @@ export function AppRoutes() {
                       <AuditLogPage />
                     ) : item.id === "evidence" ? (
                       <EvidencePage />
+                    ) : item.id === "proctoring" ? (
+                      <ProctoringPage />
                     ) : item.id === "users" ? (
                       <UsersPage />
                     ) : item.id === "registry" ? (
