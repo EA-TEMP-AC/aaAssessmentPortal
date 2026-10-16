@@ -128,7 +128,10 @@ export function ExamScreen({ attempt, stream, face, onFinished, autosaveDebounce
   const wasPaused = useRef(attempt.paused);
   const firstRender = useRef(true);
 
-  const remaining = useExamClock(attempt.deadlineAt, attempt.serverTime);
+  // X-12: an unlock can move the deadline out (the paused time is given back), so it is state.
+  const [deadlineAt, setDeadlineAt] = useState(attempt.deadlineAt);
+  const clockHeld = paused && attempt.settings.flagPolicy.extendOnUnlock;
+  const remaining = useExamClock(deadlineAt, attempt.serverTime, clockHeld);
   const proctoring = useProctoring({ attemptId: attempt.id, batchId: attempt.batchId, stream, face, requireFullscreen });
   const { stop: stopProctoring } = proctoring;
 
@@ -187,10 +190,16 @@ export function ExamScreen({ attempt, stream, face, onFinished, autosaveDebounce
     if (!paused && wasPaused.current) {
       setAnnouncement("Your test is unlocked. You can carry on.");
       void flush();
+      // The server may have added the paused time to the deadline; take the new one.
+      void getAttempt(attempt.id)
+        .then((fresh) => {
+          if (!finished.current) setDeadlineAt(fresh.deadlineAt);
+        })
+        .catch(() => {});
     }
     wasPaused.current = paused;
     if (paused) pausedHeading.current?.focus();
-  }, [paused, flush]);
+  }, [paused, flush, attempt.id]);
 
   // While paused, ask the server whether it was unlocked or the attempt ended meanwhile.
   useEffect(() => {

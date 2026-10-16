@@ -23,7 +23,7 @@ export type AttemptQuestion = {
 export type AttemptSettings = {
   questionsMandatory: boolean;
   showMarksToCandidate: boolean;
-  flagPolicy: { action: "record" | "pause" };
+  flagPolicy: { action: "record" | "pause"; extendOnUnlock: boolean };
   imageCapture: { intervalSeconds: number; atStartAndEnd: boolean };
   candidateInfoPopup: { enabled: boolean; fields: string[] };
   captureLocation: boolean;
@@ -38,7 +38,7 @@ export type AttemptMarks = {
 export const DEFAULT_ATTEMPT_SETTINGS: AttemptSettings = {
   questionsMandatory: false,
   showMarksToCandidate: false,
-  flagPolicy: { action: "record" },
+  flagPolicy: { action: "record", extendOnUnlock: false },
   imageCapture: { intervalSeconds: 30, atStartAndEnd: true },
   candidateInfoPopup: { enabled: false, fields: [] },
   captureLocation: false,
@@ -155,7 +155,10 @@ function parseSettings(value: unknown): AttemptSettings {
   return {
     questionsMandatory: value.questionsMandatory === true,
     showMarksToCandidate: value.showMarksToCandidate === true,
-    flagPolicy: { action: policy.action === "pause" ? "pause" : "record" },
+    flagPolicy: {
+      action: policy.action === "pause" ? "pause" : "record",
+      extendOnUnlock: policy.extendOnUnlock === true,
+    },
     imageCapture: {
       intervalSeconds:
         num(image.intervalSeconds) ?? d.imageCapture.intervalSeconds,

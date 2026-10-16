@@ -1,5 +1,7 @@
 import {
+  clockInstant,
   computeDeadlines,
+  isClockHeld,
   computeScores,
   isPastAcceptWindow,
   scoreMcq,
@@ -148,5 +150,31 @@ describe("scoreMcq with old rows that stored the option text", () => {
     const items = [q({ questionId: "q1", answer: "B" })];
     const out = scoreQuestions(items, new Map([["q1", "Hammer"]]), new Map([["q1", options]]));
     expect(out[0]).toMatchObject({ awardedMarks: items[0].marks, scoreStatus: "scored" });
+  });
+});
+
+describe("held clock (X-12)", () => {
+  const now = new Date("2026-10-16T10:00:00.000Z");
+  const pausedAt = new Date("2026-10-16T09:50:00.000Z");
+  const base = { acceptUntil: new Date("2026-10-16T09:00:00.000Z") };
+
+  it("does not time out a paused attempt whose clock is held", () => {
+    const held = { ...base, pause: { active: true, clockStopped: true, pausedAt } };
+    expect(isClockHeld(held)).toBe(true);
+    expect(isPastAcceptWindow(held, now)).toBe(false);
+    expect(clockInstant(held, now)).toEqual(pausedAt);
+  });
+
+  it("keeps the old behaviour when the clock is not held", () => {
+    const running = { ...base, pause: { active: true, clockStopped: false, pausedAt } };
+    expect(isClockHeld(running)).toBe(false);
+    expect(isPastAcceptWindow(running, now)).toBe(true);
+    expect(clockInstant(running, now)).toEqual(now);
+    expect(isClockHeld({ ...base })).toBe(false);
+  });
+
+  it("stops holding once the pause is lifted", () => {
+    const lifted = { ...base, pause: { active: false, clockStopped: true, pausedAt } };
+    expect(isClockHeld(lifted)).toBe(false);
   });
 });

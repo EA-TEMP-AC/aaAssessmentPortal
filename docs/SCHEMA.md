@@ -420,6 +420,9 @@ Indexes: `{ code: 1 }` unique; `{ sector: 1 }`.
 | flagPolicy.action | `record` \| `pause` | `record` | See pause below |
 | flagPolicy.pauseAfterFlags | integer 1 to 20 | 3 | Counted flags that pause the attempt |
 | flagPolicy.countSeverities | `["high"]` or `["medium","high"]` | `["high"]` | Low is never counted |
+| flagPolicy.extendOnUnlock | boolean | `false` | X-12. On: the exam clock is held while the attempt is paused and an unlock adds the paused time to `deadlineAt` and `acceptUntil`. Off: the clock keeps running |
+| marksAfterValidation | boolean | `true` | X-12. With `showMarksToCandidate` on, marks wait until the batch's result is `validated` or `published`. Off: marks show as soon as the attempt closes |
+| locationVisibleTo | list from `tp`, `assessor`, `proctor`, `ab_reviewer`, `ncvet_viewer` | `["tp","proctor"]` | X-12. Roles besides `aa_admin` that may read the coordinates of a flag photo, each inside their own batch scope. Stored in this fixed order |
 | imageCapture.intervalSeconds | integer 10 to 120 | `PROCTOR_SNAPSHOT_INTERVAL_SECONDS` (30) | Becomes `config.snapshotIntervalSeconds` of a new proctoring session |
 | imageCapture.atStartAndEnd | bool | true | Delivered as `config.snapshotAtStartAndEnd`; the engine does not act on it yet (Q807) |
 | candidateInfoPopup.enabled | bool | false | |
@@ -843,7 +846,7 @@ One candidate's attempt at one approved test paper. Holds the stored question or
 | questions[] | {questionId, version, nosId, pcId, type, marks, answer, answeredAt, awardedMarks, scoreStatus, scoredBy, markedBy, markedAt} | Y | In the stored (shuffled) order. `scoreStatus` is `pending` or `scored`; `scoredBy` is `auto` or `manual` |
 | scores | {maxMarks, obtainedMarks, pendingMarks, pendingCount, complete, byNos[], byType[]} | N | Set when the attempt closes, recomputed after manual marks. Groups are {key, maxMarks, obtainedMarks, pendingMarks, pendingCount}, sorted by key |
 | shuffleOptions | bool | N | B-20. The batch's `shuffleOptions` when the attempt started; a later settings change does not move an open attempt. Default false |
-| pause | {active, pausedAt, timesPaused, lastUnlockedAt, lastUnlockedBy} | N | B-20. Absent until the flag policy first pauses the attempt. While `active`, answer saves and submit are refused with `ATTEMPT_PAUSED`. The clock, `deadlineAt` and `acceptUntil` are not touched; a timeout still closes the attempt. A pause never changes scores, status or a result |
+| pause | {active, pausedAt, timesPaused, clockStopped, secondsGivenBack, lastUnlockedAt, lastUnlockedBy} | N | B-20, X-12. Absent until the flag policy first pauses the attempt. While `active`, answer saves and submit are refused with `ATTEMPT_PAUSED`. With `clockStopped` (copied from `flagPolicy.extendOnUnlock` when the pause begins) the attempt cannot time out and an unlock moves `deadlineAt` and `acceptUntil` out by the paused time (`secondsGivenBack` counts the total). Otherwise the clock, `deadlineAt` and `acceptUntil` are not touched and a timeout still closes the attempt. A pause never changes scores, status or a result |
 | rev | Number | Y | Bumped by every write; closing and marking compare it so a save is never lost |
 
 Indexes: unique `{ testPaperId: 1, candidateId: 1 }` (one attempt per paper), `{ batchId, status }`, `{ abId, startedAt }`, `{ status, acceptUntil }`.

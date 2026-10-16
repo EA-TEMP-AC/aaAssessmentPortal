@@ -9,6 +9,7 @@ import {
   FLAG_POLICY_ACTIONS,
   IMAGE_INTERVAL_MAX_SECONDS,
   IMAGE_INTERVAL_MIN_SECONDS,
+  LOCATION_VIEWER_ROLES,
 } from "../../config/batch-settings.js";
 import { assertNoNationalIdKeys } from "../question-bank/question-bank.schemas.js";
 import { BATCH_MODES, BATCH_STATUSES, BATCH_TYPES } from "./batch-transitions.js";
@@ -188,12 +189,14 @@ export const batchSettingsBodySchema = guard(
       shuffleQuestions: z.boolean(),
       shuffleOptions: z.boolean(),
       showMarksToCandidate: z.boolean(),
+      marksAfterValidation: z.boolean(),
       questionsMandatory: z.boolean(),
       flagPolicy: z
         .object({
           action: z.enum(FLAG_POLICY_ACTIONS),
           pauseAfterFlags: z.number().int().min(FLAG_PAUSE_AFTER_MIN).max(FLAG_PAUSE_AFTER_MAX),
           countSeverities: countSeveritiesSchema,
+          extendOnUnlock: z.boolean(),
         })
         .partial()
         .strict(),
@@ -219,6 +222,10 @@ export const batchSettingsBodySchema = guard(
         .partial()
         .strict(),
       captureLocation: z.boolean(),
+      locationVisibleTo: z
+        .array(z.enum(LOCATION_VIEWER_ROLES))
+        .max(LOCATION_VIEWER_ROLES.length)
+        .refine((list) => new Set(list).size === list.length, "No repeated roles"),
     })
     .partial()
     .strict()

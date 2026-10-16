@@ -3,11 +3,14 @@ import {
   INFO_FIELDS,
   INTERVAL_MAX_SECONDS,
   INTERVAL_MIN_SECONDS,
+  LOCATION_ROLES,
+  LOCATION_ROLE_LABELS,
   PAUSE_AFTER_MAX,
   PAUSE_AFTER_MIN,
   type BatchSettings,
   type BatchSettingsPatch,
   type InfoField,
+  type LocationRole,
 } from "../../api/batchSettings";
 
 /** The form's working copy of the batch settings, and the rules around it (task B-20). */
@@ -16,7 +19,10 @@ export type Draft = {
   shuffleQuestions: boolean;
   shuffleOptions: boolean;
   showMarksToCandidate: boolean;
+  marksAfterValidation: boolean;
   questionsMandatory: boolean;
+  extendOnUnlock: boolean;
+  locationVisibleTo: LocationRole[];
   action: "record" | "pause";
   pauseAfterFlags: string;
   countMedium: boolean;
@@ -36,7 +42,10 @@ export function toDraft(s: BatchSettings): Draft {
     shuffleQuestions: s.shuffleQuestions,
     shuffleOptions: s.shuffleOptions,
     showMarksToCandidate: s.showMarksToCandidate,
+    marksAfterValidation: s.marksAfterValidation,
     questionsMandatory: s.questionsMandatory,
+    extendOnUnlock: s.flagPolicy.extendOnUnlock,
+    locationVisibleTo: [...s.locationVisibleTo],
     action: s.flagPolicy.action,
     pauseAfterFlags: String(s.flagPolicy.pauseAfterFlags),
     countMedium: s.flagPolicy.countSeverities.includes("medium"),
@@ -83,11 +92,14 @@ export function buildPatch(
     "shuffleQuestions",
     "shuffleOptions",
     "showMarksToCandidate",
+    "marksAfterValidation",
     "questionsMandatory",
     "captureLocation",
   ] as const) {
     if (draft[key] !== saved[key]) patch[key] = draft[key];
   }
+  const viewers = LOCATION_ROLES.filter((r) => draft.locationVisibleTo.includes(r));
+  if (viewers.join() !== saved.locationVisibleTo.join()) patch.locationVisibleTo = viewers;
   const policy: NonNullable<BatchSettingsPatch["flagPolicy"]> = {};
   if (draft.action !== saved.flagPolicy.action) policy.action = draft.action;
   const after = Number(draft.pauseAfterFlags);
@@ -98,6 +110,8 @@ export function buildPatch(
     : ["high"];
   if (severities.join() !== saved.flagPolicy.countSeverities.join())
     policy.countSeverities = severities;
+  if (draft.extendOnUnlock !== saved.flagPolicy.extendOnUnlock)
+    policy.extendOnUnlock = draft.extendOnUnlock;
   if (Object.keys(policy).length > 0) patch.flagPolicy = policy;
 
   const image: NonNullable<BatchSettingsPatch["imageCapture"]> = {};
@@ -138,6 +152,11 @@ export function describeChanges(saved: BatchSettings, draft: Draft): string[] {
     draft.showMarksToCandidate,
   );
   flip(
+    "Marks only after the result is validated",
+    saved.marksAfterValidation,
+    draft.marksAfterValidation,
+  );
+  flip(
     "Every question must be answered",
     saved.questionsMandatory,
     draft.questionsMandatory,
@@ -159,6 +178,11 @@ export function describeChanges(saved: BatchSettings, draft: Draft): string[] {
       `Flags that count: ${draft.countMedium ? "medium and high" : "high only"}`,
     );
   }
+  flip(
+    "Give back the paused time when unlocked",
+    saved.flagPolicy.extendOnUnlock,
+    draft.extendOnUnlock,
+  );
   if (Number(draft.intervalSeconds) !== saved.imageCapture.intervalSeconds) {
     lines.push(
       `Camera image every: ${saved.imageCapture.intervalSeconds} seconds to ${draft.intervalSeconds} seconds`,
@@ -181,5 +205,11 @@ export function describeChanges(saved: BatchSettings, draft: Draft): string[] {
     );
   }
   flip("Capture location", saved.captureLocation, draft.captureLocation);
+  const viewers = LOCATION_ROLES.filter((r) => draft.locationVisibleTo.includes(r));
+  if (viewers.join() !== saved.locationVisibleTo.join()) {
+    lines.push(
+      `Who can see the location: AA admin${viewers.map((r) => `, ${LOCATION_ROLE_LABELS[r]}`).join("")}`,
+    );
+  }
   return lines;
 }

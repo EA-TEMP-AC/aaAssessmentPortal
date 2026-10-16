@@ -23,6 +23,8 @@ import {
   AUTO_SCORED_TYPES,
   computeDeadlines,
   computeScores,
+  clockInstant,
+  isClockHeld,
   isPastAcceptWindow,
   normaliseAnswer,
   round2,
@@ -81,8 +83,15 @@ function orderedOptions(attempt, questionId, options) {
 }
 
 async function loadBatchSettings(batchId) {
-  const batch = await Batch.findById(batchId).select("settings").lean();
-  return resolveBatchSettings(batch?.settings);
+  const [batch, result] = await Promise.all([
+    Batch.findById(batchId).select("settings").lean(),
+    Result.findOne({ batchId }).select("status").lean(),
+  ]);
+  return {
+    ...resolveBatchSettings(batch?.settings),
+    // X-12: whether the awarding body has validated the result of this batch.
+    resultValidated: result?.status === "validated" || result?.status === "published",
+  };
 }
 
 /** What the exam page needs from the batch settings. No flag limits, no thresholds. */
@@ -90,7 +99,11 @@ function candidateSettingsView(settings) {
   return {
     questionsMandatory: settings.questionsMandatory,
     showMarksToCandidate: settings.showMarksToCandidate,
-    flagPolicy: { action: settings.flagPolicy.action },
+    // X-12: extendOnUnlock tells the page to hold its countdown while the exam is paused.
+    flagPolicy: {
+      action: settings.flagPolicy.action,
+      extendOnUnlock: settings.flagPolicy.extendOnUnlock === true,
+    },
     imageCapture: { ...settings.imageCapture },
     candidateInfoPopup: { ...settings.candidateInfoPopup },
     captureLocation: settings.captureLocation,
@@ -102,6 +115,8 @@ function candidateMarksView(attempt, settings) {
   if (!settings.showMarksToCandidate || attempt.status === "in_progress" || !attempt.scores) {
     return null;
   }
+  // X-12 (DECISIONS 805): unless the batch allows marks straight after the exam, they wait for validation.
+  if (settings.marksAfterValidation && !settings.resultValidated) return null;
   return {
     obtainedMarks: attempt.scores.obtainedMarks,
     maxMarks: attempt.scores.maxMarks,
@@ -251,7 +266,12 @@ async function expireIfDue(attempt, now, trigger) {
  * (attempt-sweep-job.js) and safe to call from a script.
  */
 export async function closeExpiredAttempts({ now = new Date(), limit = 200 } = {}) {
-  const due = await Attempt.find({ status: "in_progress", acceptUntil: { $lt: now } })
+  const due = await Attempt.find({
+    status: "in_progress",
+    acceptUntil: { $lt: now },
+    // X-12: a paused attempt whose clock is held is not due.
+    $nor: [{ "pause.active": true, "pause.clockStopped": true }],
+  })
     .sort({ acceptUntil: 1 })
     .limit(limit)
     .lean();
@@ -341,7 +361,7 @@ export function startBlocker({ batch, paper, absent, deliverable, today }) {
  */
 export function startableFor(attempt, blocker, now = new Date()) {
   if (attempt?.status === "in_progress") {
-    if (attempt.deadlineAt && new Date(attempt.deadlineAt) <= now) {
+    if (attempt.deadlineAt && new Date(attempt.deadlineAt) <= clockInstant(attempt, now)) {
       return { ok: false, reason: "ATTEMPT_TIME_UP" };
     }
     return { ok: true };
@@ -370,7 +390,7 @@ export async function listAvailable(user) {
   const now = new Date();
 
   const rows = await Attempt.find({ candidateId: { $in: rosterIds } })
-    .select("testPaperId candidateId batchId status startedAt deadlineAt acceptUntil")
+    .select("testPaperId candidateId batchId status startedAt deadlineAt acceptUntil pause")
     .lean();
   const attemptByKey = new Map();
   const openByBatch = new Map();
@@ -601,8 +621,15 @@ async function presentForCandidate(
         }
       : {}),
     serverTime: now.toISOString(),
+    // X-12: tells the page the clock is held while paused, so it does not run down meanwhile.
+    clockHeld: open && isClockHeld(attempt),
     remainingSeconds: open
-      ? Math.max(0, Math.ceil((new Date(attempt.deadlineAt).getTime() - now.getTime()) / 1000))
+      ? Math.max(
+          0,
+          Math.ceil(
+            (new Date(attempt.deadlineAt).getTime() - clockInstant(attempt, now).getTime()) / 1000,
+          ),
+        )
       : 0,
     totalMarks: round2(attempt.questions.reduce((s, q) => s + q.marks, 0)),
     questions: questions.map((q, index) => {

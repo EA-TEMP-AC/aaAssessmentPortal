@@ -1856,7 +1856,7 @@ What each setting does:
 - `shuffleOptions` (default false): options are shown in an order seeded by the attempt id and question id, the same on every read. Answers and marking use the option key, never the position. Copied to the attempt at start.
 - `showMarksToCandidate` (default false): after the attempt closes, the submit response and `GET /attempts/:id` carry `marks { obtainedMarks, maxMarks, complete }` (totals; `complete` is false while hand-marked answers are pending). Never per-question marks or keys.
 - `questionsMandatory` (default false): see `POST /attempts/:id/submit`.
-- `flagPolicy`: `record` only saves flags for review. `pause`: when the flags of the attempt with a counted severity reach `pauseAfterFlags`, the attempt is paused. While paused, `PUT /attempts/:id/answers` and `POST /attempts/:id/submit` return `409 ATTEMPT_PAUSED`, saved answers stay, the clock keeps running (a timeout still closes the attempt as `timed_out`), and a pause never fails or changes a result. `aa_admin` or the batch's proctor unlocks with `POST /proctoring/sessions/:id/unlock`; the count then restarts from zero. The pause writes audit `attempt.pause` (actor role `system`; counts and ids only). Flags are still recorded while paused.
+- `flagPolicy`: `record` only saves flags for review. `pause`: when the flags of the attempt with a counted severity reach `pauseAfterFlags`, the attempt is paused. While paused, `PUT /attempts/:id/answers` and `POST /attempts/:id/submit` return `409 ATTEMPT_PAUSED`, saved answers stay, the clock keeps running unless `flagPolicy.extendOnUnlock` is on (then the clock is held, the attempt cannot time out while paused, and the unlock adds the paused time to the deadline; the unlock audit row has `after.secondsGivenBack`). With the clock running, a timeout still closes the attempt as `timed_out`. A pause never fails or changes a result. `aa_admin` or the batch's proctor unlocks with `POST /proctoring/sessions/:id/unlock`; the count then restarts from zero. The pause writes audit `attempt.pause` (actor role `system`; counts and ids only). Flags are still recorded while paused.
 - `imageCapture`: `intervalSeconds` becomes `config.snapshotIntervalSeconds` of a proctoring session created afterwards (a running session keeps its own); `atStartAndEnd` is delivered as `config.snapshotAtStartAndEnd`.
 - `captureLocation` (default false): the field and the API only. It is returned in the attempt `settings` for X-07.
 
@@ -1909,3 +1909,13 @@ Additive fields only; nothing was removed. A value is `null` when the record is 
 - `GET /api/v1/batches/:id`: `names { abName, qualificationName, tpName, centreName, assessorName, proctorName }`. `qualificationName` is "code name". The batch list does not carry `names`.
 - `GET /api/v1/proctoring/sessions` and `GET /api/v1/proctoring/sessions/:id`: `batchLabel` ("code name, start to end").
 - `GET /api/v1/evidence` and `GET /api/v1/evidence/:id`: `batchLabel` and `candidateName`.
+
+
+## Pause clock, marks timing and location viewers (task X-12)
+
+New batch settings keys (`GET`/`PATCH /batches/:id/settings`, `aa_admin` writes):
+- `flagPolicy.extendOnUnlock` (boolean, default `false`). See the `flagPolicy` line above.
+- `marksAfterValidation` (boolean, default `true`). With `showMarksToCandidate` on, `marks` in the candidate's attempt view and submit reply stay `null` until the batch result is `validated` or `published`.
+- `locationVisibleTo` (list without repeats from `tp`, `assessor`, `proctor`, `ab_reviewer`, `ncvet_viewer`, default `["tp","proctor"]`). `GET /proctoring/flags/:id/capture` returns coordinates to `aa_admin` and to these roles, each only for a batch in their own scope; others get `location: null` and `locationVisible: false`.
+
+Attempt view for the candidate: `clockHeld` (boolean) is true while the attempt is paused and the batch holds the clock; `remainingSeconds` is then counted to the moment the pause began. `settings.flagPolicy.extendOnUnlock` tells the exam page to hold its countdown.

@@ -39,19 +39,36 @@ export const GENDER_LABELS: Record<(typeof GENDER_CHOICES)[number], string> = {
   other: "Other",
 };
 
+/** X-12. Roles besides aa_admin that can be allowed to see a candidate's location. */
+export const LOCATION_ROLES = ["tp", "assessor", "proctor", "ab_reviewer", "ncvet_viewer"] as const;
+export type LocationRole = (typeof LOCATION_ROLES)[number];
+export const LOCATION_ROLE_LABELS: Record<LocationRole, string> = {
+  tp: "Training partner of this batch",
+  assessor: "Assessor of this batch",
+  proctor: "Proctor of this batch",
+  ab_reviewer: "Awarding body reviewer",
+  ncvet_viewer: "NCVET viewer",
+};
+
 export type BatchSettings = {
   shuffleQuestions: boolean;
   shuffleOptions: boolean;
   showMarksToCandidate: boolean;
+  /** X-12: with the switch above on, marks wait until the awarding body has validated the result. */
+  marksAfterValidation: boolean;
   questionsMandatory: boolean;
   flagPolicy: {
     action: FlagAction;
     pauseAfterFlags: number;
     countSeverities: ("medium" | "high")[];
+    /** X-12: an unlock gives the paused time back to the candidate. */
+    extendOnUnlock: boolean;
   };
   imageCapture: { intervalSeconds: number; atStartAndEnd: boolean };
   candidateInfoPopup: { enabled: boolean; fields: InfoField[] };
   captureLocation: boolean;
+  /** X-12: roles besides aa_admin that may see the coordinates. */
+  locationVisibleTo: LocationRole[];
 };
 
 export type BatchSettingsPatch = Partial<
@@ -67,15 +84,18 @@ export const DEFAULT_BATCH_SETTINGS: BatchSettings = {
   shuffleQuestions: true,
   shuffleOptions: false,
   showMarksToCandidate: false,
+  marksAfterValidation: true,
   questionsMandatory: false,
   flagPolicy: {
     action: "record",
     pauseAfterFlags: 3,
     countSeverities: ["high"],
+    extendOnUnlock: false,
   },
   imageCapture: { intervalSeconds: 30, atStartAndEnd: true },
   candidateInfoPopup: { enabled: false, fields: [] },
   captureLocation: false,
+  locationVisibleTo: ["tp", "proctor"],
 };
 
 function bad(what: string): ApiError {
@@ -120,6 +140,7 @@ export function parseBatchSettings(value: unknown): BatchSettings {
       root.showMarksToCandidate,
       d.showMarksToCandidate,
     ),
+    marksAfterValidation: bool(root.marksAfterValidation, d.marksAfterValidation),
     questionsMandatory: bool(root.questionsMandatory, d.questionsMandatory),
     flagPolicy: {
       action: policy.action === "pause" ? "pause" : "record",
@@ -129,6 +150,7 @@ export function parseBatchSettings(value: unknown): BatchSettings {
       ),
       countSeverities:
         severities.length > 0 ? severities : d.flagPolicy.countSeverities,
+      extendOnUnlock: bool(policy.extendOnUnlock, d.flagPolicy.extendOnUnlock),
     },
     imageCapture: {
       intervalSeconds: int(
@@ -144,6 +166,9 @@ export function parseBatchSettings(value: unknown): BatchSettings {
         : [],
     },
     captureLocation: bool(root.captureLocation, d.captureLocation),
+    locationVisibleTo: Array.isArray(root.locationVisibleTo)
+      ? LOCATION_ROLES.filter((r) => (root.locationVisibleTo as unknown[]).includes(r))
+      : d.locationVisibleTo,
   };
 }
 

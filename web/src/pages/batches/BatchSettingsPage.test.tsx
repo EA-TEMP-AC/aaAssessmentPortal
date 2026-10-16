@@ -368,3 +368,52 @@ it("builds the patch, the validation and the change lines from plain functions",
     candidateInfoPopup: { fields: ["email", "gender"] },
   });
 });
+
+it("sends the pause clock, marks timing and location viewer choices (X-12)", async () => {
+  const mock = api();
+  setSession(sessionFor("aa_admin"));
+  const user = userEvent.setup();
+  renderApp(`/batches/${ID}/settings`);
+  await screen.findByRole("group", { name: "Flags" });
+
+  await user.click(
+    screen.getByRole("checkbox", {
+      name: "Give back the paused time when the exam is unlocked",
+    }),
+  );
+  await user.click(
+    screen.getByRole("checkbox", {
+      name: "Show marks only after the awarding body validates the result",
+    }),
+  );
+  await user.click(
+    screen.getByRole("checkbox", { name: "Assessor of this batch" }),
+  );
+  await user.click(
+    screen.getByRole("checkbox", { name: "Training partner of this batch" }),
+  );
+  await user.click(screen.getByRole("button", { name: "Save settings" }));
+
+  const dialog = await screen.findByRole("dialog", {
+    name: "Save batch settings?",
+  });
+  const lines = within(dialog)
+    .getAllByRole("listitem")
+    .map((li) => li.textContent);
+  expect(lines).toEqual([
+    "Marks only after the result is validated: On to Off",
+    "Give back the paused time when unlocked: Off to On",
+    "Who can see the location: AA admin, Assessor of this batch, Proctor of this batch",
+  ]);
+  await user.click(
+    within(dialog).getByRole("button", { name: "Confirm and save" }),
+  );
+  await screen.findByText("Batch settings saved.");
+  expect(JSON.parse(String((patches(mock)[0][1] as RequestInit).body))).toEqual(
+    {
+      marksAfterValidation: false,
+      flagPolicy: { extendOnUnlock: true },
+      locationVisibleTo: ["assessor", "proctor"],
+    },
+  );
+});

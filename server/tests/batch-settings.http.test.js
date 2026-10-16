@@ -11,6 +11,7 @@ import { Candidate } from "../src/models/candidate.model.js";
 import { CandidateInfo } from "../src/models/candidate-info.model.js";
 import { ProctoringSession } from "../src/models/proctoring-session.model.js";
 import { Question } from "../src/models/question.model.js";
+import { Result } from "../src/models/result.model.js";
 import { TestPaper } from "../src/models/test-paper.model.js";
 import { resetLoginRateLimit } from "../src/modules/auth/login-rate-limit.js";
 import { clearCollections, startMongo, stopMongo } from "./helpers/db.js";
@@ -414,8 +415,24 @@ describe("batch settings (B-20)", () => {
       expect(JSON.stringify(view.body)).not.toContain("obtainedMarks");
     });
 
-    it("shows the totals after the attempt closes when showMarksToCandidate is on", async () => {
+    it("holds the marks until the result is validated by default (X-12, DECISIONS 805)", async () => {
       const w = await world({ settings: { showMarksToCandidate: true } });
+      const a = await start(w.candidate, w);
+      await putAnswers(w.candidate, a.body.id, [
+        { questionId: a.body.questions[0].questionId, answer: "A" },
+      ]);
+      const done = await submit(w.candidate, a.body.id);
+      expect(done.body.marks).toBeNull();
+      expect((await getAttempt(w.candidate, a.body.id)).body.marks).toBeNull();
+      await Result.create({ batchId: w.batch._id, status: "validated", rows: [] });
+      const later = await getAttempt(w.candidate, a.body.id);
+      expect(later.body.marks).toMatchObject({ maxMarks: 8, complete: true });
+    });
+
+    it("shows the totals after the attempt closes when marksAfterValidation is off", async () => {
+      const w = await world({
+        settings: { showMarksToCandidate: true, marksAfterValidation: false },
+      });
       const a = await start(w.candidate, w);
       expect((await getAttempt(w.candidate, a.body.id)).body.marks).toBeNull();
       await putAnswers(w.candidate, a.body.id, [
@@ -563,6 +580,43 @@ describe("batch settings (B-20)", () => {
         .set(bearer(w.candidate.token))
         .send({});
       expect(beat.body.paused).toBe(true);
+    });
+
+    it("holds the clock while paused and gives the time back on unlock when extendOnUnlock is on (X-12)", async () => {
+      const w = await world({
+        settings: { flagPolicy: { action: "pause", pauseAfterFlags: 2, extendOnUnlock: true } },
+      });
+      const { attempt, sessionId } = await begin(w);
+      await sendFlag(w.candidate, sessionId, "multiple_faces");
+      await sendFlag(w.candidate, sessionId, "multiple_faces");
+      const paused = await Attempt.findById(attempt.id).lean();
+      expect(paused.pause.clockStopped).toBe(true);
+
+      // Paused for two minutes, and the original deadline has passed meanwhile: still open.
+      const deadline = new Date(Date.now() - 30_000);
+      await Attempt.updateOne(
+        { _id: attempt.id },
+        {
+          deadlineAt: deadline,
+          acceptUntil: new Date(Date.now() - 1000),
+          "pause.pausedAt": new Date(Date.now() - 120_000),
+        },
+      );
+      const held = await getAttempt(w.candidate, attempt.id);
+      expect(held.body.status).toBe("in_progress");
+      expect(held.body.paused).toBe(true);
+      expect(held.body.clockHeld).toBe(true);
+
+      const res = await unlock(w.admin, sessionId);
+      expect(res.status).toBe(200);
+      const after = await Attempt.findById(attempt.id).lean();
+      const added = (after.deadlineAt.getTime() - deadline.getTime()) / 1000;
+      expect(added).toBeGreaterThanOrEqual(119);
+      expect(added).toBeLessThanOrEqual(125);
+      expect(after.pause.clockStopped).toBe(false);
+      expect(after.pause.secondsGivenBack).toBeGreaterThanOrEqual(119);
+      const row = await AuditLog.findOne({ action: "proctoring.unlock" }).lean();
+      expect(row.after.secondsGivenBack).toBeGreaterThanOrEqual(119);
     });
 
     it("still times the attempt out while paused: the clock keeps running", async () => {
@@ -833,6 +887,36 @@ describe("batch settings (B-20)", () => {
   });
 
   describe("location", () => {
+    it("lets aa_admin choose which roles see the coordinates (X-12)", async () => {
+      const w = await world();
+      expect((await getSettings(w.admin, w)).body.settings.locationVisibleTo).toEqual([
+        "tp",
+        "proctor",
+      ]);
+      const res = await patchSettings(w.admin, w, {
+        locationVisibleTo: ["proctor", "assessor", "tp"],
+      });
+      expect(res.status).toBe(200);
+      // Stored in a fixed order, whatever order was sent.
+      expect(res.body.settings.locationVisibleTo).toEqual(["tp", "assessor", "proctor"]);
+      expect(
+        (await patchSettings(w.admin, w, { locationVisibleTo: [] })).body.settings
+          .locationVisibleTo,
+      ).toEqual([]);
+      for (const bad of [["candidate"], ["aa_admin"], ["tp", "tp"], "tp"]) {
+        expectError(
+          await patchSettings(w.admin, w, { locationVisibleTo: bad }),
+          400,
+          "VALIDATION_ERROR",
+        );
+      }
+      expectError(
+        await patchSettings(w.proctor, w, { locationVisibleTo: ["tp"] }),
+        403,
+        "FORBIDDEN",
+      );
+    });
+
     it("is off by default and switched by aa_admin; the exam page gets the flag", async () => {
       const w = await world();
       const a = await start(w.candidate, w);

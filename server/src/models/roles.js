@@ -379,8 +379,5 @@ export const PROCTORING_UNLOCK_ROLES = Object.freeze(["aa_admin", "proctor"]);
  */
 export const PROCTORING_CAPTURE_READ_ROLES = Object.freeze([...PROCTORING_READ_ROLES, "tp"]);
 
-/** X-07: who may see the coordinates of a flag photo. Coordinates are personal data. */
-export const PROCTORING_LOCATION_ROLES = Object.freeze(["aa_admin", "tp", "proctor"]);
-
 /** GET /reports/batches/:id/marks.xlsx. X-09: same people who list attempts, each inside their own scope. */
 export const REPORT_MARKS_ROLES = Object.freeze(["aa_admin", "assessor", "ab_reviewer"]);

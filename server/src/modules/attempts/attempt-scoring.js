@@ -114,7 +114,21 @@ export function computeDeadlines(startedAt, durationMinutes, graceSeconds) {
   return { deadlineAt, acceptUntil };
 }
 
+/**
+ * X-12. True while the batch holds the exam clock during a pause: the attempt is paused and the
+ * pause began with `clockStopped`. Nothing times out, and nothing counts down, until an unlock.
+ */
+export function isClockHeld(attempt) {
+  return attempt.pause?.active === true && attempt.pause?.clockStopped === true;
+}
+
+/** The moment the exam clock reads: the start of the pause while it is held, else `now`. */
+export function clockInstant(attempt, now) {
+  return isClockHeld(attempt) && attempt.pause?.pausedAt ? new Date(attempt.pause.pausedAt) : now;
+}
+
 /** True when the server no longer takes anything from the candidate. */
 export function isPastAcceptWindow(attempt, now) {
+  if (isClockHeld(attempt)) return false;
   return now.getTime() > new Date(attempt.acceptUntil).getTime();
 }

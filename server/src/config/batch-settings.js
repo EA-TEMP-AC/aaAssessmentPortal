@@ -10,6 +10,14 @@ export const FLAG_POLICY_ACTIONS = Object.freeze(["record", "pause"]);
 export const FLAG_COUNT_SEVERITIES = Object.freeze(["medium", "high"]);
 export const FLAG_PAUSE_AFTER_MIN = 1;
 export const FLAG_PAUSE_AFTER_MAX = 20;
+/** Roles besides aa_admin that can be allowed to see a candidate's location (X-12). */
+export const LOCATION_VIEWER_ROLES = Object.freeze([
+  "tp",
+  "assessor",
+  "proctor",
+  "ab_reviewer",
+  "ncvet_viewer",
+]);
 export const IMAGE_INTERVAL_MIN_SECONDS = 10;
 export const IMAGE_INTERVAL_MAX_SECONDS = 120;
 /** The only personal fields the pop-up can ask for. There is deliberately no national ID field. */
@@ -27,14 +35,24 @@ export function defaultBatchSettings() {
     shuffleQuestions: true,
     shuffleOptions: false,
     showMarksToCandidate: false,
+    // X-12 (DECISIONS 805): marks wait until the awarding body has validated the result.
+    marksAfterValidation: true,
     questionsMandatory: false,
-    flagPolicy: { action: "record", pauseAfterFlags: 3, countSeverities: ["high"] },
+    // extendOnUnlock (X-12): off keeps the clock running while paused; on gives the paused time back.
+    flagPolicy: {
+      action: "record",
+      pauseAfterFlags: 3,
+      countSeverities: ["high"],
+      extendOnUnlock: false,
+    },
     imageCapture: {
       intervalSeconds: compliance.PROCTOR_SNAPSHOT_INTERVAL_SECONDS,
       atStartAndEnd: true,
     },
     candidateInfoPopup: { enabled: false, fields: [] },
     captureLocation: false,
+    // X-12: aa_admin always sees it; these roles may too (the batch's own people only).
+    locationVisibleTo: ["tp", "proctor"],
   };
 }
 
@@ -51,6 +69,7 @@ export function resolveBatchSettings(stored) {
     shuffleQuestions: stored.shuffleQuestions ?? base.shuffleQuestions,
     shuffleOptions: stored.shuffleOptions ?? base.shuffleOptions,
     showMarksToCandidate: stored.showMarksToCandidate ?? base.showMarksToCandidate,
+    marksAfterValidation: stored.marksAfterValidation ?? base.marksAfterValidation,
     questionsMandatory: stored.questionsMandatory ?? base.questionsMandatory,
     flagPolicy: {
       action: policy.action ?? base.flagPolicy.action,
@@ -58,6 +77,7 @@ export function resolveBatchSettings(stored) {
       countSeverities: sortedSeverities(
         policy.countSeverities?.length ? policy.countSeverities : base.flagPolicy.countSeverities,
       ),
+      extendOnUnlock: policy.extendOnUnlock ?? base.flagPolicy.extendOnUnlock,
     },
     imageCapture: {
       intervalSeconds: image.intervalSeconds ?? base.imageCapture.intervalSeconds,
@@ -68,5 +88,8 @@ export function resolveBatchSettings(stored) {
       fields: CANDIDATE_INFO_FIELDS.filter((f) => (info.fields ?? []).includes(f)),
     },
     captureLocation: stored.captureLocation ?? base.captureLocation,
+    locationVisibleTo: stored.locationVisibleTo
+      ? LOCATION_VIEWER_ROLES.filter((r) => stored.locationVisibleTo.includes(r))
+      : base.locationVisibleTo,
   };
 }

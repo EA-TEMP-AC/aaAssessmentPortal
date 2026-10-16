@@ -65,6 +65,14 @@ const attemptPauseSchema = new mongoose.Schema(
     pausedAt: { type: Date, default: null },
     /** How many times this attempt has been paused. */
     timesPaused: { type: Number, default: 0, min: 0 },
+    /**
+     * X-12. Set when the pause begins, from the batch's `flagPolicy.extendOnUnlock`. While true
+     * the exam clock is held: the attempt cannot time out, and an unlock moves the deadline out
+     * by the time it was paused.
+     */
+    clockStopped: { type: Boolean, default: false },
+    /** Seconds given back by unlocks, in total. */
+    secondsGivenBack: { type: Number, default: 0, min: 0 },
     lastUnlockedAt: { type: Date, default: null },
     lastUnlockedBy: { type: mongoose.Schema.Types.ObjectId, default: null, ref: "User" },
   },

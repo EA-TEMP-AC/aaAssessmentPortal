@@ -7,7 +7,7 @@ export const WARN_SECONDS = [300, 60] as const;
  * this device is measured once from `serverTime`, so a wrong device clock does
  * not change the time left.
  */
-export function useExamClock(deadlineAt: string, serverTime: string | null) {
+export function useExamClock(deadlineAt: string, serverTime: string | null, held = false) {
   const offset = useRef<number | null>(null);
   if (offset.current === null) {
     const server = serverTime ? Date.parse(serverTime) : Number.NaN;
@@ -18,11 +18,14 @@ export function useExamClock(deadlineAt: string, serverTime: string | null) {
   const [remaining, setRemaining] = useState(compute);
 
   useEffect(() => {
+    // X-12: while the batch holds the clock during a pause, the countdown stands still.
+    if (held) return undefined;
+    setRemaining(compute());
     const id = setInterval(() => setRemaining(compute()), 1000);
     return () => clearInterval(id);
     // compute depends only on deadline and the fixed offset.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deadline]);
+  }, [deadline, held]);
 
   return remaining;
 }

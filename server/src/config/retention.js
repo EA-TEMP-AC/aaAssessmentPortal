@@ -130,4 +130,14 @@ export const RETENTION_POLICY = Object.freeze([
     containsPii: true,
     basis: "Face snapshots taken during an exam. Kept long enough for review and disputes",
   },
+  {
+    // X-12 (DECISIONS 826): the location kept with a flag photo goes with the snapshots' period.
+    dataClass: "proctoringFlagLocation",
+    collection: "proctoringFlags",
+    dateField: "capturedAt",
+    retentionDays: 90,
+    filter: { locationStatus: "captured" },
+    containsPii: true,
+    basis: "Coordinates saved with a flag photo (encrypted). Same period as the snapshots",
+  },
 ]);

@@ -7,6 +7,8 @@ import {
   INFO_FIELDS,
   INTERVAL_MAX_SECONDS,
   INTERVAL_MIN_SECONDS,
+  LOCATION_ROLE_LABELS,
+  LOCATION_ROLES,
   PAUSE_AFTER_MAX,
   PAUSE_AFTER_MIN,
   saveBatchSettings,
@@ -158,6 +160,12 @@ function SettingsForm({ batchId, saved }: { batchId: string; saved: BatchSetting
           onChange={(v) => set("showMarksToCandidate", v)}
         />
         <Toggle
+          label="Show marks only after the awarding body validates the result"
+          help="On: even with the switch above on, the candidate sees marks only once the result of this batch is validated. Off: marks appear as soon as the exam closes. Use off for mock tests."
+          checked={draft.marksAfterValidation}
+          onChange={(v) => set("marksAfterValidation", v)}
+        />
+        <Toggle
           label="Every question must be answered"
           help="The candidate cannot submit while a question is unanswered. When the time ends, the exam still closes."
           checked={draft.questionsMandatory}
@@ -189,7 +197,7 @@ function SettingsForm({ batchId, saved }: { batchId: string; saved: BatchSetting
           </label>
           <p className="field-hint">
             When the counted flags reach the limit, the candidate is told to contact the proctor. Saved answers stay safe,
-            the exam clock keeps running, and a pause never fails or changes a result. The aa_admin or the batch proctor
+            and a pause never fails or changes a result. The aa_admin or the batch proctor
             unlocks it from the proctoring page.
           </p>
         </fieldset>
@@ -210,6 +218,14 @@ function SettingsForm({ batchId, saved }: { batchId: string; saved: BatchSetting
               {problems.pauseAfterFlags}
             </p>
           ) : null}
+        </div>
+        <div className="settings-subgroup">
+          <Toggle
+            label="Give back the paused time when the exam is unlocked"
+            help="On: the exam clock stops while the exam is paused, and an unlock adds the paused time to the candidate's deadline. Off: the clock keeps running during a pause. Only matters when the exam is paused after flags."
+            checked={draft.extendOnUnlock}
+            onChange={(v) => set("extendOnUnlock", v)}
+          />
         </div>
         <fieldset className="bare-fieldset" disabled={draft.action !== "pause"}>
           <legend>Flags that count towards the limit</legend>
@@ -314,6 +330,30 @@ function SettingsForm({ batchId, saved }: { batchId: string; saved: BatchSetting
           checked={draft.captureLocation}
           onChange={(v) => set("captureLocation", v)}
         />
+        <fieldset className="bare-fieldset">
+          <legend>Who can see the location of a flag photo</legend>
+          <p className="field-hint">
+            The AA admin always can. Others see it only for batches they belong to, and every look is recorded in the
+            access log.
+          </p>
+          {LOCATION_ROLES.map((role) => (
+            <label key={role} className="check-label">
+              <input
+                type="checkbox"
+                checked={draft.locationVisibleTo.includes(role)}
+                onChange={(event) =>
+                  set(
+                    "locationVisibleTo",
+                    event.target.checked
+                      ? [...draft.locationVisibleTo, role]
+                      : draft.locationVisibleTo.filter((r) => r !== role),
+                  )
+                }
+              />{" "}
+              {LOCATION_ROLE_LABELS[role]}
+            </label>
+          ))}
+        </fieldset>
       </Group>
 
       <div className="dialog-actions">

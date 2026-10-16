@@ -19,7 +19,7 @@ import { Candidate } from "../../models/candidate.model.js";
 import { Evidence } from "../../models/evidence.model.js";
 import { ProctoringFlag, PROCTORING_SEVERITIES } from "../../models/proctoring-flag.model.js";
 import { ProctoringSession } from "../../models/proctoring-session.model.js";
-import { PROCTORING_INVALIDATE_ROLES, PROCTORING_LOCATION_ROLES } from "../../models/roles.js";
+import { PROCTORING_INVALIDATE_ROLES } from "../../models/roles.js";
 import { stableStringify } from "../login-events/login-event.service.js";
 import { flagReason } from "./flag-reason.js";
 
@@ -346,7 +346,11 @@ async function applyFlagPolicy(session, settings, now) {
   const updated = await Attempt.findOneAndUpdate(
     { _id: attempt._id, status: "in_progress", "pause.active": { $ne: true } },
     {
-      $set: { "pause.active": true, "pause.pausedAt": now },
+      $set: {
+        "pause.active": true,
+        "pause.pausedAt": now,
+        "pause.clockStopped": settings.flagPolicy.extendOnUnlock === true,
+      },
       $inc: { "pause.timesPaused": 1, rev: 1 },
     },
     { new: true },
@@ -827,15 +831,34 @@ export async function unlockSession(user, id, now = new Date()) {
   if (attempt.pause?.active !== true) {
     throw new AppError(409, "PROCTORING_NOT_PAUSED", "This attempt is not paused");
   }
+  // X-12: when the batch stops the clock during a pause, the time it was paused is given back.
+  const givenBackMs =
+    attempt.pause.clockStopped === true && attempt.pause.pausedAt
+      ? Math.max(0, now.getTime() - new Date(attempt.pause.pausedAt).getTime())
+      : 0;
+  const full =
+    givenBackMs > 0
+      ? await Attempt.findById(attempt._id).select("deadlineAt acceptUntil").lean()
+      : null;
   const updated = await Attempt.findOneAndUpdate(
     { _id: attempt._id, status: "in_progress", "pause.active": true },
     {
       $set: {
         "pause.active": false,
+        "pause.clockStopped": false,
         "pause.lastUnlockedAt": now,
         "pause.lastUnlockedBy": user._id,
+        ...(full
+          ? {
+              deadlineAt: new Date(new Date(full.deadlineAt).getTime() + givenBackMs),
+              acceptUntil: new Date(new Date(full.acceptUntil).getTime() + givenBackMs),
+            }
+          : {}),
       },
-      $inc: { rev: 1 },
+      $inc: {
+        rev: 1,
+        ...(full ? { "pause.secondsGivenBack": Math.round(givenBackMs / 1000) } : {}),
+      },
     },
     { new: true },
   ).lean();
@@ -851,7 +874,12 @@ export async function unlockSession(user, id, now = new Date()) {
   return {
     session: after,
     before: { paused: true, countedFlags: session.policyFlagCount ?? 0 },
-    after: { paused: false, countedFlags: 0 },
+    after: {
+      paused: false,
+      countedFlags: 0,
+      // X-12: seconds added to the exam time by this unlock (0 when the clock was not held).
+      secondsGivenBack: Math.round(givenBackMs / 1000),
+    },
     body: {
       sessionId: idStr(session._id),
       attemptId: idStr(session.attemptId),
@@ -872,7 +900,11 @@ export async function getFlagCapture(user, flagId) {
   const batch = await Batch.findById(flag.batchId).select("abId tpId assessorId proctorId").lean();
   if (!isInBatchScope(user, batch)) throw forbidden();
 
-  const locationVisible = PROCTORING_LOCATION_ROLES.includes(user.role);
+  // X-12: aa_admin always; the other roles only when the batch settings name them.
+  const visibleTo = resolveBatchSettings(
+    (await Batch.findById(flag.batchId).select("settings").lean())?.settings,
+  ).locationVisibleTo;
+  const locationVisible = user.role === "aa_admin" || visibleTo.includes(user.role);
   let location = null;
   if (locationVisible && flag.locationStatus === "captured" && flag.location) {
     try {

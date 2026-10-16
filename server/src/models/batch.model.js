@@ -7,6 +7,7 @@ import {
   FLAG_POLICY_ACTIONS,
   IMAGE_INTERVAL_MAX_SECONDS,
   IMAGE_INTERVAL_MIN_SECONDS,
+  LOCATION_VIEWER_ROLES,
 } from "../config/batch-settings.js";
 import { RATIO_CLASSES, RECOGNITION_CHECKS, SECTOR_NAMES, STATE_UTS } from "../config/annexure.js";
 import {
@@ -86,6 +87,7 @@ const batchSettingsSchema = new mongoose.Schema(
     shuffleQuestions: { type: Boolean },
     shuffleOptions: { type: Boolean },
     showMarksToCandidate: { type: Boolean },
+    marksAfterValidation: { type: Boolean },
     questionsMandatory: { type: Boolean },
     flagPolicy: {
       type: new mongoose.Schema(
@@ -96,6 +98,7 @@ const batchSettingsSchema = new mongoose.Schema(
             type: [{ type: String, enum: FLAG_COUNT_SEVERITIES }],
             default: undefined,
           },
+          extendOnUnlock: { type: Boolean },
         },
         { _id: false },
       ),
@@ -126,6 +129,10 @@ const batchSettingsSchema = new mongoose.Schema(
       default: undefined,
     },
     captureLocation: { type: Boolean },
+    locationVisibleTo: {
+      type: [{ type: String, enum: LOCATION_VIEWER_ROLES }],
+      default: undefined,
+    },
   },
   { _id: false },
 );
