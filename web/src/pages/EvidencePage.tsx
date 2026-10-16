@@ -177,7 +177,7 @@ function EvidenceDetail({
     setFileError(null);
     setNotice("");
     try {
-      const file = await fetchEvidenceFile(row);
+      const file = await fetchEvidenceFile(row, { inline: true });
       clearPreview();
       const type = row.contentType === "application/pdf" ? "pdf" : "image";
       const next: Preview =

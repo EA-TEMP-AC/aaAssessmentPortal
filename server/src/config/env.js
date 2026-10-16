@@ -79,6 +79,10 @@ const envSchema = z.object({
   /** When both are unset the AWS SDK default credential chain is used. */
   EVIDENCE_S3_ACCESS_KEY_ID: optionalString,
   EVIDENCE_S3_SECRET_ACCESS_KEY: optionalString,
+  /** Server-side encryption sent with every upload (D3). Default `AES256`. */
+  EVIDENCE_S3_SSE: z.preprocess(emptyToUndefined, z.enum(["AES256", "aws:kms"]).optional()),
+  /** KMS key id or ARN, used only when EVIDENCE_S3_SSE=aws:kms. Unset uses the bucket default key. */
+  EVIDENCE_S3_KMS_KEY_ID: optionalString,
   /** Lifetime of a download link, in seconds. */
   EVIDENCE_SIGNED_URL_SECONDS: z.preprocess(
     emptyToUndefined,

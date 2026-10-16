@@ -625,6 +625,41 @@ describe("attendance and checklist", () => {
       );
     });
 
+    it("hides GPS and device id from tp, shows them to aa_admin, mis and the field staff (D8)", async () => {
+      const { w } = await seeded();
+      await LoginEvent.updateMany(
+        { batchId: w.batch._id },
+        {
+          $set: {
+            accuracy: 12,
+            device: { deviceId: "DEV-SECRET-1", platform: "android", appVersion: "1.0.0" },
+          },
+        },
+      );
+
+      const tp = await sessionFor("tp", { tpId: w.batch.tpId });
+      const asTp = await get(tp.token, w.batch._id, "login-events");
+      expect(asTp.status, JSON.stringify(asTp.body)).toBe(200);
+      expect(asTp.body.items).toHaveLength(4);
+      for (const row of asTp.body.items) {
+        expect(row.lat).toBeNull();
+        expect(row.lng).toBeNull();
+        expect(row.accuracy).toBeNull();
+        expect(row.device).toEqual({ platform: "android", appVersion: "1.0.0" });
+      }
+      const text = JSON.stringify(asTp.body);
+      expect(text).not.toContain("DEV-SECRET-1");
+      expect(text).not.toContain("19.07");
+
+      const admin = await sessionFor("aa_admin");
+      const asAdmin = await get(admin.token, w.batch._id, "login-events");
+      expect(asAdmin.body.items).toHaveLength(4);
+      for (const row of asAdmin.body.items) {
+        expect(row).toMatchObject({ lat: 19.07, lng: 72.87, accuracy: 12 });
+        expect(row.device.deviceId).toBe("DEV-SECRET-1");
+      }
+    });
+
     it("shows a candidate only their own events and attendance", async () => {
       const { w } = await seeded();
       const candidate = await sessionFor("candidate", { linkedProfileId: w.learnerIds[1] });

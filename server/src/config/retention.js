@@ -112,4 +112,22 @@ export const RETENTION_POLICY = Object.freeze([
     containsPii: true,
     basis: "Learner results (about 10 years). Likely to be set by the awarding body, not the AA",
   },
+  {
+    dataClass: "evidenceIdProof",
+    collection: "evidence",
+    dateField: "uploadedAt",
+    retentionDays: 365,
+    filter: { kind: "id_proof" },
+    containsPii: true,
+    basis: "Photos of ID cards kept for later use (DECISIONS D3). Never read for an ID number",
+  },
+  {
+    dataClass: "evidenceProctorSnapshot",
+    collection: "evidence",
+    dateField: "uploadedAt",
+    retentionDays: 90,
+    filter: { kind: "proctor_snapshot" },
+    containsPii: true,
+    basis: "Face snapshots taken during an exam. Kept long enough for review and disputes",
+  },
 ]);

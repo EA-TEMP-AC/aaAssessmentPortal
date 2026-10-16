@@ -9,9 +9,19 @@ function isNotFound(err) {
 /**
  * S3-compatible driver (AWS SDK v3). The client and the presign function are injectable so tests
  * can mock them. There is no delete call: the interface does not offer one.
- * @param {{ bucket: string, client: { send: Function }, presign?: Function }} options
+ *
+ * Every object is written with server-side encryption (D3): `AES256` (S3 managed keys) by
+ * default, or `aws:kms` with an optional key id. Encryption is not optional.
+ * @param {{ bucket: string, client: { send: Function }, presign?: Function,
+ *   serverSideEncryption?: "AES256" | "aws:kms", kmsKeyId?: string }} options
  */
-export function createS3Storage({ bucket, client, presign = getSignedUrl }) {
+export function createS3Storage({
+  bucket,
+  client,
+  presign = getSignedUrl,
+  serverSideEncryption = "AES256",
+  kmsKeyId,
+}) {
   return {
     name: "s3",
 
@@ -23,6 +33,8 @@ export function createS3Storage({ bucket, client, presign = getSignedUrl }) {
           Body: body,
           ContentLength: size,
           ContentType: contentType,
+          ServerSideEncryption: serverSideEncryption,
+          ...(serverSideEncryption === "aws:kms" && kmsKeyId ? { SSEKMSKeyId: kmsKeyId } : {}),
         }),
       );
       return { key };
@@ -70,5 +82,10 @@ export function createS3StorageFromConfig(config) {
         }
       : {}),
   });
-  return createS3Storage({ bucket: config.EVIDENCE_S3_BUCKET, client });
+  return createS3Storage({
+    bucket: config.EVIDENCE_S3_BUCKET,
+    client,
+    serverSideEncryption: config.EVIDENCE_S3_SSE ?? "AES256",
+    kmsKeyId: config.EVIDENCE_S3_KMS_KEY_ID,
+  });
 }

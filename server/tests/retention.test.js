@@ -115,6 +115,36 @@ describe("retention dry run", () => {
     ]);
   });
 
+  it("lists id_proof and proctor_snapshot evidence past their period, and deletes nothing", async () => {
+    const db = mongoose.connection.db;
+    const idDays = rule("evidenceIdProof").retentionDays;
+    const snapDays = rule("evidenceProctorSnapshot").retentionDays;
+    expect(idDays).toBe(365);
+    expect(snapDays).toBe(90);
+    const { insertedIds } = await db.collection("evidence").insertMany([
+      { kind: "id_proof", uploadedAt: daysAgo(idDays + 1) },
+      { kind: "id_proof", uploadedAt: daysAgo(idDays - 1) },
+      { kind: "proctor_snapshot", uploadedAt: daysAgo(snapDays + 30) },
+      { kind: "proctor_snapshot", uploadedAt: daysAgo(snapDays + 1) },
+      { kind: "proctor_snapshot", uploadedAt: daysAgo(snapDays - 1) },
+      // Other kinds are not in these classes, however old.
+      { kind: "photo", uploadedAt: daysAgo(5000) },
+    ]);
+
+    const report = await runRetentionDryRun({ now, sampleIds: 5 });
+    const byClass = Object.fromEntries(report.classes.map((entry) => [entry.dataClass, entry]));
+    expect(byClass.evidenceIdProof).toMatchObject({ pastRetention: 1, containsPii: true });
+    expect(byClass.evidenceIdProof.sampleIds).toEqual([String(insertedIds[0])]);
+    expect(byClass.evidenceProctorSnapshot.pastRetention).toBe(2);
+    expect(byClass.evidenceProctorSnapshot.oldest).toBe(daysAgo(snapDays + 30).toISOString());
+    expect(byClass.evidenceProctorSnapshot.sampleIds).toEqual([
+      String(insertedIds[2]),
+      String(insertedIds[3]),
+    ]);
+    expect(report.deleted).toBe(0);
+    expect(await db.collection("evidence").countDocuments({})).toBe(6);
+  });
+
   it("has no deleting code path", async () => {
     const mod = await import("../src/modules/retention/retention.service.js");
     expect(Object.keys(mod)).toEqual(["runRetentionDryRun"]);

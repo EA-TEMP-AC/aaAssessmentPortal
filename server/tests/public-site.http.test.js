@@ -3,7 +3,7 @@ import request from "supertest";
 import { createApp } from "../src/app.js";
 import { compliance } from "../src/config/compliance.js";
 import { AuditLog } from "../src/models/audit-log.model.js";
-import { OrganogramNode } from "../src/models/public-site.model.js";
+import { OrganogramNode, PoshItem, PublicPerson } from "../src/models/public-site.model.js";
 import { USER_ROLES } from "../src/models/roles.js";
 import { resetLoginRateLimit } from "../src/modules/auth/login-rate-limit.js";
 import { resetRegistryIdCache } from "../src/modules/public-site/public-site.service.js";
@@ -17,6 +17,7 @@ const oid = () => new mongoose.Types.ObjectId();
 const ADMIN = "/api/v1/admin/public-site";
 const PUBLIC = "/api/v1/public";
 const PII = "9988776655";
+const MODELS = { people: PublicPerson, posh: PoshItem };
 
 const bearer = (token) => ({ Authorization: `Bearer ${token}` });
 const post = (token, slug, body) =>
@@ -902,6 +903,56 @@ describe("public site content", () => {
       expect(pubLease).toBeDefined();
       expect(pubLease.proofOnFile).toBe(false);
       expect(pubLease.fileRef).toBe("https://files.example/docs/lease-2026.pdf");
+    });
+  });
+
+  describe("60-second cache for people and POSH (D7)", () => {
+    it("sends max-age=60 for people and posh and 300 for the others", async () => {
+      for (const slug of ["people", "posh"]) {
+        expect((await pub(slug)).headers["cache-control"]).toBe("public, max-age=60");
+      }
+      for (const slug of RESOURCE_SLUGS.filter((s) => !["people", "posh"].includes(s))) {
+        expect((await pub(slug)).headers["cache-control"], slug).toBe("public, max-age=300");
+      }
+    });
+
+    it.each(["people", "posh"])(
+      "serves %s from memory and drops it when an admin changes it",
+      async (slug) => {
+        const admin = await sessionFor("aa_admin");
+        const made = await post(admin.token, slug, { ...samples()[slug].body, published: true });
+        expect(made.status, JSON.stringify(made.body)).toBe(201);
+        expect((await pub(slug)).body.total).toBe(1);
+
+        // A change made behind the API's back is not seen until the 60 seconds pass.
+        await MODELS[slug].updateMany({}, { $set: { published: false } });
+        expect((await pub(slug)).body.total).toBe(1);
+
+        // An admin change through the API clears the cached pages at once.
+        const patched = await patch(admin.token, slug, made.body.id, { published: false });
+        expect(patched.status).toBe(200);
+        expect((await pub(slug)).body.total).toBe(0);
+        await patch(admin.token, slug, made.body.id, { published: true });
+        expect((await pub(slug)).body.total).toBe(1);
+      },
+    );
+
+    it("clears the cache on delete and keeps other sections out of it", async () => {
+      const admin = await sessionFor("aa_admin");
+      const made = await post(admin.token, "posh", { ...samples().posh.body, published: true });
+      expect((await pub("posh")).body.total).toBe(1);
+      const del = await request(app)
+        .delete(`${ADMIN}/posh/${made.body.id}`)
+        .set(bearer(admin.token));
+      expect(del.status).toBe(204);
+      expect((await pub("posh")).body.total).toBe(0);
+    });
+
+    it("keeps pages for different queries apart", async () => {
+      const admin = await sessionFor("aa_admin");
+      await post(admin.token, "people", { ...samples().people.body, published: true });
+      expect((await pub("people?kind=proctor")).body.total).toBe(0);
+      expect((await pub("people?kind=assessor")).body.total).toBe(1);
     });
   });
 });

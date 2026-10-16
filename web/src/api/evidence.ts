@@ -195,8 +195,14 @@ function isWebUrl(value: string): boolean {
  * Handles both download modes. The type of the blob comes from the stored row,
  * not from the response, so a wrong header cannot turn a file into something else.
  */
-export async function fetchEvidenceFile(row: Pick<EvidenceRow, "id" | "contentType">): Promise<EvidenceFile> {
-  const response = await apiRequest<Response>(`/evidence/${encodeURIComponent(row.id)}/file`, { raw: true });
+export async function fetchEvidenceFile(
+  row: Pick<EvidenceRow, "id" | "contentType">,
+  options: { inline?: boolean } = {},
+): Promise<EvidenceFile> {
+  // Q600: a preview asks for an inline link so a PDF opens in the page. The server uses it only
+  // with the S3 driver (images and PDFs); local disk streams the bytes either way.
+  const query = options.inline ? "?inline=true" : "";
+  const response = await apiRequest<Response>(`/evidence/${encodeURIComponent(row.id)}/file${query}`, { raw: true });
   const type = response.headers.get("Content-Type") ?? "";
   if (type.toLowerCase().includes("application/json")) {
     const body: unknown = await response.json();
