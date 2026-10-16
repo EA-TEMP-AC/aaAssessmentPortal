@@ -1,0 +1,3 @@
+# Keep model files byte-for-byte so the checksums in the READMEs stay valid on Windows.
+web/public/models/** -text
+web/public/mediapipe/** -text
