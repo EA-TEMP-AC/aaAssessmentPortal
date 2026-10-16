@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { asyncHandler } from "../../lib/async-handler.js";
+import { withoutExactLocation } from "../../lib/audit-safe.js";
 import { clientIp } from "../../lib/client-ip.js";
 import { requireAuth } from "../../middleware/require-auth.js";
 import { requireRoles } from "../../middleware/require-roles.js";
@@ -30,7 +31,8 @@ function loginEventRouter(actorType) {
         entityId: event.id,
         abId: saved.abId,
         batchId: event.batchId,
-        after: event,
+        omitRequestBody: true,
+        after: withoutExactLocation(event),
       };
       await res.status(200).json(event);
     }),

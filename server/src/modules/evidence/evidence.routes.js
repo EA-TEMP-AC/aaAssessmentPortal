@@ -7,6 +7,7 @@ import { Router } from "express";
 import multer from "multer";
 import { asyncHandler } from "../../lib/async-handler.js";
 import { AppError, validationError } from "../../lib/errors.js";
+import { withoutExactLocation } from "../../lib/audit-safe.js";
 import { requireAuth } from "../../middleware/require-auth.js";
 import { requireRoles } from "../../middleware/require-roles.js";
 import {
@@ -67,6 +68,25 @@ function parseMultipart(req, res) {
   });
 }
 
+/** Room for the multipart boundaries and text fields around the file bytes. */
+const MULTIPART_OVERHEAD_BYTES = 64 * 1024;
+
+/**
+ * Refuses by the Content-Length header before the body is read. The size limit that depends on
+ * the file type is checked after the type is known; this is the overall limit.
+ */
+function rejectOversizedByHeader(req) {
+  const declared = Number(req.get("content-length"));
+  if (
+    Number.isFinite(declared) &&
+    declared > EVIDENCE_ABSOLUTE_MAX_BYTES + MULTIPART_OVERHEAD_BYTES
+  ) {
+    throw new AppError(413, "FILE_TOO_LARGE", "The file is larger than the limit for its type", {
+      maxBytes: EVIDENCE_ABSOLUTE_MAX_BYTES,
+    });
+  }
+}
+
 function setAudit(req, entry) {
   req.audit = entry;
 }
@@ -79,6 +99,7 @@ export function mountEvidenceBatchRoutes(router) {
     asyncHandler(async (req, res) => {
       const { id } = batchIdParamSchema.parse(req.params);
       const batch = await loadUploadBatch(req.user, id);
+      rejectOversizedByHeader(req);
       try {
         await parseMultipart(req, res);
         if (!req.file) {
@@ -95,7 +116,8 @@ export function mountEvidenceBatchRoutes(router) {
           entityId: body.id,
           abId: batch.abId,
           batchId: batch._id,
-          after: { ...body, replayed: undefined },
+          omitRequestBody: true,
+          after: withoutExactLocation({ ...body, replayed: undefined }),
           meta: { contentType: body.contentType, size: body.size, sha256: body.sha256 },
         });
         await res.status(saved.replayed ? 200 : 201).json(body);

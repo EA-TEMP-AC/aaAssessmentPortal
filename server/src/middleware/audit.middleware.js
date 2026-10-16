@@ -3,6 +3,7 @@ import { maskPersonalData, redactSecrets, stripNationalIds } from "../lib/redact
 import { toObjectIdOrNull } from "../lib/object-id.js";
 import { AuditLog } from "../models/audit-log.model.js";
 import { clientIp } from "../lib/client-ip.js";
+import { safeErrorCode } from "../lib/safe-error.js";
 
 const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
@@ -31,6 +32,66 @@ function isPlainObject(value) {
   return proto === Object.prototype || proto === null;
 }
 
+/** The only keys a question route may put in an audit row. Everything else is dropped. */
+export const QUESTION_AUDIT_SAFE_KEYS = new Set([
+  "_id",
+  "id",
+  "qualificationId",
+  "nosId",
+  "pcId",
+  "type",
+  "language",
+  "difficulty",
+  "bloomLevel",
+  "marks",
+  "status",
+  "version",
+  "rootQuestionId",
+  "previousVersionId",
+  "isLatest",
+  "createdBy",
+  "updatedBy",
+  "createdAt",
+  "updatedAt",
+  "abId",
+  "sector",
+  "active",
+  "code",
+  "intervalMonths",
+  "reviewerId",
+  "dueDate",
+  "overdue",
+  "closedBy",
+  "closedAt",
+  "counts",
+  "total",
+  "pending",
+  "decided",
+  "incomplete",
+  "questionId",
+  "resultQuestionId",
+  "decision",
+  "commentLength",
+  "partial",
+  "totalRows",
+  "importedCount",
+  "createdCount",
+  "updatedCount",
+  "errorCount",
+]);
+
+/** True for a Buffer, a typed array or a long base64-looking string: file bytes in any form. */
+export function looksLikeFileData(value) {
+  if (Buffer.isBuffer(value) || ArrayBuffer.isView(value) || value instanceof ArrayBuffer) {
+    return true;
+  }
+  return typeof value === "string" && value.length > 256 && /^[A-Za-z0-9+/=]+$/.test(value);
+}
+
+/**
+ * Allow-list filter for question routes: keeps only QUESTION_AUDIT_SAFE_KEYS and drops file bytes.
+ * When anything was dropped, `content: "[redacted]"` marks the level.
+ */
 export function redactQuestionContent(value) {
   if (value === null || value === undefined) return value;
   if (typeof value.toObject === "function") {
@@ -38,29 +99,36 @@ export function redactQuestionContent(value) {
   } else if (typeof value.toJSON === "function") {
     value = value.toJSON();
   }
-  if (Array.isArray(value)) return value.map(redactQuestionContent);
+  if (Array.isArray(value)) {
+    return value.filter((item) => !looksLikeFileData(item)).map(redactQuestionContent);
+  }
+  if (looksLikeFileData(value)) return "[redacted_binary]";
   if (!isPlainObject(value)) return value;
 
   const out = {};
+  let dropped = false;
   for (const [k, v] of Object.entries(value)) {
-    if (k === "stem" || k === "comment") {
-      // Q-04: a review comment can quote the question it is about.
-      out[k] = "[redacted]";
-    } else if (k === "correctAnswer") {
-      out[k] = "[redacted]";
-    } else if (k === "options" && Array.isArray(v)) {
-      out[k] = v.map((opt) => ({
-        key: opt?.key,
-        text: "[redacted]",
-      }));
-    } else if (["fileBase64", "fileData", "file"].includes(k)) {
-      out[k] = "[redacted_binary]";
+    if (!QUESTION_AUDIT_SAFE_KEYS.has(k) || looksLikeFileData(v)) {
+      dropped = true;
     } else if (isPlainObject(v) || Array.isArray(v)) {
       out[k] = redactQuestionContent(v);
+    } else if (typeof v === "string" && v.length > 200) {
+      dropped = true;
     } else {
       out[k] = v;
     }
   }
+  if (dropped) out.content = "[redacted]";
+  return out;
+}
+
+/** Any route: a Buffer or base64 file never reaches an audit row. */
+function withoutFileData(value) {
+  if (looksLikeFileData(value)) return "[redacted_binary]";
+  if (Array.isArray(value)) return value.map(withoutFileData);
+  if (!isPlainObject(value)) return value;
+  const out = {};
+  for (const [k, v] of Object.entries(value)) out[k] = withoutFileData(v);
   return out;
 }
 
@@ -71,9 +139,13 @@ function auditEntryFromRequest(req) {
     (typeof req.originalUrl === "string" && req.originalUrl.includes("question-bank"));
 
   // Answers are the candidate's own text, so a route can keep the raw body out of the row.
+  // A Buffer body (raw or multipart upload) is never logged, whatever the route says.
   let requestBody =
-    !hinted.omitRequestBody && req.body && typeof req.body === "object"
-      ? maskPersonalData(stripNationalIds(redactSecrets(req.body)))
+    !hinted.omitRequestBody &&
+    req.body &&
+    typeof req.body === "object" &&
+    !looksLikeFileData(req.body)
+      ? withoutFileData(maskPersonalData(stripNationalIds(redactSecrets(req.body))))
       : undefined;
 
   if (isQuestion && requestBody) {
@@ -82,8 +154,10 @@ function auditEntryFromRequest(req) {
 
   const before = isQuestion
     ? redactQuestionContent(hinted.before)
-    : maskPersonalData(hinted.before);
-  const after = isQuestion ? redactQuestionContent(hinted.after) : maskPersonalData(hinted.after);
+    : withoutFileData(maskPersonalData(hinted.before));
+  const after = isQuestion
+    ? redactQuestionContent(hinted.after)
+    : withoutFileData(maskPersonalData(hinted.after));
 
   const rawMeta = {
     ...(hinted.meta ? (isQuestion ? redactQuestionContent(hinted.meta) : hinted.meta) : {}),
@@ -100,7 +174,7 @@ function auditEntryFromRequest(req) {
     batchId: hinted.batchId,
     before,
     after,
-    meta: maskPersonalData(rawMeta),
+    meta: withoutFileData(maskPersonalData(rawMeta)),
     ip: clientIp(req),
   };
 }
@@ -126,17 +200,13 @@ export function auditMiddleware(req, res, next) {
   }
 
   res.send = function patchedSend(body) {
+    // The change is already saved, so a failed audit insert is logged by code and the response kept.
     return Promise.resolve()
       .then(() => logOnce())
-      .then(() => originalSend(body))
       .catch((err) => {
-        console.error("audit log write failed", err);
-        if (res.headersSent) return undefined;
-        res.statusCode = 500;
-        return originalSend({
-          error: { code: "INTERNAL", message: "Internal server error" },
-        });
-      });
+        console.error("audit log write failed", safeErrorCode(err, "AUDIT_WRITE_FAILED"));
+      })
+      .then(() => originalSend(body));
   };
 
   next();

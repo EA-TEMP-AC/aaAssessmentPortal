@@ -205,6 +205,21 @@ describe("login events", () => {
     expect(await AuditLog.countDocuments({ action: "batch.login-event" })).toBe(1);
   });
 
+  it("keeps exact lat, lng and deviceId out of the audit row", async () => {
+    const w = await world();
+    const assessor = await sessionFor("assessor", w.assessor._id);
+    const res = await post("assessor", assessor.token, eventBody(w.batch));
+    expect(res.status).toBe(200);
+    expect(res.body.lat).toBe(19.076012345);
+    const rows = await AuditLog.find({ action: "loginEvent.create" }).lean();
+    expect(rows).toHaveLength(1);
+    const json = JSON.stringify(rows[0]);
+    expect(json).not.toContain("19.0760");
+    expect(json).not.toContain("72.8776");
+    expect(json).not.toContain("dev-9f3a");
+    expect(rows[0].meta?.requestBody).toBeUndefined();
+  });
+
   it("returns the original event for a repeat submission and creates no duplicate", async () => {
     const w = await world();
     const assessor = await sessionFor("assessor", w.assessor._id);

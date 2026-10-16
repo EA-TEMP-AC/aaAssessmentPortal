@@ -548,6 +548,11 @@ W-03 open questions (2026-10-15, Public site admin screens, web only). W-03 uses
 544. **Published items cannot be edited by mis.** Matching the server, `mis` sees Edit disabled on a published item with the reason. An `aa_admin` edits a published item directly (it stays live). Confirm, or require unpublish before edit.
 545. **Show archived lists archived only.** The server returns either archived or not-archived items, never both, so the toggle switches the list instead of adding to it, and the status filter is off while it is on. Confirm.
 
+B-17 open questions (2026-10-16, review findings). B-17 uses 560 upward.
+560. **Per-type size check by header.** The file type is unknown before the body is read, so the Content-Length check uses the overall limit (200 MB plus 64 KB for the form). The 25 MB limit for images and PDFs is still enforced after the type is read. Confirm, or ask for the client to send the kind or type in a header or query so the 25 MB limit can also be applied up front.
+561. **No GET /auth/me.** The contract and your instruction name it as allowed while a password change is due, but the route does not exist yet. It is in the allow-list so it works when added. Confirm whether to add it.
+562. **Audit detail for question routes.** The allow-list keeps ids, type, status, version, marks and counts only. Fields such as `language`, `difficulty` are kept, but anything else (including free text like comments) is dropped and shown as `content: "[redacted]"`. Confirm that this level of detail is enough for review.
+
 ## Not mandated by NCVET (TR s29), do not market as compliance features
 Specific language, DB, cloud, server architecture, API style, biometric or face-recognition tech, GPS hardware, payment gateway, CRM, help-desk software.
 
