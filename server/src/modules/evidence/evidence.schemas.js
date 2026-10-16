@@ -97,6 +97,7 @@ export const listEvidenceQuerySchema = z
     candidateId: emptyToUndef(objectIdSchema.optional()),
     kind: emptyToUndef(z.enum(EVIDENCE_KINDS).optional()),
     uploaderId: emptyToUndef(objectIdSchema.optional()),
+    sessionId: emptyToUndef(objectIdSchema.optional()),
     from: emptyToUndef(dateQuery.optional()),
     to: emptyToUndef(dateQuery.optional()),
     hasLocation: boolQuery,

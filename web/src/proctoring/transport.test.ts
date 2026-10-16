@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
+import { proctorDebug } from "./debug";
 import { createTransport, flagPath, isRetryable, snapshotPath } from "./transport";
 import type { FlagBody } from "./types";
 
@@ -153,5 +154,32 @@ describe("snapshots", () => {
   it("encodes ids in paths", () => {
     expect(flagPath("a/b")).toBe("/proctoring/sessions/a%2Fb/flags");
     expect(snapshotPath("a/b")).toBe("/batches/a%2Fb/evidence");
+  });
+});
+
+describe("debug counters (X-06)", () => {
+  it("counts sent and failed flags and snapshots and keeps only a short error text", async () => {
+    proctorDebug.reset();
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce({})
+      .mockRejectedValueOnce(new ApiError(500, "INTERNAL", "secret body text"))
+      .mockResolvedValueOnce({ id: "ev1" })
+      .mockRejectedValueOnce(new ApiError(403, "FORBIDDEN", "no"));
+    const t = createTransport({ request, setTimer: () => 1, clearTimer: () => {} });
+    await t.sendFlag("s1", body(1));
+    await t.sendFlag("s1", body(2));
+    const upload = { batchId: "b1", sessionId: "s1", clientEventId: "x", capturedAt: "2026-10-16T05:00:00.000Z", blob: new Blob(["a"]) };
+    await t.uploadSnapshot(upload);
+    await t.uploadSnapshot(upload);
+
+    expect(proctorDebug.get()).toMatchObject({
+      flagsSent: 1,
+      flagsFailed: 1,
+      snapshotsUploaded: 1,
+      snapshotsFailed: 1,
+      lastError: "snapshot: 403 FORBIDDEN",
+    });
+    expect(JSON.stringify(proctorDebug.get())).not.toContain("secret body text");
   });
 });

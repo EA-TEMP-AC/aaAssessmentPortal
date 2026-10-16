@@ -349,6 +349,29 @@ describe("Proctoring API (server/src/modules/proctoring)", () => {
       expectError(await sendFlag(w.asha, s.id, { type: "sneezing" }), 400, "VALIDATION_ERROR");
     });
 
+    it("still saves a flag and counts it when MongoDB has no replica set (error 20)", async () => {
+      const w = await world();
+      const s = await started(w.asha);
+      const refusal = Object.assign(
+        new Error("Transaction numbers are only allowed on a replica set member or mongos"),
+        { code: 20, codeName: "IllegalOperation" },
+      );
+      const spy = vi.spyOn(mongoose, "startSession").mockRejectedValueOnce(refusal);
+      try {
+        const res = await sendFlag(w.asha, s.id, { type: "phone_detected" });
+        expect(res.status, JSON.stringify(res.body)).toBe(201);
+        expect(res.body).toMatchObject({ type: "phone_detected", severity: "high" });
+      } finally {
+        spy.mockRestore();
+      }
+      expect(await ProctoringFlag.countDocuments({ sessionId: s.id })).toBe(1);
+      expect((await ProctoringSession.findById(s.id).lean()).flagCounts).toEqual({
+        low: 0,
+        medium: 0,
+        high: 1,
+      });
+    });
+
     it("is idempotent on clientEventId and refuses a changed payload", async () => {
       const w = await world();
       const s = await started(w.asha);
@@ -441,6 +464,23 @@ describe("Proctoring API (server/src/modules/proctoring)", () => {
         403,
         "FORBIDDEN",
       );
+    });
+
+    it("lists a session's snapshots with the sessionId filter, within the reader's scope", async () => {
+      const w = await world();
+      const asha = await started(w.asha);
+      const bina = await started(w.bina);
+      const a1 = await uploadSnapshot(w.asha, w.batch._id, { sessionId: asha.id });
+      const a2 = await uploadSnapshot(w.asha, w.batch._id, { sessionId: asha.id });
+      await uploadSnapshot(w.bina, w.batch._id, { sessionId: bina.id });
+      const ids = (res) => res.body.items.map((i) => i.id).sort();
+      const get = (who, sessionId) =>
+        request(app).get("/api/v1/evidence").set(bearer(who.token)).query({ sessionId });
+
+      expect(ids(await get(w.proctor, asha.id))).toEqual([a1.body.id, a2.body.id].sort());
+      expect(ids(await get(w.admin, bina.id))).toHaveLength(1);
+      expect(ids(await get(w.otherProctor, asha.id))).toEqual([]);
+      expectError(await get(w.admin, "nope"), 400, "VALIDATION_ERROR");
     });
 
     it("refuses other kinds, other sessions, PNG and staff snapshots", async () => {
@@ -681,6 +721,7 @@ describe("Proctoring API (server/src/modules/proctoring)", () => {
         ["window_blur", "low"],
       ]);
       expect(res.body.flags[0].review).toBeNull();
+      expect(res.body.flags.map((f) => f.sustainedSeconds)).toEqual([2, null]);
 
       for (const who of [w.admin, w.assessor, w.reviewer, w.ncvet]) {
         expect((await detail(who, s.id)).status).toBe(200);

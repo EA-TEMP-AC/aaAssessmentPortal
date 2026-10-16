@@ -62,10 +62,13 @@ export type EvidenceQuery = {
   candidateId?: string;
   kind?: string;
   uploaderId?: string;
+  /** X-06: the snapshots of one proctoring session. */
+  sessionId?: string;
   from?: string;
   to?: string;
   hasLocation?: "true" | "false" | "";
   page?: number;
+  pageSize?: number;
 };
 
 export type VerifyResponse = { id: string; sha256: string; verifyCount: number; verification: Verification };
@@ -154,11 +157,12 @@ function parseRow(value: unknown): EvidenceRow {
 
 export async function listEvidence(query: EvidenceQuery, signal?: AbortSignal): Promise<EvidencePage> {
   const params = new URLSearchParams();
-  for (const key of ["batchId", "candidateId", "kind", "uploaderId", "from", "to", "hasLocation"] as const) {
+  for (const key of ["batchId", "candidateId", "kind", "uploaderId", "sessionId", "from", "to", "hasLocation"] as const) {
     const value = query[key]?.trim();
     if (value) params.set(key, value);
   }
   params.set("page", String(query.page && query.page > 0 ? query.page : 1));
+  if (query.pageSize && query.pageSize > 0) params.set("pageSize", String(query.pageSize));
 
   const body = await apiRequest<unknown>(`/evidence?${params.toString()}`, { signal });
   if (!isRecord(body) || !Array.isArray(body.items)) throw bad("Evidence list");

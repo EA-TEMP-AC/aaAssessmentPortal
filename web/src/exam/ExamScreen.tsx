@@ -3,6 +3,8 @@ import { errorMessage } from "../api/client";
 import { submitAttempt, type Attempt, type AttemptQuestion } from "../api/attempts";
 import { useAutosave, type ClosedReason } from "./useAutosave";
 import { formatRemaining, spokenRemaining, useExamClock, WARN_SECONDS } from "./useExamClock";
+import { debugStripWanted } from "../proctoring/debug";
+import { ProctorDebugStrip } from "./ProctorDebugStrip";
 import { useProctoring } from "./useProctoring";
 import type { FaceStart } from "./faceEvidence";
 import { fullscreenSupported, requestExamFullscreen } from "./fullscreen";
@@ -265,6 +267,8 @@ export function ExamScreen({ attempt, stream, face, onFinished, autosaveDebounce
                 : `limited (${proctoring.status.message ?? "degraded"})`}
         </p>
       )}
+
+      {debugStripWanted() ? <ProctorDebugStrip status={proctoring.status} /> : null}
 
       {fullscreenSupported() && !isFullscreen && !timeUp ? (
         <div className="form-warning exam-fullscreen" role="alert">

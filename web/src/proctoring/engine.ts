@@ -10,6 +10,7 @@ import {
   type FaceMatcher,
   type IdentityState,
 } from "./face";
+import { describeError, proctorDebug } from "./debug";
 import { createMediaPipeDetector } from "./mediapipeDetector";
 import { createRulesState, evaluateEvent, evaluateFrame, frameStats, type RulesState } from "./rules";
 import { createTransport } from "./transport";
@@ -135,6 +136,7 @@ export function createEngine(options: EngineOptions = {}): ProctorEngine {
     let evidenceId: string | null = null;
     try {
       const blob = await takeSnapshot(r.video);
+      if (!blob) proctorDebug.snapshotFailed("no image from the camera");
       if (blob && run === r) {
         evidenceId = await r.transport.uploadSnapshot({
           batchId: r.batchId,
@@ -144,8 +146,9 @@ export function createEngine(options: EngineOptions = {}): ProctorEngine {
           blob,
         });
       }
-    } catch {
+    } catch (error) {
       evidenceId = null;
+      proctorDebug.snapshotFailed(describeError(error));
     }
     if (run === r) options.onSnapshot?.(reason, evidenceId);
     return evidenceId;
@@ -195,6 +198,7 @@ export function createEngine(options: EngineOptions = {}): ProctorEngine {
   async function tick(r: Run) {
     if (r.busy || run !== r) return;
     r.busy = true;
+    const startedAt = performance.now();
     try {
       const gray = r.sampler.sample(r.video);
       const stats = gray ? frameStats(gray, r.previous, thresholds) : { brightness: null, identical: null };
@@ -222,6 +226,7 @@ export function createEngine(options: EngineOptions = {}): ProctorEngine {
       r.rules = result.state;
       for (const flag of result.flags) void send(r, flag);
       await checkIdentity(r);
+      proctorDebug.tick(performance.now() - startedAt);
     } finally {
       r.busy = false;
     }
@@ -264,6 +269,7 @@ export function createEngine(options: EngineOptions = {}): ProctorEngine {
 
   async function start(o: Parameters<ProctorEngine["start"]>[0]) {
     stop();
+    proctorDebug.reset();
     const video = document.createElement("video");
     video.muted = true;
     video.playsInline = true;

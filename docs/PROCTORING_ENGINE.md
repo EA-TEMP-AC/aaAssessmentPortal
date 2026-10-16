@@ -97,3 +97,11 @@ browser-event checks and the brightness and freeze checks.
 In a development build, `aa_admin` can open `/proctoring-demo`. It opens the camera, runs the engine
 with a local config, and shows the live detections and the flags raised. It sends nothing to the
 server.
+
+## Debug strip (X-06)
+
+In a development build, add `?debug=1` to the exam address to see one line under the exam heading: engine status and message, the time the last detection cycle took, flags sent and failed, snapshots uploaded and failed, and the last error as a short text (status and code, for example `flag: 500 INTERNAL`). It holds counters only: no image, token or response body, and nothing is written to browser storage. A production build never shows it. Code: `web/src/proctoring/debug.ts`, `web/src/exam/ProctorDebugStrip.tsx`.
+
+## Why a real session recorded no flags (X-06)
+
+The flag POST saves the flag and bumps the session count in a MongoDB transaction. The development server was reaching a MongoDB that is not a replica set (a Windows service on 127.0.0.1:27017, while the Docker `rs0` replica set answered only on `::1`). That MongoDB refuses transactions with code 20 (IllegalOperation), so every flag POST failed with a 500 and the log showed `unhandled error 20`. The transport treats a 500 as "try again later", keeps the flag in its in-memory queue, and fails again, so the exam page looked fine and the session stayed at 0 flags and no images (the snapshot upload does not use a transaction, so interval snapshots could be saved, but they were never linked to a flag). The server now falls back to two plain writes when it sees code 20. The proper set-up is still one MongoDB on 27017, the replica set from docker-compose.yml; stop the Windows MongoDB service or change its port.

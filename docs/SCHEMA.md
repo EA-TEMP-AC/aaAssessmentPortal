@@ -993,6 +993,8 @@ Indexes: `{ attemptId: 1 }` unique; `{ batchId: 1, createdAt: -1 }`; `{ abId: 1,
 | receivedAt | Date | Y | Server clock |
 | detail | {label, count, confidence} | N | Label max 60, count 0 to 100, confidence 0 to 1. No images or personal data |
 | evidenceId | ObjectId | N | A `proctor_snapshot` evidence row of the same session |
+
+X-06: no new field. The staff response adds `sustainedSeconds`, read from `PROCTOR_SUSTAINED_SECONDS` (§2) at response time and not stored. The image size and resolution are not stored on the flag: size, kind and capture time come from the linked `evidence` row, and the page reads the resolution from the loaded picture.
 | payloadHash | string | Y | sha256 of the canonical payload; replay vs `CONFLICT_IDEMPOTENT`. Never returned |
 | review | {decision, note (max 300), decidedAt, decidedBy, decidedByRole} | N | One decision per flag: `dismiss`, `warn`, `invalidate_recommended` |
 

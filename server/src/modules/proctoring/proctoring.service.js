@@ -102,6 +102,7 @@ function presentFlag(flag) {
     capturedAt: iso(flag.capturedAt),
     receivedAt: iso(flag.receivedAt),
     detail: flag.detail ?? null,
+    sustainedSeconds: compliance.PROCTOR_SUSTAINED_SECONDS[flag.type] ?? null,
     evidenceId: idStr(flag.evidenceId),
     review: flag.review
       ? {
@@ -250,6 +251,35 @@ function replayFlag(existing, hashValue) {
   return { flag: existing, replayed: true, body: presentFlagForCandidate(existing, true) };
 }
 
+const TRANSACTIONS_UNSUPPORTED = 20;
+let warnedNoTransactions = false;
+
+/**
+ * Saves the flag and bumps the session's count together. A MongoDB without a replica set refuses
+ * transactions with code 20 (IllegalOperation); the flag then goes in as two plain writes so it
+ * is not lost. A replica set (docker-compose.yml) is still the supported set-up. X-06.
+ */
+async function saveFlagAndCount(sessionId, flagDoc, bump) {
+  try {
+    return await withTransaction(async (tx) => {
+      const [created] = await ProctoringFlag.create([flagDoc], { session: tx });
+      await ProctoringSession.updateOne({ _id: sessionId }, bump, { session: tx });
+      return created.toObject();
+    });
+  } catch (err) {
+    if (err?.code !== TRANSACTIONS_UNSUPPORTED) throw err;
+    if (!warnedNoTransactions) {
+      warnedNoTransactions = true;
+      console.warn(
+        "MongoDB is not a replica set: proctoring flags are saved without a transaction. See README.",
+      );
+    }
+    const created = await ProctoringFlag.create(flagDoc);
+    await ProctoringSession.updateOne({ _id: sessionId }, bump);
+    return created.toObject();
+  }
+}
+
 /**
  * POST /proctoring/sessions/:id/flags. Idempotent on `clientEventId` within the session.
  * The server sets the severity. A flag only records; it never changes the attempt.
@@ -281,34 +311,23 @@ export async function recordFlag(user, id, body, now = new Date()) {
   }
 
   const severity = severityOf(body.type);
+  const flagDoc = {
+    sessionId: session._id,
+    attemptId: session.attemptId,
+    batchId: session.batchId,
+    abId: session.abId,
+    clientEventId: body.clientEventId,
+    type: body.type,
+    severity,
+    capturedAt: new Date(body.capturedAt),
+    receivedAt: now,
+    detail: body.detail ?? null,
+    evidenceId,
+    payloadHash: hashValue,
+  };
+  const bump = { $inc: { [`flagCounts.${severity}`]: 1 } };
   try {
-    const flag = await withTransaction(async (tx) => {
-      const [created] = await ProctoringFlag.create(
-        [
-          {
-            sessionId: session._id,
-            attemptId: session.attemptId,
-            batchId: session.batchId,
-            abId: session.abId,
-            clientEventId: body.clientEventId,
-            type: body.type,
-            severity,
-            capturedAt: new Date(body.capturedAt),
-            receivedAt: now,
-            detail: body.detail ?? null,
-            evidenceId,
-            payloadHash: hashValue,
-          },
-        ],
-        { session: tx },
-      );
-      await ProctoringSession.updateOne(
-        { _id: session._id },
-        { $inc: { [`flagCounts.${severity}`]: 1 } },
-        { session: tx },
-      );
-      return created.toObject();
-    });
+    const flag = await saveFlagAndCount(session._id, flagDoc, bump);
     return { flag, replayed: false, session, body: presentFlagForCandidate(flag, false) };
   } catch (err) {
     if (err?.code !== 11000) throw err;

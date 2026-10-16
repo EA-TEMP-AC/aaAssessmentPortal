@@ -1,5 +1,6 @@
 import { apiRequest, ApiError } from "../api/client";
 import { PROCTOR_THRESHOLDS } from "./config";
+import { describeError, proctorDebug } from "./debug";
 import type { FlagBody, ProctorTransport, SnapshotUpload } from "./types";
 
 /**
@@ -55,7 +56,13 @@ export function createTransport(options: TransportOptions = {}): ApiTransport {
   let disposed = false;
 
   async function post(item: Queued): Promise<void> {
-    await request<unknown>(flagPath(item.sessionId), { method: "POST", body: item.body });
+    try {
+      await request<unknown>(flagPath(item.sessionId), { method: "POST", body: item.body });
+    } catch (error) {
+      proctorDebug.flagFailed(describeError(error));
+      throw error;
+    }
+    proctorDebug.flagSent();
   }
 
   function enqueue(item: Queued) {
@@ -116,8 +123,14 @@ export function createTransport(options: TransportOptions = {}): ApiTransport {
       try {
         const body = await request<unknown>(snapshotPath(input.batchId), { method: "POST", body: form });
         const id = typeof body === "object" && body !== null ? (body as { id?: unknown }).id : null;
-        return typeof id === "string" && id.length > 0 ? id : null;
-      } catch {
+        if (typeof id === "string" && id.length > 0) {
+          proctorDebug.snapshotUploaded();
+          return id;
+        }
+        proctorDebug.snapshotFailed("no id in response");
+        return null;
+      } catch (error) {
+        proctorDebug.snapshotFailed(describeError(error));
         return null;
       }
     },
