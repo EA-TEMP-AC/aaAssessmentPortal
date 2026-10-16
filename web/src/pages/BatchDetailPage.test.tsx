@@ -38,6 +38,8 @@ function defaultListHandler(url: URL, current = batchRecord()) {
     return jsonResponse(200, listBody([current]));
   }
   if (url.pathname.endsWith("/candidates")) return jsonResponse(200, { items: [] });
+  // X-09: the Reports section lists the attempts of the batch.
+  if (url.pathname.endsWith("/attempts")) return jsonResponse(200, { items: [], total: 0, page: 1, pageSize: 100 });
   // X-10: the Test paper section lists approved papers for aa_admin.
   if (url.pathname.endsWith("/tests")) return jsonResponse(200, { items: [], total: 0, page: 1, pageSize: 100 });
   if (url.pathname.endsWith(`/batches/${IDS.batch}`)) return jsonResponse(200, current);
