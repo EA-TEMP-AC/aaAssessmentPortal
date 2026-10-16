@@ -5,6 +5,8 @@
  * Do not change these types without changing the engine task too.
  */
 
+import type { FaceMatcher } from "../proctoring/face/types";
+
 export type ProctorFlagType =
   | "tab_hidden"
   | "fullscreen_exit"
@@ -16,7 +18,10 @@ export type ProctorFlagType =
   | "person_detected"
   | "phone_detected"
   | "camera_blocked"
-  | "camera_frozen";
+  | "camera_frozen"
+  | "face_mismatch"
+  | "id_mismatch"
+  | "id_unreadable";
 
 export interface ProctorConfig {
   snapshotIntervalSeconds: number;
@@ -35,6 +40,8 @@ export interface ProctorEngine {
     batchId: string;
     config: ProctorConfig;
     onStatus: (s: ProctorStatus) => void;
+    /** P-09: holds the selfie reference; the engine compares the live face with it. */
+    faceMatcher?: FaceMatcher;
   }): Promise<void>;
   stop(): void;
 }

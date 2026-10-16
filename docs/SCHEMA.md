@@ -220,7 +220,7 @@ Implement in B-02. No magic numbers in feature code.
 | `PROCTOR_FLAG_COOLDOWN_SECONDS` | `15` | Project (P-01). Seconds the browser waits before sending a second flag of the same type (`config.flagCooldownSeconds`). Not enforced by the server |
 | `PROCTOR_SUSTAINED_SECONDS` | `{ face_not_present: 5, camera_blocked: 5, camera_frozen: 8 }` | Project (P-01, P-05). How long the condition must last before the browser raises the flag (`config.sustainedSeconds`) |
 | `PROCTOR_FEED_LOST_INTERVALS` | `3` | Project (P-01). No heartbeat for this many snapshot intervals (90 s) shows the session as `feed_lost`. Open Q621 |
-| `PROCTOR_FLAG_SEVERITY` | table | Project (P-04). low: `tab_hidden`, `fullscreen_exit`, `window_blur`, `permission_revoked`, `object_detected`; medium: `face_not_present`; high: `multiple_faces`, `person_detected`, `phone_detected`, `camera_blocked`, `camera_frozen`. Set by the server, never by the client |
+| `PROCTOR_FLAG_SEVERITY` | table | Project (P-04). low: `tab_hidden`, `fullscreen_exit`, `window_blur`, `permission_revoked`, `object_detected`; medium: `face_not_present`, `id_unreadable`; high: `multiple_faces`, `person_detected`, `phone_detected`, `camera_blocked`, `camera_frozen`, `face_mismatch`, `id_mismatch`. Set by the server, never by the client |
 
 ### 2.1 Working-day counting convention
 
@@ -573,8 +573,8 @@ One row per file in the evidence vault. The file is in object storage (section 3
 | `batchId` | ObjectId | required |
 | `abId` | ObjectId | copied from the batch at upload, for awarding-body scoping |
 | `candidateId` | ObjectId or null | a `candidates` row of this batch |
-| `kind` | string | `photo`, `id_proof`, `attendance`, `equipment`, `other`, `video`, `proctor_snapshot` (P-01; JPEG only, uploaded by the candidate) |
-| `sessionId` | ObjectId or null | P-01: the `proctoringSessions` row of a `proctor_snapshot`; null for every other kind. `candidateId` is copied from the session |
+| `kind` | string | `photo`, `id_proof`, `attendance`, `equipment`, `other`, `video`, `proctor_snapshot` (P-01; JPEG only, uploaded by the candidate). `id_proof` (P-09): a candidate's ID card photo, JPEG or PNG up to 5 MB, uploaded at Start with `sessionId`; readable only by `aa_admin` and the uploader (D3) |
+| `sessionId` | ObjectId or null | P-01: the `proctoringSessions` row of a `proctor_snapshot`; P-09: also set for a candidate's `id_proof`; null for every other kind. `candidateId` is copied from the session |
 | `contentType` | string | from the bytes: `image/jpeg`, `image/png`, `application/pdf`, `video/mp4` |
 | `size` | number | bytes, counted by the server. Limit 25 MB (image, PDF), 200 MB (video) |
 | `sha256` | string | hex, computed by the server from the uploaded bytes |
@@ -592,7 +592,7 @@ One row per file in the evidence vault. The file is in object storage (section 3
 
 Indexes: `{ clientEventId: 1 }` unique; `{ batchId: 1, capturedAt: -1 }`; `{ candidateId: 1, capturedAt: -1 }`; `{ abId: 1, capturedAt: -1 }`; `{ uploaderUserId: 1, capturedAt: -1 }`; `{ sha256: 1 }`; `{ sessionId: 1, capturedAt: -1 }`.
 
-Read scope: aa_admin, mis, ncvet_viewer all rows; ab_reviewer `abId`; assessor and proctor `uploaderUserId` (their own uploads, not the batch's), plus `proctor_snapshot` rows of their assigned batches (P-01); candidate, tp, sme none. A candidate uploads only `proctor_snapshot` for their own session.
+Read scope: aa_admin, mis, ncvet_viewer all rows; ab_reviewer `abId`; assessor and proctor `uploaderUserId` (their own uploads, not the batch's), plus `proctor_snapshot` rows of their assigned batches (P-01); candidate, tp, sme none. A candidate uploads only `proctor_snapshot` or `id_proof` for their own session. **P-09, D3:** rows of kind `id_proof` are visible only to `aa_admin` and the uploader, for every role, in list, detail, file and verify; each such read is access-logged. ID card photos and selfies are personal data with no retention period yet and need encryption at rest (docs/DPDP_CHECKLIST.md).
 
 #### 3.24.1 Storage
 
@@ -987,7 +987,7 @@ Indexes: `{ attemptId: 1 }` unique; `{ batchId: 1, createdAt: -1 }`; `{ abId: 1,
 |---|---|---|---|
 | sessionId, attemptId, batchId, abId | ObjectId | Y | |
 | clientEventId | string | Y | Max 200; unique per session |
-| type | enum | Y | `tab_hidden`, `fullscreen_exit`, `window_blur`, `permission_revoked`, `object_detected`, `face_not_present`, `multiple_faces`, `person_detected`, `phone_detected`, `camera_blocked`, `camera_frozen` |
+| type | enum | Y | `tab_hidden`, `fullscreen_exit`, `window_blur`, `permission_revoked`, `object_detected`, `face_not_present`, `multiple_faces`, `person_detected`, `phone_detected`, `camera_blocked`, `camera_frozen`, `face_mismatch`, `id_mismatch`, `id_unreadable` |
 | severity | enum | Y | `low`, `medium`, `high`; set by the server from `PROCTOR_FLAG_SEVERITY` (§2) |
 | capturedAt | Date | Y | Device clock, as sent |
 | receivedAt | Date | Y | Server clock |
@@ -1067,8 +1067,8 @@ Schema and contract only. **B-10** writes `learnerFeedback` once the batch is `a
 | Schemes / projects / signatories CRUD (`/schemes`, `/projects`, `/signatories`) | A | A | D | D | D | D | D | R | R | H-01; deactivate, never delete; audited (signatory name redacted); Q380 |
 | Question bank write / import | A | D | A | D | D | D | D | D | D | Q-01; aa_admin and sme only; audited (content redacted) |
 | Question bank approve | A | D | D | D | D | D | D | A | D | Q-01; ab_reviewer and aa_admin; audited |
-| Evidence upload (`POST /batches/:id/evidence`) | A | D | D | own | own | own¶ | D | D | D | V-01; assessor and proctor of the batch; not into `cancelled` or `rejected` batches; ¶ P-01: a candidate uploads only `proctor_snapshot` for their own proctoring session |
-| Evidence list / get / file | A | R | D | own | own | D | D | R° | R | V-01; ° own `abId`; assessor and proctor see their own uploads plus `proctor_snapshot` rows of their batches (P-01); every file download is access-logged |
+| Evidence upload (`POST /batches/:id/evidence`) | A | D | D | own | own | own¶ | D | D | D | V-01; assessor and proctor of the batch; not into `cancelled` or `rejected` batches; ¶ P-01, P-09: a candidate uploads only `proctor_snapshot` or `id_proof` for their own proctoring session |
+| Evidence list / get / file | A | R | D | own | own | D | D | R° | R | V-01; ° own `abId`; assessor and proctor see their own uploads plus `proctor_snapshot` rows of their batches (P-01); every file download is access-logged; P-09 / D3: `id_proof` rows only for aa_admin and the uploader, every read access-logged |
 | Proctoring session start / heartbeat / flags / own warnings | D | D | D | D | D | own | D | D | D | P-01; the candidate's own attempt and session |
 | Proctoring sessions list / detail / report | A | D | D | R | R | D | D | R° | R | P-01, P-04; assessor and proctor their assigned batches; ° own `abId` |
 | Proctoring flag review (dismiss / warn) | A | D | D | D | A | D | D | D | D | P-08; proctor on own batches; audited before and after, no note text |

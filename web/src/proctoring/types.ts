@@ -3,6 +3,8 @@
  * API build against these names; keep them exactly as they are.
  */
 
+import type { FaceMatcher } from "./face/types";
+
 export const PROCTOR_FLAG_TYPES = [
   "tab_hidden",
   "fullscreen_exit",
@@ -15,6 +17,9 @@ export const PROCTOR_FLAG_TYPES = [
   "phone_detected",
   "camera_blocked",
   "camera_frozen",
+  "face_mismatch",
+  "id_mismatch",
+  "id_unreadable",
 ] as const;
 
 export type ProctorFlagType =
@@ -28,7 +33,10 @@ export type ProctorFlagType =
   | "person_detected"
   | "phone_detected"
   | "camera_blocked"
-  | "camera_frozen";
+  | "camera_frozen"
+  | "face_mismatch"
+  | "id_mismatch"
+  | "id_unreadable";
 
 export interface ProctorConfig {
   snapshotIntervalSeconds: number;
@@ -37,7 +45,10 @@ export interface ProctorConfig {
   sustainedSeconds: Record<string, number>;
 }
 
-export type ProctorStatus = { state: "starting" | "running" | "degraded" | "stopped"; message?: string };
+export type ProctorStatus = {
+  state: "starting" | "running" | "degraded" | "stopped";
+  message?: string;
+};
 
 export interface ProctorEngine {
   start(o: {
@@ -47,6 +58,8 @@ export interface ProctorEngine {
     batchId: string;
     config: ProctorConfig;
     onStatus: (s: ProctorStatus) => void;
+    /** P-09: holds the selfie reference. When present, the live face is compared with it. */
+    faceMatcher?: FaceMatcher;
   }): Promise<void>;
   stop(): void;
 }
@@ -65,10 +78,14 @@ export interface Detector {
 }
 
 /** Kept small on purpose: no image data, no names, no question text. */
-export type FlagDetail = { label: string; count: number; confidence: number };
+export type FlagDetail = { label: string; count: number; confidence?: number };
 
 /** What the rules engine decided to raise. */
-export type RaisedFlag = { type: ProctorFlagType; at: number; detail?: FlagDetail };
+export type RaisedFlag = {
+  type: ProctorFlagType;
+  at: number;
+  detail?: FlagDetail;
+};
 
 /** Body of POST /proctoring/sessions/:id/flags. The server decides severity. */
 export type FlagBody = {
@@ -85,6 +102,8 @@ export type SnapshotUpload = {
   clientEventId: string;
   capturedAt: string;
   blob: Blob;
+  /** P-09: the camera check uploads the ID card photo as id_proof. Default proctor_snapshot. */
+  kind?: "proctor_snapshot" | "id_proof";
 };
 
 export interface ProctorTransport {

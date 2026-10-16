@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, it, vi } from "vitest";
 import { jsonResponse } from "../test/fixtures";
 import { fakeStream, frame, stubFetch } from "../test/examFixtures";
+import { fakeFaceChecks, makeVideosReady } from "../test/faceFixtures";
 import { isBlackFrame } from "./precheck";
 import { PrecheckScreen, type FrameCheckOptions } from "./PrecheckScreen";
 
@@ -12,6 +13,7 @@ beforeEach(() => {
   getUserMedia = vi.fn();
   Object.defineProperty(navigator, "mediaDevices", { value: { getUserMedia }, configurable: true });
   vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+  makeVideosReady();
   stubFetch((u) => (u.pathname.endsWith("/health") ? jsonResponse(200, { status: "ok" }) : jsonResponse(404)));
 });
 
@@ -25,6 +27,7 @@ function setup(frameCheck: FrameCheckOptions, props: Partial<Parameters<typeof P
       onStart={onStart}
       onCancel={() => {}}
       frameCheck={{ attempts: 3, intervalMs: 1, ...frameCheck }}
+      faceChecks={fakeFaceChecks()}
       {...props}
     />,
   );
@@ -43,6 +46,8 @@ it("keeps Start disabled until the camera check passes and the notice is agreed"
 
   expect(screen.getByText(/no video is uploaded/i)).toBeInTheDocument();
   expect(screen.getByText(/a person reviews every flag/i)).toBeInTheDocument();
+  expect(screen.getByText(/face on your ID card is compared with your selfie/i)).toBeInTheDocument();
+  expect(screen.getByText(/nothing is sent except flags and a few photos/i)).toBeInTheDocument();
   expect(startButton()).toBeDisabled();
   expect(await screen.findByText(/Connected to the exam server/)).toBeInTheDocument();
 
@@ -53,10 +58,15 @@ it("keeps Start disabled until the camera check passes and the notice is agreed"
   expect(await screen.findByText("Camera check passed.")).toBeInTheDocument();
   expect(getUserMedia).toHaveBeenCalledWith({ video: true, audio: false });
   expect(screen.getByLabelText("Camera preview")).toBeVisible();
+  // The ID card and selfie steps are part of the gate.
+  expect(startButton()).toBeDisabled();
+  await user.click(screen.getByRole("button", { name: "Capture ID card" }));
+  await user.click(screen.getByRole("button", { name: "Take selfie" }));
+  expect(await screen.findByText(/look alike/)).toBeInTheDocument();
   expect(startButton()).toBeEnabled();
 
   await user.click(startButton());
-  expect(onStart).toHaveBeenCalledWith(stream);
+  expect(onStart).toHaveBeenCalledWith(stream, expect.objectContaining({ idOutcome: "match" }));
 });
 
 it("fails the check on a black picture and keeps Start disabled", async () => {

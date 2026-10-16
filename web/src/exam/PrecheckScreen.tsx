@@ -9,6 +9,18 @@ import {
   stopStream,
   type NetworkCheck,
 } from "./precheck";
+import {
+  captureIdCard,
+  capturePrecheckReference,
+  DEFAULT_FACE_CONFIG,
+  FaceApiMatcher,
+  toJpegBlob,
+  verifyIdAgainstReference,
+  type CameraDeps,
+  type FaceConfig,
+  type IdFaceMatcher,
+} from "../proctoring/face";
+import type { FaceStart } from "./faceEvidence";
 
 export type FrameCheckOptions = {
   sample?: (video: HTMLVideoElement) => Uint8ClampedArray | null;
@@ -23,6 +35,31 @@ type CameraState =
   | { state: "passed" }
   | { state: "failed"; message: string };
 
+/** Tries before the by-hand fallback is offered (ID card or selfie). */
+export const MAX_FACE_TRIES = 3;
+
+export const ID_STEP_MESSAGES = {
+  match: "The photo on the card and your face look alike.",
+  mismatch: "The photo on the card and your face do not look alike. You can continue, and a proctor will review.",
+  unreadable:
+    "We could not read the photo on the card. Hold the card flat, close to the camera, with the photo in focus, then select Retry.",
+  modelFailed: "The face check could not run on this device. You can continue; a proctor will check your ID by hand.",
+} as const;
+
+export const FALLBACK_LABEL = "Continue; a proctor will check your ID by hand";
+
+/** Tests swap the matcher, the camera helpers and the numbers; the page uses the real ones. */
+export type FaceCheckOptions = {
+  createMatcher?: () => IdFaceMatcher;
+  deps?: CameraDeps;
+  config?: FaceConfig;
+  /** Turns a still into the JPEG kept for upload. Default: the canvas helper. */
+  toJpeg?: (frame: ImageBitmap) => Promise<Blob>;
+};
+
+type IdResult = "pending" | "match" | "mismatch" | "unreadable";
+type FaceModel = "idle" | "loading" | "ready" | "failed";
+
 type MicState = "idle" | "requesting" | "ok" | "denied" | "unavailable";
 
 type Props = {
@@ -30,9 +67,10 @@ type Props = {
   starting: boolean;
   startError: string | null;
   /** Gets the live camera stream. The exam keeps it for proctoring and stops it at the end. */
-  onStart: (stream: MediaStream) => void;
+  onStart: (stream: MediaStream, face: FaceStart) => void;
   onCancel: () => void;
   frameCheck?: FrameCheckOptions;
+  faceChecks?: FaceCheckOptions;
 };
 
 function cameraError(error: unknown): string {
@@ -61,7 +99,7 @@ function networkText(check: NetworkCheck | null, busy: boolean): string {
   return "The exam server could not be reached. Check your connection and try again.";
 }
 
-export function PrecheckScreen({ heading, starting, startError, onStart, onCancel, frameCheck }: Props) {
+export function PrecheckScreen({ heading, starting, startError, onStart, onCancel, frameCheck, faceChecks }: Props) {
   const headingRef = useRef<HTMLHeadingElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -74,6 +112,21 @@ export function PrecheckScreen({ heading, starting, startError, onStart, onCance
   const [networkBusy, setNetworkBusy] = useState(true);
   const [consent, setConsent] = useState(false);
   const [browser] = useState(checkBrowser);
+  const faceConfig = faceChecks?.config ?? DEFAULT_FACE_CONFIG;
+  const matcherRef = useRef<IdFaceMatcher | null>(null);
+  const idFrameRef = useRef<ImageBitmap | null>(null);
+  const idJpegRef = useRef<Blob | null>(null);
+  const selfieJpegRef = useRef<Blob | null>(null);
+  const idDistanceRef = useRef<number | undefined>(undefined);
+  const [faceModel, setFaceModel] = useState<FaceModel>("idle");
+  const [faceBusy, setFaceBusy] = useState<"id" | "selfie" | null>(null);
+  const [idCaptured, setIdCaptured] = useState(false);
+  const [selfieDone, setSelfieDone] = useState(false);
+  const [idResult, setIdResult] = useState<IdResult>("pending");
+  const [idFailures, setIdFailures] = useState(0);
+  const [selfieFailures, setSelfieFailures] = useState(0);
+  const [faceMessage, setFaceMessage] = useState<string | null>(null);
+  const [fallback, setFallback] = useState(false);
   const consentId = useId();
   const blockedId = useId();
 
@@ -96,10 +149,125 @@ export function PrecheckScreen({ heading, starting, startError, onStart, onCance
   useEffect(
     () => () => {
       runId.current += 1;
-      if (!handedOff.current) stopStream(streamRef.current);
+      if (!handedOff.current) {
+        stopStream(streamRef.current);
+        // Nothing from the face checks outlives this screen unless the exam took it over.
+        matcherRef.current?.clear();
+        idFrameRef.current?.close();
+        idFrameRef.current = null;
+        idJpegRef.current = null;
+        selfieJpegRef.current = null;
+      }
     },
     [],
   );
+
+  function jpegOf(frame: ImageBitmap): Promise<Blob> {
+    return faceChecks?.toJpeg ? faceChecks.toJpeg(frame) : toJpegBlob(frame, faceConfig);
+  }
+
+  function getMatcher(): IdFaceMatcher {
+    if (!matcherRef.current) matcherRef.current = (faceChecks?.createMatcher ?? (() => new FaceApiMatcher(faceConfig)))();
+    return matcherRef.current;
+  }
+
+  // Load the face model once the camera works, so the ID and selfie steps are ready when needed.
+  useEffect(() => {
+    if (camera.state !== "passed" || faceModel !== "idle") return;
+    setFaceModel("loading");
+    let live = true;
+    getMatcher()
+      .load()
+      .then(() => live && setFaceModel("ready"))
+      .catch(() => live && setFaceModel("failed"));
+    return () => {
+      live = false;
+    };
+    // The matcher is created once; only the camera state starts the load.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [camera.state, faceModel]);
+
+  function attachPreview(element: HTMLVideoElement | null) {
+    if (element && streamRef.current && element.srcObject !== streamRef.current) {
+      element.srcObject = streamRef.current;
+      void Promise.resolve(element.play()).catch(() => {});
+    }
+  }
+
+  async function verifyId() {
+    const frame = idFrameRef.current;
+    const matcher = matcherRef.current;
+    if (!frame || !matcher) return;
+    let check;
+    try {
+      check = await verifyIdAgainstReference(frame, matcher, faceConfig);
+    } catch {
+      check = { result: "id_no_face" } as const;
+    }
+    frame.close();
+    idFrameRef.current = null;
+    setIdCaptured(false);
+    if (check.result === "match" || check.result === "mismatch") {
+      idDistanceRef.current = check.distance;
+      setIdResult(check.result);
+      setFaceMessage(null);
+    } else if (check.result === "selfie_no_face") {
+      setSelfieDone(false);
+      setIdResult("pending");
+      setFaceMessage("Take the selfie again first: we need one clear view of your face.");
+    } else {
+      setIdFailures((n) => n + 1);
+      setIdResult("unreadable");
+      setFaceMessage(null);
+    }
+  }
+
+  async function captureId() {
+    const video = videoRef.current;
+    if (!video || faceBusy) return;
+    setFaceBusy("id");
+    setFaceMessage(null);
+    const result = await captureIdCard(video, faceChecks?.deps);
+    if (!result.ok) {
+      setFaceMessage(result.message);
+      setFaceBusy(null);
+      return;
+    }
+    idFrameRef.current?.close();
+    idFrameRef.current = result.frame;
+    try {
+      idJpegRef.current = await jpegOf(result.frame);
+    } catch {
+      idJpegRef.current = null;
+    }
+    setIdCaptured(true);
+    setIdResult("pending");
+    if (matcherRef.current?.hasReference()) await verifyId();
+    setFaceBusy(null);
+  }
+
+  async function takeSelfie() {
+    const video = videoRef.current;
+    if (!video || faceBusy) return;
+    setFaceBusy("selfie");
+    setFaceMessage(null);
+    const result = await capturePrecheckReference(video, getMatcher(), faceConfig, faceChecks?.deps);
+    if (!result.ok) {
+      setSelfieFailures((n) => n + 1);
+      setFaceMessage(result.message);
+      setFaceBusy(null);
+      return;
+    }
+    try {
+      selfieJpegRef.current = await jpegOf(result.frame);
+    } catch {
+      selfieJpegRef.current = null;
+    }
+    result.frame.close();
+    setSelfieDone(true);
+    if (idFrameRef.current) await verifyId();
+    setFaceBusy(null);
+  }
 
   async function rerunNetwork() {
     setNetworkBusy(true);
@@ -117,7 +285,10 @@ export function PrecheckScreen({ heading, starting, startError, onStart, onCance
     let stream: MediaStream;
     try {
       if (!navigator.mediaDevices?.getUserMedia) throw new Error("unsupported");
-      stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: false,
+      });
     } catch (error) {
       if (run === runId.current) setCamera({ state: "failed", message: cameraError(error) });
       return;
@@ -178,7 +349,10 @@ export function PrecheckScreen({ heading, starting, startError, onStart, onCance
     setMic("requesting");
     try {
       if (!navigator.mediaDevices?.getUserMedia) throw new Error("unsupported");
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: false,
+      });
       // Only the permission is checked. Nothing is recorded.
       stopStream(stream);
       setMic("ok");
@@ -188,11 +362,23 @@ export function PrecheckScreen({ heading, starting, startError, onStart, onCance
     }
   }
 
+  const idChecked = selfieDone && (idResult === "match" || idResult === "mismatch");
+  const canFallback = idFailures >= MAX_FACE_TRIES || selfieFailures >= MAX_FACE_TRIES || faceModel === "failed";
+  const faceDone = idChecked || fallback;
+
   function start() {
     const stream = streamRef.current;
-    if (!stream || camera.state !== "passed" || !consent || starting) return;
+    if (!stream || camera.state !== "passed" || !consent || !faceDone || starting) return;
+    const matcher = matcherRef.current;
     handedOff.current = true;
-    onStart(stream);
+    // Called inside the click: the page asks for full screen before it awaits anything.
+    onStart(stream, {
+      matcher: matcher && matcher.hasReference() ? matcher : null,
+      idJpeg: idJpegRef.current,
+      selfieJpeg: selfieJpegRef.current,
+      idOutcome: idChecked ? (idResult as "match" | "mismatch") : "unreadable",
+      idDistance: idChecked ? idDistanceRef.current : undefined,
+    });
   }
 
   // A failed start hands the stream back so the candidate can try again.
@@ -203,6 +389,7 @@ export function PrecheckScreen({ heading, starting, startError, onStart, onCance
   const browserBlocked = browser.some((item) => item.required && !item.ok);
   const missing: string[] = [];
   if (camera.state !== "passed") missing.push("pass the camera check");
+  if (!faceDone) missing.push("show your ID card and take a selfie");
   if (!consent) missing.push("agree to the proctoring notice");
   const canStart = missing.length === 0 && !starting;
 
@@ -213,7 +400,7 @@ export function PrecheckScreen({ heading, starting, startError, onStart, onCance
       </h1>
       <p>The exam timer starts only when you select Start exam.</p>
 
-      <h2>1. Camera</h2>
+      <h2>Step 1: camera</h2>
       <div className="exam-camera">
         <video
           ref={videoRef}
@@ -245,7 +432,63 @@ export function PrecheckScreen({ heading, starting, startError, onStart, onCance
         {camera.state === "passed" ? "Check camera again" : "Check camera"}
       </button>
 
-      <h2>2. Microphone (optional)</h2>
+      <h2>Step 2: show your ID card</h2>
+      <p className="field-hint">
+        Hold your ID card in front of the camera so the photo on it is flat and in focus. The page does not read the
+        card's text or number.
+      </p>
+      {hasPreview ? (
+        <video className="exam-preview" aria-label="ID card preview" muted playsInline autoPlay ref={attachPreview} />
+      ) : null}
+      <button
+        type="button"
+        onClick={() => void captureId()}
+        disabled={camera.state !== "passed" || faceBusy !== null || starting || faceModel === "failed"}
+      >
+        {idResult === "unreadable" ? "Retry" : "Capture ID card"}
+      </button>
+      <p role="status">
+        {camera.state !== "passed" && "Pass the camera check first."}
+        {camera.state === "passed" && faceModel === "loading" && "Loading the face check…"}
+        {faceModel === "failed" && ID_STEP_MESSAGES.modelFailed}
+        {faceModel !== "failed" &&
+          idCaptured &&
+          idResult === "pending" &&
+          !selfieDone &&
+          "ID card captured. Now take a selfie."}
+        {idResult === "match" && ID_STEP_MESSAGES.match}
+        {idResult === "mismatch" && ID_STEP_MESSAGES.mismatch}
+        {idResult === "unreadable" && ID_STEP_MESSAGES.unreadable}
+      </p>
+
+      <h2>Step 3: take a selfie</h2>
+      <p className="field-hint">Look straight at the camera, alone in the picture, with your face well lit.</p>
+      {hasPreview ? (
+        <video className="exam-preview" aria-label="Selfie preview" muted playsInline autoPlay ref={attachPreview} />
+      ) : null}
+      <button
+        type="button"
+        onClick={() => void takeSelfie()}
+        disabled={camera.state !== "passed" || faceBusy !== null || starting || faceModel === "failed"}
+      >
+        {selfieDone ? "Take selfie again" : "Take selfie"}
+      </button>
+      <p role="status">{selfieDone ? "Selfie taken." : camera.state === "passed" ? "No selfie yet." : ""}</p>
+      {faceMessage ? (
+        <p role="alert" className="form-error">
+          {faceMessage}
+        </p>
+      ) : null}
+      {canFallback && !faceDone ? (
+        <button type="button" onClick={() => setFallback(true)} disabled={starting}>
+          {FALLBACK_LABEL}
+        </button>
+      ) : null}
+      {fallback && !idChecked ? (
+        <p role="status">A proctor will check your ID by hand. You can start the exam.</p>
+      ) : null}
+
+      <h2>Step 4: microphone (optional)</h2>
       <p className="field-hint">Checks only that your browser allows the microphone. Nothing is recorded.</p>
       <p role="status">
         {mic === "idle" && "The microphone has not been checked."}
@@ -258,7 +501,7 @@ export function PrecheckScreen({ heading, starting, startError, onStart, onCance
         Check microphone
       </button>
 
-      <h2>3. Browser and network</h2>
+      <h2>Step 5: browser and network</h2>
       <ul className="exam-checklist">
         {browser.map((item) => (
           <li key={item.id}>
@@ -283,7 +526,7 @@ export function PrecheckScreen({ heading, starting, startError, onStart, onCance
         </p>
       ) : null}
 
-      <h2>4. Proctoring notice</h2>
+      <h2>Step 6: proctoring notice</h2>
       <div className="exam-consent" id={consentId}>
         <p>Your camera is used for proctoring while the exam is open.</p>
         <ul>
@@ -292,7 +535,11 @@ export function PrecheckScreen({ heading, starting, startError, onStart, onCance
             The exam software looks for things like your face leaving the camera, another person, or a phone, and
             records a flag when it sees one. It may also take an occasional snapshot.
           </li>
-          <li>Only those flags and snapshots are sent to the assessment agency.</li>
+          <li>
+            The face on your ID card is compared with your selfie, and your face is compared with that selfie during the
+            exam. No government record is checked. The comparison happens in your browser.
+          </li>
+          <li>Nothing is sent except flags and a few photos, including the photo of your ID card and your selfie.</li>
           <li>A person reviews every flag. Nothing is decided against you automatically.</li>
           <li>The exam opens in full screen. Leaving full screen or switching tabs is recorded as a flag.</li>
         </ul>

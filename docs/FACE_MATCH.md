@@ -65,7 +65,9 @@ Results get worse, or wrong, with:
 4. Confirmation of the model weight licence (DECISIONS 684).
 5. Every flag goes to the human review queue (P-08). A flag never blocks, fails or invalidates a candidate by itself.
 
-## Wiring (after merge)
+## Wiring (done in P-09)
+
+P-09 wired this module into the exam page and the engine: the camera check (ID card, then selfie), the upload of both photos at Start, and the live comparison. See docs/PROCTORING_ENGINE.md (Face checks) for the flag detail mapping. The notes below were written before that and are kept for reference.
 
 The owner wires this into the proctoring engine and the exam page. Notes:
 

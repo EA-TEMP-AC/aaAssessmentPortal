@@ -5,7 +5,8 @@ import { startAttempt, type Attempt } from "../api/attempts";
 import { listAvailableAssessments, type AvailableAssessment } from "../api/availableAssessments";
 import { ExamScreen, type ExamOutcome } from "../exam/ExamScreen";
 import { exitExamFullscreen, requestExamFullscreen } from "../exam/fullscreen";
-import { PrecheckScreen, type FrameCheckOptions } from "../exam/PrecheckScreen";
+import type { FaceStart } from "../exam/faceEvidence";
+import { PrecheckScreen, type FaceCheckOptions, type FrameCheckOptions } from "../exam/PrecheckScreen";
 import { stopStream } from "../exam/precheck";
 
 type Choice = { batchId: string; paperId: string; heading: string };
@@ -13,12 +14,14 @@ type Choice = { batchId: string; paperId: string; heading: string };
 type Phase =
   | { name: "choose" }
   | { name: "precheck"; choice: Choice }
-  | { name: "exam"; attempt: Attempt; stream: MediaStream }
+  | { name: "exam"; attempt: Attempt; stream: MediaStream; face: FaceStart }
   | { name: "finished"; outcome: ExamOutcome };
 
 type Props = {
   /** Tests swap the frame reader; the page uses the real one. */
   frameCheck?: FrameCheckOptions;
+  /** Tests swap the face matcher and camera helpers. */
+  faceChecks?: FaceCheckOptions;
   autosaveDebounceMs?: number;
 };
 
@@ -112,7 +115,13 @@ function PaperRow({ item, onChoose }: { item: AvailableAssessment; onChoose: (ch
         type="button"
         disabled={!enabled}
         aria-describedby={stateId}
-        onClick={() => onChoose({ batchId: item.batchId, paperId: item.paperId, heading: item.paperName })}
+        onClick={() =>
+          onChoose({
+            batchId: item.batchId,
+            paperId: item.paperId,
+            heading: item.paperName,
+          })
+        }
       >
         {resume ? "Resume" : "Start"}
         <span className="visually-hidden"> {item.paperName}</span>
@@ -121,12 +130,20 @@ function PaperRow({ item, onChoose }: { item: AvailableAssessment; onChoose: (ch
   );
 }
 
-type BatchGroup = { batchId: string; batchName: string; items: AvailableAssessment[] };
+type BatchGroup = {
+  batchId: string;
+  batchName: string;
+  items: AvailableAssessment[];
+};
 
 function groupByBatch(items: AvailableAssessment[]): BatchGroup[] {
   const groups = new Map<string, BatchGroup>();
   for (const item of items) {
-    const group = groups.get(item.batchId) ?? { batchId: item.batchId, batchName: item.batchName, items: [] };
+    const group = groups.get(item.batchId) ?? {
+      batchId: item.batchId,
+      batchName: item.batchName,
+      items: [],
+    };
     group.items.push(item);
     groups.set(item.batchId, group);
   }
@@ -208,15 +225,17 @@ function Finished({ outcome, onBack }: { outcome: ExamOutcome; onBack: () => voi
   );
 }
 
-export function ExamPage({ frameCheck, autosaveDebounceMs }: Props) {
+export function ExamPage({ frameCheck, faceChecks, autosaveDebounceMs }: Props) {
   const [phase, setPhase] = useState<Phase>({ name: "choose" });
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const faceRef = useRef<FaceStart | null>(null);
 
   useEffect(
     () => () => {
       stopStream(streamRef.current);
+      faceRef.current?.matcher?.clear();
       exitExamFullscreen();
     },
     [],
@@ -225,24 +244,30 @@ export function ExamPage({ frameCheck, autosaveDebounceMs }: Props) {
   const finish = useCallback((outcome: ExamOutcome) => {
     stopStream(streamRef.current);
     streamRef.current = null;
+    faceRef.current?.matcher?.clear();
+    faceRef.current = null;
     exitExamFullscreen();
     setPhase({ name: "finished", outcome });
   }, []);
 
-  async function start(choice: Choice, stream: MediaStream) {
+  async function start(choice: Choice, stream: MediaStream, face: FaceStart) {
     streamRef.current = stream;
+    faceRef.current = face;
     // Full screen has to be asked for inside the click, before anything is awaited.
     requestExamFullscreen();
     setStarting(true);
     setStartError(null);
     try {
-      const attempt = await startAttempt({ batchId: choice.batchId, testPaperId: choice.paperId });
+      const attempt = await startAttempt({
+        batchId: choice.batchId,
+        testPaperId: choice.paperId,
+      });
       setStarting(false);
       if (attempt.status !== "in_progress") {
         finish("closed");
         return;
       }
-      setPhase({ name: "exam", attempt, stream });
+      setPhase({ name: "exam", attempt, stream, face });
     } catch (error) {
       exitExamFullscreen();
       setStarting(false);
@@ -257,7 +282,8 @@ export function ExamPage({ frameCheck, autosaveDebounceMs }: Props) {
         starting={starting}
         startError={startError}
         frameCheck={frameCheck}
-        onStart={(stream) => void start(phase.choice, stream)}
+        faceChecks={faceChecks}
+        onStart={(stream, face) => void start(phase.choice, stream, face)}
         onCancel={() => {
           setStartError(null);
           setPhase({ name: "choose" });
@@ -270,6 +296,7 @@ export function ExamPage({ frameCheck, autosaveDebounceMs }: Props) {
       <ExamScreen
         attempt={phase.attempt}
         stream={phase.stream}
+        face={phase.face}
         onFinished={finish}
         autosaveDebounceMs={autosaveDebounceMs}
       />

@@ -17,6 +17,25 @@ The model sits behind a small `Detector` interface (`detect(frame) → Detection
 be swapped for another model (for example YOLO) without touching the rules. Tests use
 `FakeDetector`.
 
+## Face checks (P-09)
+
+`start()` takes an optional `faceMatcher` (the matcher that holds the candidate's selfie from the camera check; see docs/FACE_MATCH.md). When it is present:
+
+- The engine loads the face model once at start. If that fails the status becomes `degraded` ("The face check could not load; the other browser checks still run.") and the face comparison is skipped; every other check keeps running.
+- Each detection cycle it runs `matcher.compare(video)` and `evaluateIdentity`. `face_mismatch` is raised only when the face rules say so (3 mismatches in a row that span the configured hold time, with a cooldown); one frame never raises it. A snapshot is taken and sent with the flag, like any other flag.
+- `stop()` calls the matcher's `clear()`, once.
+- Descriptors stay in the matcher. Nothing about them is sent, stored or logged.
+
+**Detail mapping.** The face rules produce `{ samples, distance }`. The server's `detail` is `{ label, count, confidence }` with `label` limited to letters, digits, space, `_` and `-`. The engine sends:
+
+| Face rules | Server `detail` |
+|---|---|
+| `distance` (face-api distance, 3 decimals) | `label: "distance_<distance x 100, rounded>"`, for example `distance_72`; with no distance the label is the flag type |
+| `samples` | `count` |
+| (none) | `confidence` is left out: a distance is not a confidence |
+
+`id_mismatch` and `id_unreadable` are raised once by the exam page after Start, not by the engine: `id_mismatch` with the same mapping (`count` 1), `id_unreadable` with no detail. Both carry the evidence id of the ID card photo (`id_proof`) when its upload worked. Every face flag is for a person to review; none blocks the candidate or changes the exam.
+
 ## What it detects
 
 | Flag | When |

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FakeDetector } from "./detector";
+import { FakeFaceMatcher, faceConfig } from "./face";
 import { createEngine, type EngineOptions } from "./engine";
 import type { Detection, FlagBody, ProctorConfig, ProctorStatus, ProctorTransport } from "./types";
 
@@ -70,8 +71,13 @@ function setup(extra: EngineOptions = {}, frames: Detection[][] = [[face]]) {
   return { engine, detector, transport, flags, snapshots, sampler, statuses, setBrightness };
 }
 
-async function startEngine(s: ReturnType<typeof setup>, stream = fakeStream().stream) {
+async function startEngine(
+  s: ReturnType<typeof setup>,
+  stream = fakeStream().stream,
+  faceMatcher?: FakeFaceMatcher,
+) {
   await s.engine.start({
+    faceMatcher,
     stream,
     sessionId: "sess-1",
     attemptId: "att-1",
@@ -288,6 +294,125 @@ describe("flags", () => {
     expect(onSnapshot.mock.calls.filter((c) => c[0] === "interval")).toHaveLength(2);
     const upload = vi.mocked(s.transport.uploadSnapshot).mock.calls[0][0];
     expect(upload).toMatchObject({ batchId: "batch-1", sessionId: "sess-1" });
+    s.engine.stop();
+  });
+});
+
+describe("face matcher (P-09)", () => {
+  // 500 ms between cycles: three mismatches in a row that span 1 s raise the flag on the third.
+  const rules = faceConfig({ mismatchSamples: 3, mismatchHoldMs: 1000, maxSampleGapMs: 3000, flagCooldownMs: 60_000 });
+  const mismatch = { state: "mismatch", distance: 0.72 } as const;
+  const match = { state: "match", distance: 0.3 } as const;
+
+  async function withReference(script: ConstructorParameters<typeof FakeFaceMatcher>[0]) {
+    const matcher = new FakeFaceMatcher(script);
+    await matcher.setReference({} as ImageBitmap);
+    return matcher;
+  }
+
+  it("raises face_mismatch only after the rules say so, with a snapshot and the server detail shape", async () => {
+    const matcher = await withReference({ compare: [mismatch] });
+    const s = setup({ faceConfig: rules });
+    await startEngine(s, undefined, matcher);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(matcher.calls.filter((c) => c === "compare")).toHaveLength(2);
+    expect(s.flags).toEqual([]);
+    await vi.advanceTimersByTimeAsync(500);
+    expect(s.flags).toHaveLength(1);
+    const flag = s.flags[0];
+    expect(flag.type).toBe("face_mismatch");
+    expect(flag.detail).toEqual({ label: "distance_72", count: 3 });
+    expect(flag.evidenceId).toBe("ev-1");
+    expect(Object.keys(flag).sort()).toEqual(["capturedAt", "clientEventId", "detail", "evidenceId", "type"]);
+    s.engine.stop();
+  });
+
+  it("does not flag a scattered mismatch, and the cooldown stops repeats", async () => {
+    const scattered = await withReference({ compare: [mismatch, match, mismatch, match, mismatch, match, match] });
+    const a = setup({ faceConfig: rules });
+    await startEngine(a, undefined, scattered);
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(a.flags).toEqual([]);
+    a.engine.stop();
+
+    const steady = await withReference({ compare: [mismatch] });
+    const b = setup({ faceConfig: rules });
+    await startEngine(b, undefined, steady);
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(b.flags.filter((f) => f.type === "face_mismatch")).toHaveLength(1);
+    b.engine.stop();
+  });
+
+  it("ignores frames with no face or several faces", async () => {
+    const matcher = await withReference({ compare: [{ state: "no_face" }, { state: "multiple_faces" }, { state: "unknown" }] });
+    const s = setup({ faceConfig: rules }, [[face]]);
+    await startEngine(s, undefined, matcher);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(s.flags).toEqual([]);
+    s.engine.stop();
+  });
+
+  it("clears the matcher on stop, once per run, and never compares afterwards", async () => {
+    const matcher = await withReference({ compare: [match] });
+    const s = setup({ faceConfig: rules });
+    await startEngine(s, undefined, matcher);
+    await vi.advanceTimersByTimeAsync(1000);
+    s.engine.stop();
+    expect(matcher.calls.filter((c) => c === "clear")).toHaveLength(1);
+    expect(matcher.hasReference()).toBe(false);
+    const before = matcher.calls.length;
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(matcher.calls).toHaveLength(before);
+    s.engine.stop();
+    expect(matcher.calls.filter((c) => c === "clear")).toHaveLength(1);
+  });
+
+  it("reports degraded when the face model fails to load and keeps every other check running", async () => {
+    const matcher = new FakeFaceMatcher({ loadError: new Error("no model") });
+    const s = setup({ faceConfig: rules }, [[]]);
+    await s.engine.start({
+      stream: fakeStream().stream,
+      sessionId: "sess-1",
+      attemptId: "att-1",
+      batchId: "batch-1",
+      config,
+      faceMatcher: matcher,
+      onStatus: (status) => s.statuses.push(status),
+    });
+    const last = s.statuses[s.statuses.length - 1];
+    expect(last.state).toBe("degraded");
+    expect(last.message).toMatch(/face check could not load/i);
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(matcher.calls).not.toContain("compare");
+    // Not having a face is still reported by the normal check.
+    expect(s.flags.map((f) => f.type)).toEqual(["face_not_present"]);
+    s.engine.stop();
+    expect(matcher.calls).toContain("clear");
+  });
+
+  it("sends nothing but flag bodies and snapshots, and uses no storage or console", async () => {
+    const setItem = vi.spyOn(Storage.prototype, "setItem");
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const matcher = await withReference({ compare: [mismatch] });
+    const s = setup({ faceConfig: rules });
+    await startEngine(s, undefined, matcher);
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(s.flags).toHaveLength(1);
+    const sent = JSON.stringify(vi.mocked(s.transport.sendFlag).mock.calls);
+    expect(sent).not.toMatch(/descriptor|Float32|reference/i);
+    expect(setItem).not.toHaveBeenCalled();
+    expect(log).not.toHaveBeenCalled();
+    expect(warn).not.toHaveBeenCalled();
+    s.engine.stop();
+  });
+
+  it("works exactly as before when no matcher is given", async () => {
+    const s = setup({ faceConfig: rules });
+    await startEngine(s);
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(s.flags).toEqual([]);
+    expect(s.statuses.map((x) => x.state)).toEqual(["starting", "running"]);
     s.engine.stop();
   });
 });

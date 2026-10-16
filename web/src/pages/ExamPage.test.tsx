@@ -18,6 +18,7 @@ import {
   PAPER_ID,
   stubFetch,
 } from "../test/examFixtures";
+import { fakeFaceChecks, makeVideosReady } from "../test/faceFixtures";
 import { ExamPage } from "./ExamPage";
 
 const BATCH_NAME = "ELE/Q0001 Field Technician, 2026-10-15 to 2026-10-17";
@@ -50,6 +51,7 @@ beforeEach(() => {
   getUserMedia = vi.fn();
   Object.defineProperty(navigator, "mediaDevices", { value: { getUserMedia }, configurable: true });
   vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+  makeVideosReady();
 });
 
 function renderPage() {
@@ -57,7 +59,11 @@ function renderPage() {
   return render(
     <QueryClientProvider client={createQueryClient()}>
       <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-        <ExamPage frameCheck={{ sample: () => frame(150), attempts: 2, intervalMs: 1 }} autosaveDebounceMs={20} />
+        <ExamPage
+          frameCheck={{ sample: () => frame(150), attempts: 2, intervalMs: 1 }}
+          faceChecks={fakeFaceChecks()}
+          autosaveDebounceMs={20}
+        />
       </MemoryRouter>
     </QueryClientProvider>,
   );
@@ -66,6 +72,9 @@ function renderPage() {
 async function passPrecheck(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole("button", { name: "Check camera" }));
   await screen.findByText("Camera check passed.");
+  await user.click(screen.getByRole("button", { name: "Capture ID card" }));
+  await user.click(screen.getByRole("button", { name: "Take selfie" }));
+  await screen.findByText(/look alike/);
   await user.click(screen.getByRole("checkbox", { name: /proctoring notice/i }));
   await user.click(screen.getByRole("button", { name: "Start exam" }));
 }
