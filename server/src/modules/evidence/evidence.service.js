@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { batchLabels } from "../../lib/display-names.js";
 import { createReadStream } from "node:fs";
 import { env } from "../../config/env.js";
 import {
@@ -377,8 +378,30 @@ export async function listEvidence(user, query) {
     page: query.page,
     pageSize: query.pageSize,
     total,
-    items: docs.map((doc) => presentEvidence(doc)),
+    items: await withDisplayNames(docs.map((doc) => presentEvidence(doc))),
   };
+}
+
+/**
+ * X-11. Adds the batch in words and the candidate's name to presented rows, so the screens do
+ * not have to show ids. Names only; a missing record gives null.
+ */
+export async function withDisplayNames(rows) {
+  const candidateIds = [...new Set(rows.map((r) => r.candidateId).filter(Boolean))];
+  const [labels, candidates] = await Promise.all([
+    batchLabels(rows.map((r) => r.batchId)),
+    candidateIds.length > 0
+      ? Candidate.find({ _id: { $in: candidateIds } })
+          .select("name")
+          .lean()
+      : [],
+  ]);
+  const names = new Map(candidates.map((c) => [String(c._id), c.name]));
+  return rows.map((r) => ({
+    ...r,
+    batchLabel: labels.get(r.batchId) ?? null,
+    candidateName: r.candidateId ? (names.get(r.candidateId) ?? null) : null,
+  }));
 }
 
 /** Unknown id is 404; a row outside the caller's scope is 403. */

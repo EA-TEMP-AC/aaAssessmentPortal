@@ -1893,3 +1893,11 @@ No body. Any `2xx`. Sent every 15 seconds while the exam is open.
 Returns `{ items: [{ id, message, createdAt }] }`. Polled every 15 seconds; each new `id` is shown once to the candidate, who must acknowledge it (the acknowledgement is not sent yet).
 
 Flag types the engine raises (`web/src/exam/proctorBridge.ts`): `tab_hidden`, `fullscreen_exit`, `window_blur`, `permission_revoked`, `object_detected`, `face_not_present`, `multiple_faces`, `person_detected`, `phone_detected`, `camera_blocked`, `camera_frozen`, `face_mismatch`, `id_mismatch`, `id_unreadable` (P-09). No video is uploaded; only flags and occasional snapshots, plus, at Start, the ID card photo (`id_proof`) and the selfie (`proctor_snapshot`). Face flags only ask a person to look; they never block or fail a candidate. The `detail` of a face flag is `{ label: "distance_<hundredths>", count: <samples> }` (docs/PROCTORING_ENGINE.md); no descriptor or image data is ever sent.
+
+
+## Names next to ids (task X-11)
+
+Additive fields only; nothing was removed. A value is `null` when the record is not found, and the screen then shows the id.
+- `GET /api/v1/batches/:id`: `names { abName, qualificationName, tpName, centreName, assessorName, proctorName }`. `qualificationName` is "code name". The batch list does not carry `names`.
+- `GET /api/v1/proctoring/sessions` and `GET /api/v1/proctoring/sessions/:id`: `batchLabel` ("code name, start to end").
+- `GET /api/v1/evidence` and `GET /api/v1/evidence/:id`: `batchLabel` and `candidateName`.

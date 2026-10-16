@@ -31,6 +31,7 @@ import {
   loadUploadBatch,
   openEvidenceFile,
   presentEvidence,
+  withDisplayNames,
   recordDownload,
   recordIdProofReads,
   verifyEvidence,
@@ -152,7 +153,8 @@ evidenceRouter.get(
     const { id } = evidenceIdParamSchema.parse(req.params);
     const doc = await loadReadableEvidence(req.user, id);
     await recordIdProofReads(req, [doc]);
-    await res.status(200).json(presentEvidence(doc));
+    const [row] = await withDisplayNames([presentEvidence(doc)]);
+    await res.status(200).json(row);
   }),
 );
 
