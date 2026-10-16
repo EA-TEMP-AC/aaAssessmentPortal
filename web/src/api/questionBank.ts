@@ -8,7 +8,13 @@ import { ApiError, apiRequest } from "./client";
 
 export const QUESTION_PAGE_SIZE = 50;
 
-export const QUESTION_TYPES = ["mcq", "short_answer", "scenario", "viva", "practical"] as const;
+export const QUESTION_TYPES = [
+  "mcq",
+  "short_answer",
+  "scenario",
+  "viva",
+  "practical",
+] as const;
 export type QuestionType = (typeof QUESTION_TYPES)[number];
 
 export const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
@@ -19,7 +25,12 @@ export const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
   practical: "Practical",
 };
 
-export const QUESTION_STATUSES = ["draft", "in_review", "approved", "retired"] as const;
+export const QUESTION_STATUSES = [
+  "draft",
+  "in_review",
+  "approved",
+  "retired",
+] as const;
 export type QuestionStatus = (typeof QUESTION_STATUSES)[number];
 
 export const QUESTION_STATUS_LABELS: Record<QuestionStatus, string> = {
@@ -32,7 +43,14 @@ export const QUESTION_STATUS_LABELS: Record<QuestionStatus, string> = {
 export const DIFFICULTIES = ["easy", "medium", "tough"] as const;
 export type Difficulty = (typeof DIFFICULTIES)[number];
 
-export const BLOOM_LEVELS = ["remember", "understand", "apply", "analyze", "evaluate", "create"] as const;
+export const BLOOM_LEVELS = [
+  "remember",
+  "understand",
+  "apply",
+  "analyze",
+  "evaluate",
+  "create",
+] as const;
 
 export type QuestionOption = { key: string; text: string };
 
@@ -104,7 +122,11 @@ export type ImportResult = {
 };
 
 function responseError(): ApiError {
-  return new ApiError(502, "INVALID_RESPONSE", "Question bank response was not recognised.");
+  return new ApiError(
+    502,
+    "INVALID_RESPONSE",
+    "Question bank response was not recognised.",
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -112,12 +134,20 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function oneOf<T extends string>(list: readonly T[], value: unknown): T | null {
-  return typeof value === "string" && (list as readonly string[]).includes(value) ? (value as T) : null;
+  return typeof value === "string" &&
+    (list as readonly string[]).includes(value)
+    ? (value as T)
+    : null;
 }
 
 export function parseQuestion(value: unknown): Question {
   if (!isRecord(value)) throw responseError();
-  const id = typeof value._id === "string" ? value._id : typeof value.id === "string" ? value.id : "";
+  const id =
+    typeof value._id === "string"
+      ? value._id
+      : typeof value.id === "string"
+        ? value.id
+        : "";
   const type = oneOf(QUESTION_TYPES, value.type);
   const status = oneOf(QUESTION_STATUSES, value.status);
   if (
@@ -136,7 +166,9 @@ export function parseQuestion(value: unknown): Question {
   }
   const options = Array.isArray(value.options)
     ? value.options.flatMap((item): QuestionOption[] =>
-        isRecord(item) && typeof item.key === "string" && typeof item.text === "string"
+        isRecord(item) &&
+        typeof item.key === "string" &&
+        typeof item.text === "string"
           ? [{ key: item.key, text: item.text }]
           : [],
       )
@@ -152,7 +184,8 @@ export function parseQuestion(value: unknown): Question {
     bloomLevel: typeof value.bloomLevel === "string" ? value.bloomLevel : null,
     stem: value.stem,
     options,
-    correctAnswer: typeof value.correctAnswer === "string" ? value.correctAnswer : null,
+    correctAnswer:
+      typeof value.correctAnswer === "string" ? value.correctAnswer : null,
     marks: value.marks,
     status,
     version: value.version,
@@ -163,9 +196,23 @@ export function parseQuestion(value: unknown): Question {
 function parsePage(value: unknown): QuestionPage {
   if (!isRecord(value) || !Array.isArray(value.items)) throw responseError();
   const { total, page, pageSize } = value;
-  if (typeof total !== "number" || typeof page !== "number" || typeof pageSize !== "number") throw responseError();
-  const totalPages = typeof value.totalPages === "number" ? value.totalPages : Math.max(1, Math.ceil(total / pageSize));
-  return { items: value.items.map(parseQuestion), total, page, pageSize, totalPages };
+  if (
+    typeof total !== "number" ||
+    typeof page !== "number" ||
+    typeof pageSize !== "number"
+  )
+    throw responseError();
+  const totalPages =
+    typeof value.totalPages === "number"
+      ? value.totalPages
+      : Math.max(1, Math.ceil(total / pageSize));
+  return {
+    items: value.items.map(parseQuestion),
+    total,
+    page,
+    pageSize,
+    totalPages,
+  };
 }
 
 export async function listQuestions(
@@ -179,30 +226,57 @@ export async function listQuestions(
   }
   params.set("page", String(page));
   params.set("pageSize", String(QUESTION_PAGE_SIZE));
-  return parsePage(await apiRequest<unknown>(`/question-bank/questions?${params.toString()}`, { signal }));
+  return parsePage(
+    await apiRequest<unknown>(`/question-bank/questions?${params.toString()}`, {
+      signal,
+    }),
+  );
 }
 
 export async function createQuestion(input: QuestionWrite): Promise<Question> {
-  return parseQuestion(await apiRequest<unknown>("/question-bank/questions", { method: "POST", body: input }));
+  return parseQuestion(
+    await apiRequest<unknown>("/question-bank/questions", {
+      method: "POST",
+      body: input,
+    }),
+  );
 }
 
 /** Creates the next version. The old version stays, no longer the latest. */
-export async function updateQuestion(id: string, input: QuestionWrite): Promise<Question> {
-  return parseQuestion(await apiRequest<unknown>(`/question-bank/questions/${id}`, { method: "PUT", body: input }));
+export async function updateQuestion(
+  id: string,
+  input: QuestionWrite,
+): Promise<Question> {
+  return parseQuestion(
+    await apiRequest<unknown>(`/question-bank/questions/${id}`, {
+      method: "PUT",
+      body: input,
+    }),
+  );
 }
 
 export async function submitQuestionForReview(id: string): Promise<Question> {
   return parseQuestion(
-    await apiRequest<unknown>(`/question-bank/questions/${id}/submit-for-review`, { method: "POST" }),
+    await apiRequest<unknown>(
+      `/question-bank/questions/${id}/submit-for-review`,
+      { method: "POST" },
+    ),
   );
 }
 
 export async function approveQuestion(id: string): Promise<Question> {
-  return parseQuestion(await apiRequest<unknown>(`/question-bank/questions/${id}/approve`, { method: "POST" }));
+  return parseQuestion(
+    await apiRequest<unknown>(`/question-bank/questions/${id}/approve`, {
+      method: "POST",
+    }),
+  );
 }
 
 export async function downloadImportTemplate(): Promise<Blob> {
-  const response = await apiRequest<Response>("/question-bank/import-template", { raw: true });
+  const response = await apiRequest<Response>(
+    "/question-bank/import-template",
+    { raw: true },
+  );
   return response.blob();
 }
 
@@ -210,37 +284,57 @@ function parseRowErrors(value: unknown): ImportRowError[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((item): ImportRowError[] => {
     if (!isRecord(item) || typeof item.row !== "number") return [];
-    const errors = Array.isArray(item.errors) ? item.errors.filter((e): e is string => typeof e === "string") : [];
+    const errors = Array.isArray(item.errors)
+      ? item.errors.filter((e): e is string => typeof e === "string")
+      : [];
     return [{ row: item.row, errors }];
   });
 }
 
 /** A refused import (nothing saved) carries the same report in ApiError.details. */
 export function importReportFromError(error: unknown): ImportResult | null {
-  if (!(error instanceof ApiError) || error.code !== "IMPORT_VALIDATION_FAILED" || !isRecord(error.details)) {
+  if (
+    !(error instanceof ApiError) ||
+    error.code !== "IMPORT_VALIDATION_FAILED" ||
+    !isRecord(error.details)
+  ) {
     return null;
   }
   const { details } = error;
   return {
     totalRows: typeof details.totalRows === "number" ? details.totalRows : 0,
     importedCount: 0,
-    errorCount: typeof details.errorCount === "number" ? details.errorCount : parseRowErrors(details.errors).length,
+    errorCount:
+      typeof details.errorCount === "number"
+        ? details.errorCount
+        : parseRowErrors(details.errors).length,
     errors: parseRowErrors(details.errors),
   };
 }
 
-export async function importQuestions(file: Blob, validRowsOnly: boolean): Promise<ImportResult> {
-  const body = await apiRequest<unknown>(`/question-bank/import${validRowsOnly ? "?partial=true" : ""}`, {
-    method: "POST",
-    body: file,
-    headers: { "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" },
-  });
+export async function importQuestions(
+  file: Blob,
+  validRowsOnly: boolean,
+): Promise<ImportResult> {
+  const body = await apiRequest<unknown>(
+    `/question-bank/import${validRowsOnly ? "?partial=true" : ""}`,
+    {
+      method: "POST",
+      body: file,
+      headers: {
+        "Content-Type":
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      },
+    },
+  );
   if (!isRecord(body)) throw responseError();
   const errors = parseRowErrors(body.errors);
   return {
     totalRows: typeof body.totalRows === "number" ? body.totalRows : 0,
-    importedCount: typeof body.importedCount === "number" ? body.importedCount : 0,
-    errorCount: typeof body.errorCount === "number" ? body.errorCount : errors.length,
+    importedCount:
+      typeof body.importedCount === "number" ? body.importedCount : 0,
+    errorCount:
+      typeof body.errorCount === "number" ? body.errorCount : errors.length,
     errors,
   };
 }

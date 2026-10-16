@@ -18,8 +18,9 @@ import { Candidate } from "../../models/candidate.model.js";
 import { Evidence } from "../../models/evidence.model.js";
 import { ProctoringFlag, PROCTORING_SEVERITIES } from "../../models/proctoring-flag.model.js";
 import { ProctoringSession } from "../../models/proctoring-session.model.js";
-import { PROCTORING_INVALIDATE_ROLES } from "../../models/roles.js";
+import { PROCTORING_INVALIDATE_ROLES, PROCTORING_LOCATION_ROLES } from "../../models/roles.js";
 import { stableStringify } from "../login-events/login-event.service.js";
+import { flagReason } from "./flag-reason.js";
 
 /** Shown to the candidate when a reviewer warns without writing a message. */
 export const DEFAULT_WARNING_MESSAGE =
@@ -40,6 +41,8 @@ export function proctoringConfig(settings = resolveBatchSettings(null)) {
     detectionIntervalMs: compliance.PROCTOR_DETECTION_INTERVAL_MS,
     flagCooldownSeconds: compliance.PROCTOR_FLAG_COOLDOWN_SECONDS,
     sustainedSeconds: { ...compliance.PROCTOR_SUSTAINED_SECONDS },
+    // X-07: the browser draws the severity on the flag photo.
+    flagSeverity: { ...compliance.PROCTOR_FLAG_SEVERITY },
   };
 }
 
@@ -109,6 +112,8 @@ function presentFlag(flag) {
     detail: flag.detail ?? null,
     sustainedSeconds: compliance.PROCTOR_SUSTAINED_SECONDS[flag.type] ?? null,
     evidenceId: idStr(flag.evidenceId),
+    // X-07: whether coordinates were kept. The coordinates themselves come from /flags/:id/capture.
+    locationStatus: flag.locationStatus ?? "not_shared",
     review: flag.review
       ? {
           decision: flag.review.decision,
@@ -144,7 +149,14 @@ async function batchSettingsOf(batchId) {
   return resolveBatchSettings(batch?.settings);
 }
 
-function presentForCandidate(session, attemptStatus, now, settings, paused = false) {
+function presentForCandidate(
+  session,
+  attemptStatus,
+  now,
+  settings,
+  paused = false,
+  captureLocation = false,
+) {
   return {
     id: idStr(session._id),
     attemptId: idStr(session.attemptId),
@@ -158,7 +170,15 @@ function presentForCandidate(session, attemptStatus, now, settings, paused = fal
         ? { snapshotIntervalSeconds: session.snapshotIntervalSeconds }
         : {}),
     },
+    // X-07: tells the browser whether to add its location to flag photos.
+    captureLocation,
   };
+}
+
+async function captureLocationOf(batchId) {
+  // X-07 stores the switch on the batch; B-20 keeps it with the batch settings. Either turns it on.
+  const batch = await Batch.findById(batchId).select("captureLocation settings").lean();
+  return batch?.captureLocation === true || batch?.settings?.captureLocation === true;
 }
 
 /**
@@ -177,7 +197,14 @@ export async function createSession(user, { attemptId }, now = new Date()) {
     return {
       session: existing,
       created: false,
-      body: presentForCandidate(existing, attempt.status, now, settings, paused),
+      body: presentForCandidate(
+        existing,
+        attempt.status,
+        now,
+        settings,
+        paused,
+        await captureLocationOf(existing.batchId),
+      ),
     };
   }
   if (attempt.status !== "in_progress") {
@@ -205,13 +232,27 @@ export async function createSession(user, { attemptId }, now = new Date()) {
     return {
       session: winner,
       created: false,
-      body: presentForCandidate(winner, attempt.status, now, settings, paused),
+      body: presentForCandidate(
+        winner,
+        attempt.status,
+        now,
+        settings,
+        paused,
+        await captureLocationOf(winner.batchId),
+      ),
     };
   }
   return {
     session,
     created: true,
-    body: presentForCandidate(session, attempt.status, now, settings, paused),
+    body: presentForCandidate(
+      session,
+      attempt.status,
+      now,
+      settings,
+      paused,
+      await captureLocationOf(session.batchId),
+    ),
   };
 }
 
@@ -389,6 +430,9 @@ export async function recordFlag(user, id, body, now = new Date()) {
     evidenceId = evidence._id;
   }
 
+  // X-07: coordinates are kept only while the batch has location capture on. They are not part of
+  // the payload hash, so they never sit in a hash either.
+  const keepLocation = body.location != null && (await captureLocationOf(session.batchId));
   const severity = severityOf(body.type);
   const flagDoc = {
     sessionId: session._id,
@@ -402,6 +446,8 @@ export async function recordFlag(user, id, body, now = new Date()) {
     receivedAt: now,
     detail: body.detail ?? null,
     evidenceId,
+    locationStatus: keepLocation ? "captured" : "not_shared",
+    location: keepLocation ? JSON.stringify(body.location) : null,
     payloadHash: hashValue,
   };
   const settings = await batchSettingsOf(session.batchId);
@@ -452,7 +498,9 @@ export async function loadSnapshotSession(user, sessionId, batchId) {
 async function loadReadableSession(user, id) {
   const session = await ProctoringSession.findById(id).lean();
   if (!session) throw notFound();
-  const batch = await Batch.findById(session.batchId).select("abId assessorId proctorId").lean();
+  const batch = await Batch.findById(session.batchId)
+    .select("abId tpId assessorId proctorId")
+    .lean();
   if (!isInBatchScope(user, batch)) throw forbidden();
   return { session, batch };
 }
@@ -801,6 +849,54 @@ export async function unlockSession(user, id, now = new Date()) {
       sessionId: idStr(session._id),
       attemptId: idStr(session.attemptId),
       lock: presentLock(after, updated, settings),
+    },
+  };
+}
+
+/**
+ * GET /proctoring/flags/:id/capture. X-07: what the server saved about a flag photo, to read next
+ * to the picture. The reason is built here, not read from the picture. Coordinates are returned
+ * only to aa_admin, the batch's training partner and the assigned proctor; `readers` says whose
+ * personal data to log (the flag, and the learner it shows).
+ */
+export async function getFlagCapture(user, flagId) {
+  const flag = await ProctoringFlag.findById(flagId).lean();
+  if (!flag) throw notFound();
+  const batch = await Batch.findById(flag.batchId).select("abId tpId assessorId proctorId").lean();
+  if (!isInBatchScope(user, batch)) throw forbidden();
+
+  const locationVisible = PROCTORING_LOCATION_ROLES.includes(user.role);
+  let location = null;
+  if (locationVisible && flag.locationStatus === "captured" && flag.location) {
+    try {
+      const parsed = JSON.parse(flag.location);
+      location = {
+        latitude: parsed.latitude,
+        longitude: parsed.longitude,
+        accuracy: parsed.accuracy ?? null,
+      };
+    } catch {
+      location = null;
+    }
+  }
+  const session = location
+    ? await ProctoringSession.findById(flag.sessionId).select("learnerId").lean()
+    : null;
+  return {
+    flag,
+    learnerId: session?.learnerId ?? null,
+    body: {
+      flagId: idStr(flag._id),
+      sessionId: idStr(flag.sessionId),
+      type: flag.type,
+      reason: flagReason(flag.type),
+      severity: flag.severity,
+      capturedAt: iso(flag.capturedAt),
+      receivedAt: iso(flag.receivedAt),
+      evidenceId: idStr(flag.evidenceId),
+      locationStatus: flag.locationStatus ?? "not_shared",
+      locationVisible,
+      location,
     },
   };
 }

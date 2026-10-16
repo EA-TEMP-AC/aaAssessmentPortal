@@ -38,7 +38,10 @@ const DATE_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/;
  * define a calendar-day boundary, so a date input becomes the viewer's local
  * day: start of `from`, end of `to`. See DECISIONS.md open question 38.
  */
-export function localDayBound(date: string, bound: "start" | "end"): string | null {
+export function localDayBound(
+  date: string,
+  bound: "start" | "end",
+): string | null {
   const match = DATE_ONLY.exec(date);
   if (!match) return null;
   const year = Number(match[1]);
@@ -48,7 +51,11 @@ export function localDayBound(date: string, bound: "start" | "end"): string | nu
     bound === "start"
       ? new Date(year, month - 1, day, 0, 0, 0, 0)
       : new Date(year, month - 1, day, 23, 59, 59, 999);
-  if (value.getFullYear() !== year || value.getMonth() !== month - 1 || value.getDate() !== day) {
+  if (
+    value.getFullYear() !== year ||
+    value.getMonth() !== month - 1 ||
+    value.getDate() !== day
+  ) {
     return null;
   }
   return value.toISOString();
@@ -65,16 +72,20 @@ function nullableString(value: unknown): string | null | undefined {
 }
 
 function wholeNumber(value: unknown, minimum: number): number | null {
-  if (typeof value !== "number" || !Number.isInteger(value) || value < minimum) return null;
+  if (typeof value !== "number" || !Number.isInteger(value) || value < minimum)
+    return null;
   return value;
 }
 
 function parseItem(value: unknown): AuditLogItem | null {
   if (!isRecord(value)) return null;
   if (typeof value.id !== "string" || value.id.length === 0) return null;
-  if (typeof value.action !== "string" || value.action.length === 0) return null;
-  if (typeof value.entity !== "string" || value.entity.length === 0) return null;
-  if (typeof value.createdAt !== "string" || value.createdAt.length === 0) return null;
+  if (typeof value.action !== "string" || value.action.length === 0)
+    return null;
+  if (typeof value.entity !== "string" || value.entity.length === 0)
+    return null;
+  if (typeof value.createdAt !== "string" || value.createdAt.length === 0)
+    return null;
 
   const actorId = nullableString(value.actorId);
   const actorRole = nullableString(value.actorRole);
@@ -112,19 +123,31 @@ function parseItem(value: unknown): AuditLogItem | null {
 
 function parseAuditLogPage(value: unknown): AuditLogPage {
   if (!isRecord(value) || !Array.isArray(value.items)) {
-    throw new ApiError(502, "INVALID_RESPONSE", "Audit log response was not recognised.");
+    throw new ApiError(
+      502,
+      "INVALID_RESPONSE",
+      "Audit log response was not recognised.",
+    );
   }
   const page = wholeNumber(value.page, 1);
   const pageSize = wholeNumber(value.pageSize, 1);
   const total = wholeNumber(value.total, 0);
   if (page === null || pageSize === null || total === null) {
-    throw new ApiError(502, "INVALID_RESPONSE", "Audit log response was not recognised.");
+    throw new ApiError(
+      502,
+      "INVALID_RESPONSE",
+      "Audit log response was not recognised.",
+    );
   }
   const items: AuditLogItem[] = [];
   for (const item of value.items) {
     const parsed = parseItem(item);
     if (!parsed) {
-      throw new ApiError(502, "INVALID_RESPONSE", "Audit log response was not recognised.");
+      throw new ApiError(
+        502,
+        "INVALID_RESPONSE",
+        "Audit log response was not recognised.",
+      );
     }
     items.push(parsed);
   }
@@ -132,7 +155,10 @@ function parseAuditLogPage(value: unknown): AuditLogPage {
 }
 
 /** Contract query: entity, entityId, from, to, page. pageSize is response-only. */
-export async function listAuditLogs(query: AuditLogQuery, signal?: AbortSignal): Promise<AuditLogPage> {
+export async function listAuditLogs(
+  query: AuditLogQuery,
+  signal?: AbortSignal,
+): Promise<AuditLogPage> {
   const params = new URLSearchParams();
   const entity = query.entity?.trim();
   const entityId = query.entityId?.trim();
@@ -143,6 +169,8 @@ export async function listAuditLogs(query: AuditLogQuery, signal?: AbortSignal):
   const page = query.page && query.page > 0 ? query.page : 1;
   params.set("page", String(page));
 
-  const body = await apiRequest<unknown>(`/audit-logs?${params.toString()}`, { signal });
+  const body = await apiRequest<unknown>(`/audit-logs?${params.toString()}`, {
+    signal,
+  });
   return parseAuditLogPage(body);
 }

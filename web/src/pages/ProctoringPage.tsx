@@ -5,6 +5,7 @@ import type { EvidenceRow } from "../api/evidence";
 import {
   DECISION_LABELS,
   FLAG_TYPE_LABELS,
+  getFlagCapture,
   getProctoringSession,
   listSessionSnapshots,
   listProctoringSessions,
@@ -24,6 +25,7 @@ import {
 import { useSession } from "../api/session";
 import { isRole, ROLE_LABELS } from "../routing/access";
 import { EvidenceImage } from "./proctoring/EvidenceImage";
+import { FlagCaptureDetails } from "./proctoring/FlagCaptureDetails";
 import { formatTime } from "./proctoring/format";
 import { SnapshotStrip } from "./proctoring/SnapshotStrip";
 
@@ -227,17 +229,20 @@ function FlagEntry({
         <p className="field-hint">Raised after the condition lasted at least {flag.sustainedSeconds} seconds.</p>
       ) : null}
       {detailParts.length > 0 ? <p className="field-hint">Sent by the browser: {detailParts.join(", ")}</p> : null}
-      {flag.evidenceId ? (
-        <EvidenceImage
-          evidenceId={flag.evidenceId}
-          description={`${typeLabel(flag.type)} at ${formatTime(flag.capturedAt)}`}
-          row={evidence}
-          detailsState={detailsState}
-          showMeta
-        />
-      ) : (
-        <p className="field-hint">No image for this flag</p>
-      )}
+      <div className="proctor-flag-capture">
+        {flag.evidenceId ? (
+          <EvidenceImage
+            evidenceId={flag.evidenceId}
+            description={`${typeLabel(flag.type)} at ${formatTime(flag.capturedAt)}`}
+            row={evidence}
+            detailsState={detailsState}
+            showMeta
+          />
+        ) : (
+          <p className="field-hint">No image for this flag</p>
+        )}
+        <FlagCaptureDetails flagId={flag.id} load={getFlagCapture} />
+      </div>
       {flag.review ? (
         <p className="proctor-decision">
           Decision: {DECISION_LABELS[flag.review.decision]} by {roleLabel(flag.review.decidedByRole)}

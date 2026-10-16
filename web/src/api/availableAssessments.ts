@@ -24,6 +24,8 @@ export type AvailableAssessment = {
   /** Batch dates, YYYY-MM-DD (IST). Null from an older server. */
   assessmentStartDate: string | null;
   assessmentEndDate: string | null;
+  /** X-07: the batch records the candidate location with flag photos. */
+  captureLocation: boolean;
   paperId: string;
   paperName: string;
   language: string | null;
@@ -36,7 +38,11 @@ export type AvailableAssessment = {
 const STATUSES: readonly string[] = ["in_progress", "submitted", "timed_out"];
 
 function bad(): ApiError {
-  return new ApiError(502, "INVALID_RESPONSE", "Available assessments response was not recognised.");
+  return new ApiError(
+    502,
+    "INVALID_RESPONSE",
+    "Available assessments response was not recognised.",
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -48,7 +54,9 @@ function str(value: unknown): string | null {
 }
 
 function count(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
+    ? value
+    : null;
 }
 
 function parseAttempt(value: unknown): AvailableAttempt | null {
@@ -78,12 +86,19 @@ export function parseAvailableAssessment(value: unknown): AvailableAssessment {
   const paperId = str(value.paperId);
   const questionCount = count(value.questionCount);
   const durationMinutes = count(value.durationMinutes);
-  if (!batchId || !paperId || questionCount === null || durationMinutes === null) throw bad();
+  if (
+    !batchId ||
+    !paperId ||
+    questionCount === null ||
+    durationMinutes === null
+  )
+    throw bad();
   return {
     batchId,
     batchName: str(value.batchName) ?? `Batch ${batchId}`,
     assessmentStartDate: str(value.assessmentStartDate),
     assessmentEndDate: str(value.assessmentEndDate),
+    captureLocation: value.captureLocation === true,
     paperId,
     paperName: str(value.paperName) ?? str(value.paperCode) ?? paperId,
     language: str(value.language),
@@ -94,7 +109,9 @@ export function parseAvailableAssessment(value: unknown): AvailableAssessment {
   };
 }
 
-export async function listAvailableAssessments(signal?: AbortSignal): Promise<AvailableAssessment[]> {
+export async function listAvailableAssessments(
+  signal?: AbortSignal,
+): Promise<AvailableAssessment[]> {
   const body = await apiRequest<unknown>("/attempts/available", { signal });
   if (!isRecord(body) || !Array.isArray(body.items)) throw bad();
   return body.items.map(parseAvailableAssessment);

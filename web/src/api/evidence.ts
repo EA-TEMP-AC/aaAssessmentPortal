@@ -55,7 +55,12 @@ export type EvidenceRow = {
   verifyCount: number;
 };
 
-export type EvidencePage = { page: number; pageSize: number; total: number; items: EvidenceRow[] };
+export type EvidencePage = {
+  page: number;
+  pageSize: number;
+  total: number;
+  items: EvidenceRow[];
+};
 
 export type EvidenceQuery = {
   batchId?: string;
@@ -71,7 +76,12 @@ export type EvidenceQuery = {
   pageSize?: number;
 };
 
-export type VerifyResponse = { id: string; sha256: string; verifyCount: number; verification: Verification };
+export type VerifyResponse = {
+  id: string;
+  sha256: string;
+  verifyCount: number;
+  verification: Verification;
+};
 
 /** What GET /evidence/:id/file gave back: a short-lived link (S3) or the bytes (local disk). */
 export type EvidenceFile =
@@ -79,7 +89,11 @@ export type EvidenceFile =
   | { mode: "bytes"; blob: Blob };
 
 function bad(what: string): ApiError {
-  return new ApiError(502, "INVALID_RESPONSE", `${what} response was not recognised.`);
+  return new ApiError(
+    502,
+    "INVALID_RESPONSE",
+    `${what} response was not recognised.`,
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -102,7 +116,8 @@ function parseVerification(value: unknown): Verification | null {
   if (!isRecord(value)) return null;
   const at = str(value.at);
   const result = value.result;
-  if (!at || (result !== "ok" && result !== "mismatch" && result !== "missing")) return null;
+  if (!at || (result !== "ok" && result !== "mismatch" && result !== "missing"))
+    return null;
   return {
     at,
     byUserId: nullableStr(value.byUserId),
@@ -126,8 +141,16 @@ function parseRow(value: unknown): EvidenceRow {
   const locationStatus = str(value.locationStatus);
   const size = nullableNum(value.size);
   if (
-    !id || !batchId || !kind || !contentType || !sha256 || !uploaderId || !capturedAt || !uploadedAt ||
-    !locationStatus || size === null
+    !id ||
+    !batchId ||
+    !kind ||
+    !contentType ||
+    !sha256 ||
+    !uploaderId ||
+    !capturedAt ||
+    !uploadedAt ||
+    !locationStatus ||
+    size === null
   ) {
     throw bad("Evidence");
   }
@@ -155,26 +178,45 @@ function parseRow(value: unknown): EvidenceRow {
   };
 }
 
-export async function listEvidence(query: EvidenceQuery, signal?: AbortSignal): Promise<EvidencePage> {
+export async function listEvidence(
+  query: EvidenceQuery,
+  signal?: AbortSignal,
+): Promise<EvidencePage> {
   const params = new URLSearchParams();
-  for (const key of ["batchId", "candidateId", "kind", "uploaderId", "sessionId", "from", "to", "hasLocation"] as const) {
+  for (const key of [
+    "batchId",
+    "candidateId",
+    "kind",
+    "uploaderId",
+    "sessionId",
+    "from",
+    "to",
+    "hasLocation",
+  ] as const) {
     const value = query[key]?.trim();
     if (value) params.set(key, value);
   }
   params.set("page", String(query.page && query.page > 0 ? query.page : 1));
-  if (query.pageSize && query.pageSize > 0) params.set("pageSize", String(query.pageSize));
+  if (query.pageSize && query.pageSize > 0)
+    params.set("pageSize", String(query.pageSize));
 
-  const body = await apiRequest<unknown>(`/evidence?${params.toString()}`, { signal });
+  const body = await apiRequest<unknown>(`/evidence?${params.toString()}`, {
+    signal,
+  });
   if (!isRecord(body) || !Array.isArray(body.items)) throw bad("Evidence list");
   const page = nullableNum(body.page);
   const pageSize = nullableNum(body.pageSize);
   const total = nullableNum(body.total);
-  if (page === null || pageSize === null || total === null || pageSize < 1) throw bad("Evidence list");
+  if (page === null || pageSize === null || total === null || pageSize < 1)
+    throw bad("Evidence list");
   return { page, pageSize, total, items: body.items.map(parseRow) };
 }
 
 export async function verifyEvidence(id: string): Promise<VerifyResponse> {
-  const body = await apiRequest<unknown>(`/evidence/${encodeURIComponent(id)}/verify`, { method: "POST" });
+  const body = await apiRequest<unknown>(
+    `/evidence/${encodeURIComponent(id)}/verify`,
+    { method: "POST" },
+  );
   if (!isRecord(body)) throw bad("Verify");
   const verification = parseVerification(body.verification);
   if (!verification) throw bad("Verify");
@@ -206,13 +248,20 @@ export async function fetchEvidenceFile(
   // Q600: a preview asks for an inline link so a PDF opens in the page. The server uses it only
   // with the S3 driver (images and PDFs); local disk streams the bytes either way.
   const query = options.inline ? "?inline=true" : "";
-  const response = await apiRequest<Response>(`/evidence/${encodeURIComponent(row.id)}/file${query}`, { raw: true });
+  const response = await apiRequest<Response>(
+    `/evidence/${encodeURIComponent(row.id)}/file${query}`,
+    { raw: true },
+  );
   const type = response.headers.get("Content-Type") ?? "";
   if (type.toLowerCase().includes("application/json")) {
     const body: unknown = await response.json();
     const url = isRecord(body) ? str(body.url) : null;
     if (!url || !isWebUrl(url)) throw bad("File");
-    return { mode: "link", url, expiresAt: isRecord(body) ? nullableStr(body.expiresAt) : null };
+    return {
+      mode: "link",
+      url,
+      expiresAt: isRecord(body) ? nullableStr(body.expiresAt) : null,
+    };
   }
   const bytes = await response.arrayBuffer();
   return { mode: "bytes", blob: new Blob([bytes], { type: row.contentType }) };

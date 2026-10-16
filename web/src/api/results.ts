@@ -8,12 +8,20 @@ import type { BatchStatus } from "./batches";
 export const MARK_COMPONENTS = ["theory", "practical", "viva"] as const;
 export type MarkComponent = (typeof MARK_COMPONENTS)[number];
 
-export const RESULT_STATUSES = ["draft", "submitted", "validated", "published"] as const;
+export const RESULT_STATUSES = [
+  "draft",
+  "submitted",
+  "validated",
+  "published",
+] as const;
 export type ResultStatus = (typeof RESULT_STATUSES)[number];
 
 export type CandidateOutcome = "Pass" | "Fail" | "Absent";
 
-export type ResultNosMarks = { nosId: string } & Record<MarkComponent, number | null>;
+export type ResultNosMarks = { nosId: string } & Record<
+  MarkComponent,
+  number | null
+>;
 
 export type ResultRow = {
   candidateId: string;
@@ -66,7 +74,11 @@ export type AttendanceRecord = {
 };
 
 function responseError(): ApiError {
-  return new ApiError(502, "INVALID_RESPONSE", "Result response was not recognised.");
+  return new ApiError(
+    502,
+    "INVALID_RESPONSE",
+    "Result response was not recognised.",
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -82,16 +94,22 @@ function nullableMark(value: unknown): number | null {
 }
 
 function parseRow(value: unknown): ResultRow {
-  if (!isRecord(value) || typeof value.candidateId !== "string") throw responseError();
+  if (!isRecord(value) || typeof value.candidateId !== "string")
+    throw responseError();
   const outcome =
-    value.outcome === "Pass" || value.outcome === "Fail" || value.outcome === "Absent" ? value.outcome : null;
+    value.outcome === "Pass" ||
+    value.outcome === "Fail" ||
+    value.outcome === "Absent"
+      ? value.outcome
+      : null;
   const nos = Array.isArray(value.nos) ? value.nos : [];
   return {
     candidateId: value.candidateId,
     absent: value.absent === true,
     outcome,
     nos: nos.map((entry) => {
-      if (!isRecord(entry) || typeof entry.nosId !== "string") throw responseError();
+      if (!isRecord(entry) || typeof entry.nosId !== "string")
+        throw responseError();
       return {
         nosId: entry.nosId,
         theory: nullableMark(entry.theory),
@@ -105,7 +123,12 @@ function parseRow(value: unknown): ResultRow {
 export function parseResult(value: unknown): ResultRecord {
   if (!isRecord(value)) throw responseError();
   const status = RESULT_STATUSES.find((item) => item === value.status);
-  if (typeof value.id !== "string" || typeof value.batchId !== "string" || !status || !Array.isArray(value.rows)) {
+  if (
+    typeof value.id !== "string" ||
+    typeof value.batchId !== "string" ||
+    !status ||
+    !Array.isArray(value.rows)
+  ) {
     throw responseError();
   }
   return {
@@ -126,7 +149,11 @@ export function parseResult(value: unknown): ResultRecord {
 
 function parseMove(value: unknown): ResultMoveRecord {
   const result = parseResult(value);
-  if (!isRecord(value) || typeof value.batchStatus !== "string" || typeof value.batchStatusVersion !== "number") {
+  if (
+    !isRecord(value) ||
+    typeof value.batchStatus !== "string" ||
+    typeof value.batchStatusVersion !== "number"
+  ) {
     throw responseError();
   }
   return {
@@ -144,51 +171,105 @@ function resultsPath(batchId: string): string {
  * `null` when the server answers 404: no result yet, or (candidate and
  * training partner) the result is not published.
  */
-export async function getResults(batchId: string, signal?: AbortSignal): Promise<ResultRecord | null> {
+export async function getResults(
+  batchId: string,
+  signal?: AbortSignal,
+): Promise<ResultRecord | null> {
   try {
-    return parseResult(await apiRequest<unknown>(resultsPath(batchId), { signal }));
+    return parseResult(
+      await apiRequest<unknown>(resultsPath(batchId), { signal }),
+    );
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) return null;
     throw error;
   }
 }
 
-export async function saveResults(batchId: string, input: SaveResultsInput): Promise<ResultRecord> {
-  return parseResult(await apiRequest<unknown>(resultsPath(batchId), { method: "PUT", body: input }));
-}
-
-async function postMove(batchId: string, action: string, body: Record<string, string>): Promise<ResultMoveRecord> {
-  return parseMove(
-    await apiRequest<unknown>(`/batches/${encodeURIComponent(batchId)}/${action}`, { method: "POST", body }),
+export async function saveResults(
+  batchId: string,
+  input: SaveResultsInput,
+): Promise<ResultRecord> {
+  return parseResult(
+    await apiRequest<unknown>(resultsPath(batchId), {
+      method: "PUT",
+      body: input,
+    }),
   );
 }
 
-export async function submitResult(batchId: string, input: { lateReason?: string } = {}): Promise<ResultMoveRecord> {
-  return postMove(batchId, "submit-result", input.lateReason ? { lateReason: input.lateReason } : {});
+async function postMove(
+  batchId: string,
+  action: string,
+  body: Record<string, string>,
+): Promise<ResultMoveRecord> {
+  return parseMove(
+    await apiRequest<unknown>(
+      `/batches/${encodeURIComponent(batchId)}/${action}`,
+      { method: "POST", body },
+    ),
+  );
 }
 
-export async function validateResult(batchId: string, input: { reason?: string } = {}): Promise<ResultMoveRecord> {
-  return postMove(batchId, "validate", input.reason ? { reason: input.reason } : {});
+export async function submitResult(
+  batchId: string,
+  input: { lateReason?: string } = {},
+): Promise<ResultMoveRecord> {
+  return postMove(
+    batchId,
+    "submit-result",
+    input.lateReason ? { lateReason: input.lateReason } : {},
+  );
 }
 
-export async function publishResult(batchId: string, input: { reason?: string } = {}): Promise<ResultMoveRecord> {
-  return postMove(batchId, "publish", input.reason ? { reason: input.reason } : {});
+export async function validateResult(
+  batchId: string,
+  input: { reason?: string } = {},
+): Promise<ResultMoveRecord> {
+  return postMove(
+    batchId,
+    "validate",
+    input.reason ? { reason: input.reason } : {},
+  );
+}
+
+export async function publishResult(
+  batchId: string,
+  input: { reason?: string } = {},
+): Promise<ResultMoveRecord> {
+  return postMove(
+    batchId,
+    "publish",
+    input.reason ? { reason: input.reason } : {},
+  );
 }
 
 /**
  * POST /batches/:id/return-for-correction (B-05b). The awarding body reviewer
  * sends a submitted or validated result back to draft. `reason` is required.
  */
-export async function returnForCorrection(batchId: string, input: { reason: string }): Promise<ResultMoveRecord> {
+export async function returnForCorrection(
+  batchId: string,
+  input: { reason: string },
+): Promise<ResultMoveRecord> {
   return postMove(batchId, "return-for-correction", { reason: input.reason });
 }
 
 /** GET /batches/:id/attendance (B-06c). `present: false` is the result outcome Absent. */
-export async function listAttendance(batchId: string, signal?: AbortSignal): Promise<AttendanceRecord[]> {
-  const body = await apiRequest<unknown>(`/batches/${encodeURIComponent(batchId)}/attendance`, { signal });
+export async function listAttendance(
+  batchId: string,
+  signal?: AbortSignal,
+): Promise<AttendanceRecord[]> {
+  const body = await apiRequest<unknown>(
+    `/batches/${encodeURIComponent(batchId)}/attendance`,
+    { signal },
+  );
   if (!isRecord(body) || !Array.isArray(body.items)) throw responseError();
   return body.items.map((item) => {
-    if (!isRecord(item) || typeof item.candidateId !== "string" || typeof item.present !== "boolean") {
+    if (
+      !isRecord(item) ||
+      typeof item.candidateId !== "string" ||
+      typeof item.present !== "boolean"
+    ) {
       throw responseError();
     }
     return {

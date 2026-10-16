@@ -29,7 +29,11 @@ export type AttemptSettings = {
   captureLocation: boolean;
 };
 
-export type AttemptMarks = { obtainedMarks: number; maxMarks: number; complete: boolean };
+export type AttemptMarks = {
+  obtainedMarks: number;
+  maxMarks: number;
+  complete: boolean;
+};
 
 export const DEFAULT_ATTEMPT_SETTINGS: AttemptSettings = {
   questionsMandatory: false,
@@ -81,7 +85,11 @@ export type ClosedAttempt = {
 const STATUSES: readonly string[] = ["in_progress", "submitted", "timed_out"];
 
 function bad(what: string): ApiError {
-  return new ApiError(502, "INVALID_RESPONSE", `${what} response was not recognised.`);
+  return new ApiError(
+    502,
+    "INVALID_RESPONSE",
+    `${what} response was not recognised.`,
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -97,7 +105,9 @@ function num(value: unknown): number | null {
 }
 
 function status(value: unknown): AttemptStatus | null {
-  return typeof value === "string" && STATUSES.includes(value) ? (value as AttemptStatus) : null;
+  return typeof value === "string" && STATUSES.includes(value)
+    ? (value as AttemptStatus)
+    : null;
 }
 
 /** Only the fields the candidate needs. Anything else the server sends is dropped. */
@@ -111,7 +121,9 @@ function parseQuestion(value: unknown, index: number): AttemptQuestion {
         if (!isRecord(option)) return [];
         const key = str(option.key);
         if (!key) return [];
-        return [{ key, text: typeof option.text === "string" ? option.text : "" }];
+        return [
+          { key, text: typeof option.text === "string" ? option.text : "" },
+        ];
       })
     : [];
   return {
@@ -136,19 +148,24 @@ function parseSettings(value: unknown): AttemptSettings {
   const d = DEFAULT_ATTEMPT_SETTINGS;
   if (!isRecord(value)) return { ...d };
   const image = isRecord(value.imageCapture) ? value.imageCapture : {};
-  const info = isRecord(value.candidateInfoPopup) ? value.candidateInfoPopup : {};
+  const info = isRecord(value.candidateInfoPopup)
+    ? value.candidateInfoPopup
+    : {};
   const policy = isRecord(value.flagPolicy) ? value.flagPolicy : {};
   return {
     questionsMandatory: value.questionsMandatory === true,
     showMarksToCandidate: value.showMarksToCandidate === true,
     flagPolicy: { action: policy.action === "pause" ? "pause" : "record" },
     imageCapture: {
-      intervalSeconds: num(image.intervalSeconds) ?? d.imageCapture.intervalSeconds,
+      intervalSeconds:
+        num(image.intervalSeconds) ?? d.imageCapture.intervalSeconds,
       atStartAndEnd: image.atStartAndEnd !== false,
     },
     candidateInfoPopup: {
       enabled: info.enabled === true,
-      fields: Array.isArray(info.fields) ? info.fields.filter((f): f is string => typeof f === "string") : [],
+      fields: Array.isArray(info.fields)
+        ? info.fields.filter((f): f is string => typeof f === "string")
+        : [],
     },
     captureLocation: value.captureLocation === true,
   };
@@ -161,10 +178,19 @@ export function parseAttempt(value: unknown): Attempt {
   const batchId = str(value.batchId);
   const attemptStatus = status(value.status);
   const deadlineAt = str(value.deadlineAt);
-  if (!id || !testPaperId || !batchId || !attemptStatus || !deadlineAt || !Array.isArray(value.questions)) {
+  if (
+    !id ||
+    !testPaperId ||
+    !batchId ||
+    !attemptStatus ||
+    !deadlineAt ||
+    !Array.isArray(value.questions)
+  ) {
     throw bad("Attempt");
   }
-  const questions = value.questions.map(parseQuestion).sort((a, b) => a.order - b.order);
+  const questions = value.questions
+    .map(parseQuestion)
+    .sort((a, b) => a.order - b.order);
   return {
     id,
     testPaperId,
@@ -185,7 +211,10 @@ export function parseAttempt(value: unknown): Attempt {
   };
 }
 
-export async function startAttempt(input: { batchId: string; testPaperId: string }): Promise<Attempt> {
+export async function startAttempt(input: {
+  batchId: string;
+  testPaperId: string;
+}): Promise<Attempt> {
   const body = await apiRequest<unknown>("/attempts/start", {
     method: "POST",
     body: { batchId: input.batchId, testPaperId: input.testPaperId },
@@ -193,8 +222,14 @@ export async function startAttempt(input: { batchId: string; testPaperId: string
   return parseAttempt(body);
 }
 
-export async function getAttempt(id: string, signal?: AbortSignal): Promise<Attempt> {
-  const body = await apiRequest<unknown>(`/attempts/${encodeURIComponent(id)}`, { signal });
+export async function getAttempt(
+  id: string,
+  signal?: AbortSignal,
+): Promise<Attempt> {
+  const body = await apiRequest<unknown>(
+    `/attempts/${encodeURIComponent(id)}`,
+    { signal },
+  );
   return parseAttempt(body);
 }
 
@@ -202,10 +237,13 @@ export async function saveAnswers(
   id: string,
   answers: { questionId: string; answer: string | null }[],
 ): Promise<SaveAnswersResult> {
-  const body = await apiRequest<unknown>(`/attempts/${encodeURIComponent(id)}/answers`, {
-    method: "PUT",
-    body: { answers },
-  });
+  const body = await apiRequest<unknown>(
+    `/attempts/${encodeURIComponent(id)}/answers`,
+    {
+      method: "PUT",
+      body: { answers },
+    },
+  );
   if (!isRecord(body)) throw bad("Save");
   return {
     saved: num(body.saved) ?? 0,
@@ -216,7 +254,10 @@ export async function saveAnswers(
 }
 
 export async function submitAttempt(id: string): Promise<ClosedAttempt> {
-  const body = await apiRequest<unknown>(`/attempts/${encodeURIComponent(id)}/submit`, { method: "POST" });
+  const body = await apiRequest<unknown>(
+    `/attempts/${encodeURIComponent(id)}/submit`,
+    { method: "POST" },
+  );
   if (!isRecord(body)) throw bad("Submit");
   const closedStatus = status(body.status);
   if (!closedStatus) throw bad("Submit");

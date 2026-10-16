@@ -204,7 +204,9 @@ describe("Proctoring API (server/src/modules/proctoring)", () => {
           detectionIntervalMs: 1000,
           flagCooldownSeconds: 15,
           sustainedSeconds: { face_not_present: 2, camera_blocked: 2, camera_frozen: 8 },
+          flagSeverity: compliance.PROCTOR_FLAG_SEVERITY,
         },
+        captureLocation: false,
       });
       expect(first.config.snapshotIntervalSeconds).toBe(
         compliance.PROCTOR_SNAPSHOT_INTERVAL_SECONDS,

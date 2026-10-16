@@ -33,6 +33,7 @@ import {
   type FrameCheckOptions,
 } from "../exam/PrecheckScreen";
 import { stopStream } from "../exam/precheck";
+import { createLocationProvider } from "../proctoring/location";
 
 /**
  * X-08: open the exam with browser full screen. Off: the exam has its own window instead.
@@ -266,11 +267,18 @@ export function ExamWindowPage({
     }
   }
 
-  async function start(stream: MediaStream, face: FaceStart) {
+  async function start(
+    stream: MediaStream,
+    face: FaceStart,
+    captureLocation: boolean,
+  ) {
     streamRef.current = stream;
     faceRef.current = face;
     // Only when full screen is switched on: it has to be asked for inside the click.
     if (requireFullscreen) requestExamFullscreen();
+    // X-07: the browser asks about location once, here, not in the middle of the exam. The answer is
+    // not waited for, and a refusal changes nothing.
+    if (captureLocation) void createLocationProvider().get();
     setStarting(true);
     setStartError(null);
     // B-20: when the batch asks for the candidate's details, they come after the camera check
@@ -374,11 +382,12 @@ export function ExamWindowPage({
   return (
     <PrecheckScreen
       heading={item.paperName}
+      captureLocation={item.captureLocation}
       starting={starting}
       startError={startError}
       frameCheck={frameCheck}
       faceChecks={faceChecks}
-      onStart={(stream, face) => void start(stream, face)}
+      onStart={(stream, face) => void start(stream, face, item.captureLocation)}
       cancelLabel={hasLiveOpener() ? "Close this window" : "Back to my exams"}
       onCancel={() => {
         if (hasLiveOpener()) closeExamWindow();

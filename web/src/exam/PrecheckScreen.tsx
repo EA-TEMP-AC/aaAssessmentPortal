@@ -1,4 +1,10 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
 import {
   checkBrowser,
   checkNetwork,
@@ -40,11 +46,16 @@ export const MAX_FACE_TRIES = 3;
 
 export const ID_STEP_MESSAGES = {
   match: "The photo on the card and your face look alike.",
-  mismatch: "The photo on the card and your face do not look alike. You can continue, and a proctor will review.",
+  mismatch:
+    "The photo on the card and your face do not look alike. You can continue, and a proctor will review.",
   unreadable:
     "We could not read the photo on the card. Hold the card flat, close to the camera, with the photo in focus, then select Retry.",
-  modelFailed: "The face check could not run on this device. You can continue; a proctor will check your ID by hand.",
+  modelFailed:
+    "The face check could not run on this device. You can continue; a proctor will check your ID by hand.",
 } as const;
+
+export const LOCATION_NOTICE =
+  "This exam records your location with flag photos.";
 
 export const FALLBACK_LABEL = "Continue; a proctor will check your ID by hand";
 
@@ -64,6 +75,8 @@ type MicState = "idle" | "requesting" | "ok" | "denied" | "unavailable";
 
 type Props = {
   heading: string;
+  /** X-07: the batch records the location with flag photos. Shows a line in the notice. */
+  captureLocation?: boolean;
   starting: boolean;
   startError: string | null;
   /** Gets the live camera stream. The exam keeps it for proctoring and stops it at the end. */
@@ -76,7 +89,8 @@ type Props = {
 };
 
 function cameraError(error: unknown): string {
-  const name = error instanceof DOMException || error instanceof Error ? error.name : "";
+  const name =
+    error instanceof DOMException || error instanceof Error ? error.name : "";
   if (name === "NotAllowedError" || name === "SecurityError") {
     return "Camera permission was refused. Allow the camera in your browser's site settings, then select Check camera again.";
   }
@@ -95,14 +109,18 @@ function wait(ms: number): Promise<void> {
 
 function networkText(check: NetworkCheck | null, busy: boolean): string {
   if (busy || !check) return "Checking the connection…";
-  if (check.state === "ok") return `Connected to the exam server (${check.ms} ms).`;
-  if (check.state === "slow") return `Connected, but slow (${check.ms} ms). Answers may take longer to save.`;
-  if (check.state === "offline") return "You are offline. Connect to the internet before you start.";
+  if (check.state === "ok")
+    return `Connected to the exam server (${check.ms} ms).`;
+  if (check.state === "slow")
+    return `Connected, but slow (${check.ms} ms). Answers may take longer to save.`;
+  if (check.state === "offline")
+    return "You are offline. Connect to the internet before you start.";
   return "The exam server could not be reached. Check your connection and try again.";
 }
 
 export function PrecheckScreen({
   heading,
+  captureLocation,
   starting,
   startError,
   onStart,
@@ -115,8 +133,14 @@ export function PrecheckScreen({
   const videoRef = useRef<HTMLVideoElement>(null);
   const idVideoRef = useRef<HTMLVideoElement | null>(null);
   const selfieVideoRef = useRef<HTMLVideoElement | null>(null);
-  const panelHeadingRefs = [useRef<HTMLHeadingElement>(null), useRef<HTMLHeadingElement>(null)];
-  const tabRefs = [useRef<HTMLButtonElement>(null), useRef<HTMLButtonElement>(null)];
+  const panelHeadingRefs = [
+    useRef<HTMLHeadingElement>(null),
+    useRef<HTMLHeadingElement>(null),
+  ];
+  const tabRefs = [
+    useRef<HTMLButtonElement>(null),
+    useRef<HTMLButtonElement>(null),
+  ];
   const movedTab = useRef(false);
   const [step, setStep] = useState<0 | 1>(0);
   const streamRef = useRef<MediaStream | null>(null);
@@ -182,11 +206,16 @@ export function PrecheckScreen({
   );
 
   function jpegOf(frame: ImageBitmap): Promise<Blob> {
-    return faceChecks?.toJpeg ? faceChecks.toJpeg(frame) : toJpegBlob(frame, faceConfig);
+    return faceChecks?.toJpeg
+      ? faceChecks.toJpeg(frame)
+      : toJpegBlob(frame, faceConfig);
   }
 
   function getMatcher(): IdFaceMatcher {
-    if (!matcherRef.current) matcherRef.current = (faceChecks?.createMatcher ?? (() => new FaceApiMatcher(faceConfig)))();
+    if (!matcherRef.current)
+      matcherRef.current = (
+        faceChecks?.createMatcher ?? (() => new FaceApiMatcher(faceConfig))
+      )();
     return matcherRef.current;
   }
 
@@ -209,7 +238,11 @@ export function PrecheckScreen({
   function previewRef(target: { current: HTMLVideoElement | null }) {
     return (element: HTMLVideoElement | null) => {
       target.current = element;
-      if (element && streamRef.current && element.srcObject !== streamRef.current) {
+      if (
+        element &&
+        streamRef.current &&
+        element.srcObject !== streamRef.current
+      ) {
         element.srcObject = streamRef.current;
         void Promise.resolve(element.play()).catch(() => {});
       }
@@ -236,7 +269,9 @@ export function PrecheckScreen({
     } else if (check.result === "selfie_no_face") {
       setSelfieDone(false);
       setIdResult("pending");
-      setFaceMessage("Take the selfie again first: we need one clear view of your face.");
+      setFaceMessage(
+        "Take the selfie again first: we need one clear view of your face.",
+      );
     } else {
       setIdFailures((n) => n + 1);
       setIdResult("unreadable");
@@ -273,7 +308,12 @@ export function PrecheckScreen({
     if (!video || faceBusy) return;
     setFaceBusy("selfie");
     setFaceMessage(null);
-    const result = await capturePrecheckReference(video, getMatcher(), faceConfig, faceChecks?.deps);
+    const result = await capturePrecheckReference(
+      video,
+      getMatcher(),
+      faceConfig,
+      faceChecks?.deps,
+    );
     if (!result.ok) {
       setSelfieFailures((n) => n + 1);
       setFaceMessage(result.message);
@@ -312,7 +352,8 @@ export function PrecheckScreen({
         audio: false,
       });
     } catch (error) {
-      if (run === runId.current) setCamera({ state: "failed", message: cameraError(error) });
+      if (run === runId.current)
+        setCamera({ state: "failed", message: cameraError(error) });
       return;
     }
     if (run !== runId.current) {
@@ -325,7 +366,8 @@ export function PrecheckScreen({
         if (streamRef.current !== stream || handedOff.current) return;
         setCamera({
           state: "failed",
-          message: "The camera was turned off or its permission was removed. Select Check camera again.",
+          message:
+            "The camera was turned off or its permission was removed. Select Check camera again.",
         });
       });
     });
@@ -379,18 +421,36 @@ export function PrecheckScreen({
       stopStream(stream);
       setMic("ok");
     } catch (error) {
-      const name = error instanceof DOMException || error instanceof Error ? error.name : "";
-      setMic(name === "NotAllowedError" || name === "SecurityError" ? "denied" : "unavailable");
+      const name =
+        error instanceof DOMException || error instanceof Error
+          ? error.name
+          : "";
+      setMic(
+        name === "NotAllowedError" || name === "SecurityError"
+          ? "denied"
+          : "unavailable",
+      );
     }
   }
 
-  const idChecked = selfieDone && (idResult === "match" || idResult === "mismatch");
-  const canFallback = idFailures >= MAX_FACE_TRIES || selfieFailures >= MAX_FACE_TRIES || faceModel === "failed";
+  const idChecked =
+    selfieDone && (idResult === "match" || idResult === "mismatch");
+  const canFallback =
+    idFailures >= MAX_FACE_TRIES ||
+    selfieFailures >= MAX_FACE_TRIES ||
+    faceModel === "failed";
   const faceDone = idChecked || fallback;
 
   function start() {
     const stream = streamRef.current;
-    if (!stream || camera.state !== "passed" || !consent || !faceDone || starting) return;
+    if (
+      !stream ||
+      camera.state !== "passed" ||
+      !consent ||
+      !faceDone ||
+      starting
+    )
+      return;
     const matcher = matcherRef.current;
     handedOff.current = true;
     // Called inside the click: the page asks for full screen before it awaits anything.
@@ -410,7 +470,9 @@ export function PrecheckScreen({
 
   const networkOk = network?.state === "ok" || network?.state === "slow";
   const required: { ok: boolean; todo: string }[] = [
-    ...browser.filter((item) => item.required).map((item) => ({ ok: item.ok, todo: item.label.toLowerCase() })),
+    ...browser
+      .filter((item) => item.required)
+      .map((item) => ({ ok: item.ok, todo: item.label.toLowerCase() })),
     { ok: camera.state === "passed", todo: "camera access" },
     { ok: !networkBusy && networkOk, todo: "network speed" },
   ];
@@ -434,7 +496,8 @@ export function PrecheckScreen({
 
   function onTabKey(event: ReactKeyboardEvent<HTMLButtonElement>) {
     let next: 0 | 1 | null = null;
-    if (event.key === "ArrowRight" || event.key === "ArrowLeft") next = step === 0 ? 1 : 0;
+    if (event.key === "ArrowRight" || event.key === "ArrowLeft")
+      next = step === 0 ? 1 : 0;
     else if (event.key === "Home") next = 0;
     else if (event.key === "End") next = 1;
     if (next === null) return;
@@ -469,13 +532,20 @@ export function PrecheckScreen({
         aria-valuenow={progress}
         aria-valuetext={`Step ${step + 1} of 2: ${tabs[step]}`}
       >
-        <div className="exam-progress-bar" style={{ width: `${(progress / 2) * 100}%` }} />
+        <div
+          className="exam-progress-bar"
+          style={{ width: `${(progress / 2) * 100}%` }}
+        />
       </div>
       <p className="exam-progress-text" aria-hidden="true">
         Step {step + 1} of 2: {tabs[step]}
       </p>
 
-      <div role="tablist" aria-label="Pre-exam check steps" className="exam-tabs">
+      <div
+        role="tablist"
+        aria-label="Pre-exam check steps"
+        className="exam-tabs"
+      >
         {tabs.map((name, index) => {
           const done = index === 0 && step1Ok && step === 1;
           const locked = index === 1 && !step1Ok;
@@ -541,24 +611,40 @@ export function PrecheckScreen({
                     : "busy"
             }
             reason={cameraReason(camera)}
-            buttonLabel={camera.state === "idle" ? "Check camera" : "Retry camera check"}
+            buttonLabel={
+              camera.state === "idle" ? "Check camera" : "Retry camera check"
+            }
             onRetry={() => void runCameraCheck()}
-            disabled={camera.state === "requesting" || camera.state === "checking" || starting}
+            disabled={
+              camera.state === "requesting" ||
+              camera.state === "checking" ||
+              starting
+            }
           />
           <CheckRow
             label="Microphone"
             optional
             state={
-              mic === "ok" ? "pass" : mic === "denied" || mic === "unavailable" ? "fail" : mic === "idle" ? "idle" : "busy"
+              mic === "ok"
+                ? "pass"
+                : mic === "denied" || mic === "unavailable"
+                  ? "fail"
+                  : mic === "idle"
+                    ? "idle"
+                    : "busy"
             }
             reason={micReason(mic)}
-            buttonLabel={mic === "idle" ? "Check microphone" : "Retry microphone check"}
+            buttonLabel={
+              mic === "idle" ? "Check microphone" : "Retry microphone check"
+            }
             onRetry={() => void runMicCheck()}
             disabled={mic === "requesting" || starting}
           />
           <CheckRow
             label="Network speed"
-            state={networkBusy || !network ? "busy" : networkOk ? "pass" : "fail"}
+            state={
+              networkBusy || !network ? "busy" : networkOk ? "pass" : "fail"
+            }
             reason={networkText(network, networkBusy)}
             buttonLabel="Retry network check"
             onRetry={() => void rerunNetwork()}
@@ -576,7 +662,9 @@ export function PrecheckScreen({
             autoPlay
             hidden={!hasPreview}
           />
-          {!hasPreview ? <p className="field-hint">Your camera preview appears here.</p> : null}
+          {!hasPreview ? (
+            <p className="field-hint">Your camera preview appears here.</p>
+          ) : null}
         </div>
 
         <div className="dialog-actions">
@@ -611,7 +699,10 @@ export function PrecheckScreen({
         </h2>
         {camera.state !== "passed" ? (
           <div role="alert" className="form-error">
-            <p>The camera is not working. Go back to the browser checks and retry the camera check.</p>
+            <p>
+              The camera is not working. Go back to the browser checks and retry
+              the camera check.
+            </p>
             <button type="button" onClick={() => goTo(0)}>
               Back to browser checks
             </button>
@@ -620,8 +711,8 @@ export function PrecheckScreen({
 
         <h3>Show your ID card</h3>
         <p className="field-hint">
-          Hold your ID card in front of the camera so the photo on it is flat and in focus. The page does not read the
-          card's text or number.
+          Hold your ID card in front of the camera so the photo on it is flat
+          and in focus. The page does not read the card's text or number.
         </p>
         {hasPreview ? (
           <video
@@ -636,12 +727,19 @@ export function PrecheckScreen({
         <button
           type="button"
           onClick={() => void captureId()}
-          disabled={camera.state !== "passed" || faceBusy !== null || starting || faceModel === "failed"}
+          disabled={
+            camera.state !== "passed" ||
+            faceBusy !== null ||
+            starting ||
+            faceModel === "failed"
+          }
         >
           {idResult === "unreadable" ? "Retry" : "Capture ID card"}
         </button>
         <p role="status">
-          {camera.state === "passed" && faceModel === "loading" && "Loading the face check…"}
+          {camera.state === "passed" &&
+            faceModel === "loading" &&
+            "Loading the face check…"}
           {faceModel === "failed" && ID_STEP_MESSAGES.modelFailed}
           {faceModel !== "failed" &&
             idCaptured &&
@@ -654,7 +752,10 @@ export function PrecheckScreen({
         </p>
 
         <h3>Take a selfie</h3>
-        <p className="field-hint">Look straight at the camera, alone in the picture, with your face well lit.</p>
+        <p className="field-hint">
+          Look straight at the camera, alone in the picture, with your face well
+          lit.
+        </p>
         {hasPreview ? (
           <video
             className="exam-preview"
@@ -668,22 +769,41 @@ export function PrecheckScreen({
         <button
           type="button"
           onClick={() => void takeSelfie()}
-          disabled={camera.state !== "passed" || faceBusy !== null || starting || faceModel === "failed"}
+          disabled={
+            camera.state !== "passed" ||
+            faceBusy !== null ||
+            starting ||
+            faceModel === "failed"
+          }
         >
           {selfieDone ? "Take selfie again" : "Take selfie"}
         </button>
-        <p role="status">{selfieDone ? "Selfie taken." : camera.state === "passed" ? "No selfie yet." : ""}</p>
+        <p role="status">
+          {selfieDone
+            ? "Selfie taken."
+            : camera.state === "passed"
+              ? "No selfie yet."
+              : ""}
+        </p>
         {faceMessage ? (
           <p role="alert" className="form-error">
             {faceMessage}
           </p>
         ) : null}
         {canFallback && !faceDone ? (
-          <button type="button" onClick={() => setFallback(true)} disabled={starting}>
+          <button
+            type="button"
+            onClick={() => setFallback(true)}
+            disabled={starting}
+          >
             {FALLBACK_LABEL}
           </button>
         ) : null}
-        {fallback && !idChecked ? <p role="status">A proctor will check your ID by hand. You can start the exam.</p> : null}
+        {fallback && !idChecked ? (
+          <p role="status">
+            A proctor will check your ID by hand. You can start the exam.
+          </p>
+        ) : null}
 
         <h3>Proctoring notice</h3>
         <div className="exam-consent" id={consentId}>
@@ -691,18 +811,33 @@ export function PrecheckScreen({
           <ul>
             <li>No video is uploaded or recorded.</li>
             <li>
-              The exam software looks for things like your face leaving the camera, another person, or a phone, and
-              records a flag when it sees one. It may also take an occasional snapshot.
+              The exam software looks for things like your face leaving the
+              camera, another person, or a phone, and records a flag when it
+              sees one. It may also take an occasional snapshot.
             </li>
             <li>
-              The face on your ID card is compared with your selfie, and your face is compared with that selfie during
-              the exam. No government record is checked. The comparison happens in your browser.
+              The face on your ID card is compared with your selfie, and your
+              face is compared with that selfie during the exam. No government
+              record is checked. The comparison happens in your browser.
             </li>
-            <li>Nothing is sent except flags and a few photos, including the photo of your ID card and your selfie.</li>
-            <li>A person reviews every flag. Nothing is decided against you automatically.</li>
             <li>
-              The exam opens in its own window. Switching to another tab or window during the exam is recorded as a
-              flag.
+              Nothing is sent except flags and a few photos, including the photo
+              of your ID card and your selfie.
+            </li>
+            {captureLocation ? (
+              <li>
+                {LOCATION_NOTICE} Your browser asks for permission first. If you
+                refuse, the exam carries on and the photos say the location was
+                not shared.
+              </li>
+            ) : null}
+            <li>
+              A person reviews every flag. Nothing is decided against you
+              automatically.
+            </li>
+            <li>
+              The exam opens in its own window. Switching to another tab or
+              window during the exam is recorded as a flag.
             </li>
           </ul>
         </div>
@@ -714,7 +849,8 @@ export function PrecheckScreen({
             aria-describedby={consentId}
             disabled={starting}
           />
-          I have read the proctoring notice and agree to the camera being used during the exam.
+          I have read the proctoring notice and agree to the camera being used
+          during the exam.
         </label>
 
         {startError ? (
@@ -723,7 +859,12 @@ export function PrecheckScreen({
           </p>
         ) : null}
         <div className="dialog-actions">
-          <button type="button" onClick={start} disabled={!canStart} aria-describedby={canStart ? undefined : blockedId}>
+          <button
+            type="button"
+            onClick={start}
+            disabled={!canStart}
+            aria-describedby={canStart ? undefined : blockedId}
+          >
             {starting ? "Starting…" : "Start exam"}
           </button>
           <button type="button" onClick={() => goTo(0)} disabled={starting}>
@@ -809,7 +950,17 @@ function CheckRow({
         {label}
         {optional ? " (optional)" : ""}
       </strong>{" "}
-      <span className={state === "pass" ? "exam-check-ok" : blocking ? "form-error-text" : undefined}>{word}.</span>{" "}
+      <span
+        className={
+          state === "pass"
+            ? "exam-check-ok"
+            : blocking
+              ? "form-error-text"
+              : undefined
+        }
+      >
+        {word}.
+      </span>{" "}
       <span className="exam-check-reason" role={blocking ? "alert" : undefined}>
         {reason}
       </span>{" "}

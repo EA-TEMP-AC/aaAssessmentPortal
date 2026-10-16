@@ -176,7 +176,11 @@ export type AssignBatchInput = {
 };
 
 function responseError(): ApiError {
-  return new ApiError(502, "INVALID_RESPONSE", "Batch response was not recognised.");
+  return new ApiError(
+    502,
+    "INVALID_RESPONSE",
+    "Batch response was not recognised.",
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -184,7 +188,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function wholeNumber(value: unknown, minimum: number): number | null {
-  if (typeof value !== "number" || !Number.isInteger(value) || value < minimum) return null;
+  if (typeof value !== "number" || !Number.isInteger(value) || value < minimum)
+    return null;
   return value;
 }
 
@@ -231,13 +236,21 @@ function parseSla(value: unknown): BatchSla {
   const acceptDueAt = optionalNullableString(value.acceptDueAt);
   const assignDueAt = optionalNullableString(value.assignDueAt);
   const resultDueAt = optionalNullableString(value.resultDueAt);
-  if (acceptDueAt === undefined || assignDueAt === undefined || resultDueAt === undefined) throw responseError();
+  if (
+    acceptDueAt === undefined ||
+    assignDueAt === undefined ||
+    resultDueAt === undefined
+  )
+    throw responseError();
   if (!Array.isArray(value.breached)) throw responseError();
-  const breached = value.breached.filter((item): item is SlaKey => typeof item === "string" && isSlaKey(item));
+  const breached = value.breached.filter(
+    (item): item is SlaKey => typeof item === "string" && isSlaKey(item),
+  );
   const lateSource = value.lateActions === undefined ? [] : value.lateActions;
   if (!Array.isArray(lateSource)) throw responseError();
   const lateActions = lateSource.map((row) => {
-    if (!isRecord(row) || typeof row.key !== "string" || !isSlaKey(row.key)) throw responseError();
+    if (!isRecord(row) || typeof row.key !== "string" || !isSlaKey(row.key))
+      throw responseError();
     if (typeof row.reason !== "string") throw responseError();
     const byUserId = optionalNullableString(row.byUserId);
     const at = requiredString(row.at);
@@ -249,7 +262,12 @@ function parseSla(value: unknown): BatchSla {
 
 function parseRecognitionOverride(value: unknown): RecognitionOverride | null {
   if (value === null || value === undefined) return null;
-  if (!isRecord(value) || typeof value.reason !== "string" || typeof value.at !== "string") throw responseError();
+  if (
+    !isRecord(value) ||
+    typeof value.reason !== "string" ||
+    typeof value.at !== "string"
+  )
+    throw responseError();
   const byUserId = optionalNullableString(value.byUserId);
   if (byUserId === undefined) throw responseError();
   const checks = Array.isArray(value.checks)
@@ -260,7 +278,12 @@ function parseRecognitionOverride(value: unknown): RecognitionOverride | null {
 
 function parseRatioOverride(value: unknown): RatioOverride | null {
   if (value === null || value === undefined) return null;
-  if (!isRecord(value) || typeof value.reason !== "string" || typeof value.at !== "string") throw responseError();
+  if (
+    !isRecord(value) ||
+    typeof value.reason !== "string" ||
+    typeof value.at !== "string"
+  )
+    throw responseError();
   const byUserId = optionalNullableString(value.byUserId);
   if (byUserId === undefined) throw responseError();
   return { byUserId, reason: value.reason, at: value.at };
@@ -270,7 +293,12 @@ function parseWarnings(value: unknown): BatchWarning[] | undefined {
   if (value === undefined) return undefined;
   if (!Array.isArray(value)) throw responseError();
   return value.map((item) => {
-    if (!isRecord(item) || typeof item.code !== "string" || typeof item.message !== "string") throw responseError();
+    if (
+      !isRecord(item) ||
+      typeof item.code !== "string" ||
+      typeof item.message !== "string"
+    )
+      throw responseError();
     return { code: item.code, message: item.message, details: item.details };
   });
 }
@@ -283,7 +311,8 @@ function parseStatusHistory(value: unknown): StatusHistoryEntry[] | undefined {
     const entry: StatusHistoryEntry = {};
     if (typeof item.status === "string") entry.status = item.status;
     if (typeof item.at === "string") entry.at = item.at;
-    if (item.byUserId === null || typeof item.byUserId === "string") entry.byUserId = item.byUserId;
+    if (item.byUserId === null || typeof item.byUserId === "string")
+      entry.byUserId = item.byUserId;
     if (typeof item.action === "string") entry.action = item.action;
     if (typeof item.note === "string") entry.note = item.note;
     return entry;
@@ -296,15 +325,21 @@ export function parseBatch(value: unknown): BatchRecord {
   const abId = requiredString(value.abId);
   const qualificationId = requiredString(value.qualificationId);
   if (!id || !abId || !qualificationId) throw responseError();
-  if (typeof value.type !== "string" || !(BATCH_TYPES as readonly string[]).includes(value.type)) throw responseError();
-  if (typeof value.mode !== "string" || !isBatchMode(value.mode)) throw responseError();
+  if (
+    typeof value.type !== "string" ||
+    !(BATCH_TYPES as readonly string[]).includes(value.type)
+  )
+    throw responseError();
+  if (typeof value.mode !== "string" || !isBatchMode(value.mode))
+    throw responseError();
   const assessmentStartDate = requiredString(value.assessmentStartDate);
   const assessmentEndDate = requiredString(value.assessmentEndDate);
   const tpId = requiredString(value.tpId);
   const centreId = requiredString(value.centreId);
   const candidateCount = wholeNumber(value.candidateCount, 1);
   const sector = requiredString(value.sector);
-  if (typeof value.ratioClass !== "string" || !isRatioClass(value.ratioClass)) throw responseError();
+  if (typeof value.ratioClass !== "string" || !isRatioClass(value.ratioClass))
+    throw responseError();
   const assessmentLanguage = requiredString(value.assessmentLanguage);
   const state = requiredString(value.state);
   if (
@@ -320,27 +355,39 @@ export function parseBatch(value: unknown): BatchRecord {
     throw responseError();
   }
   if (value.learnerFeedback !== null) throw responseError();
-  if (typeof value.status !== "string" || !isBatchStatus(value.status)) throw responseError();
+  if (typeof value.status !== "string" || !isBatchStatus(value.status))
+    throw responseError();
   const statusVersion = wholeNumber(value.statusVersion, 1);
   if (statusVersion === null) throw responseError();
   const assessorId = nullableString(value.assessorId);
   const proctorId = nullableString(value.proctorId);
   const resultId = nullableString(value.resultId);
   const testPaperId = nullableString(value.testPaperId ?? null) ?? null;
-  if (assessorId === undefined || proctorId === undefined || resultId === undefined) throw responseError();
+  if (
+    assessorId === undefined ||
+    proctorId === undefined ||
+    resultId === undefined
+  )
+    throw responseError();
   const rejectReason = optionalNullableString(value.rejectReason);
   const cancelReason = optionalNullableString(value.cancelReason);
-  if (rejectReason === undefined || cancelReason === undefined) throw responseError();
+  if (rejectReason === undefined || cancelReason === undefined)
+    throw responseError();
   if (typeof value.isReassessment !== "boolean") throw responseError();
   const reassessmentOf = nullableString(value.reassessmentOf ?? null);
-  const firstAssessmentBatchId = nullableString(value.firstAssessmentBatchId ?? null);
-  if (reassessmentOf === undefined || firstAssessmentBatchId === undefined) throw responseError();
+  const firstAssessmentBatchId = nullableString(
+    value.firstAssessmentBatchId ?? null,
+  );
+  if (reassessmentOf === undefined || firstAssessmentBatchId === undefined)
+    throw responseError();
   const schemeId = nullableString(value.schemeId ?? null);
   const projectId = nullableString(value.projectId ?? null);
   if (schemeId === undefined || projectId === undefined) throw responseError();
   const sla = parseSla(value.sla);
   const accommodations = Array.isArray(value.accommodations)
-    ? value.accommodations.filter((item): item is string => typeof item === "string")
+    ? value.accommodations.filter(
+        (item): item is string => typeof item === "string",
+      )
     : [];
   return {
     id,
@@ -391,7 +438,8 @@ function parseBatchList(value: unknown): BatchListPage {
   const page = wholeNumber(value.page, 1);
   const pageSize = wholeNumber(value.pageSize, 1);
   const total = wholeNumber(value.total, 0);
-  if (page === null || pageSize === null || total === null) throw responseError();
+  if (page === null || pageSize === null || total === null)
+    throw responseError();
   return {
     page,
     pageSize,
@@ -400,7 +448,10 @@ function parseBatchList(value: unknown): BatchListPage {
   };
 }
 
-export async function listBatches(query: BatchListQuery, signal?: AbortSignal): Promise<BatchListPage> {
+export async function listBatches(
+  query: BatchListQuery,
+  signal?: AbortSignal,
+): Promise<BatchListPage> {
   const params = new URLSearchParams();
   if (query.status) params.set("status", query.status);
   if (query.from) params.set("from", query.from);
@@ -409,66 +460,117 @@ export async function listBatches(query: BatchListQuery, signal?: AbortSignal): 
   if (query.schemeId) params.set("schemeId", query.schemeId);
   if (query.projectId) params.set("projectId", query.projectId);
   params.set("page", String(query.page && query.page > 0 ? query.page : 1));
-  const pageSize = query.pageSize && isBatchPageSize(query.pageSize) ? query.pageSize : BATCH_PAGE_SIZE_DEFAULT;
+  const pageSize =
+    query.pageSize && isBatchPageSize(query.pageSize)
+      ? query.pageSize
+      : BATCH_PAGE_SIZE_DEFAULT;
   params.set("pageSize", String(pageSize));
-  const body = await apiRequest<unknown>(`/batches?${params.toString()}`, { signal });
+  const body = await apiRequest<unknown>(`/batches?${params.toString()}`, {
+    signal,
+  });
   return parseBatchList(body);
 }
 
-export async function getBatch(id: string, signal?: AbortSignal): Promise<BatchRecord> {
-  const body = await apiRequest<unknown>(`/batches/${encodeURIComponent(id)}`, { signal });
+export async function getBatch(
+  id: string,
+  signal?: AbortSignal,
+): Promise<BatchRecord> {
+  const body = await apiRequest<unknown>(`/batches/${encodeURIComponent(id)}`, {
+    signal,
+  });
   return parseBatch(body);
 }
 
-export async function createBatch(input: CreateBatchInput): Promise<BatchRecord> {
-  const body = await apiRequest<unknown>("/batches", { method: "POST", body: input });
-  return parseBatch(body);
-}
-
-export async function acceptBatch(id: string, input: AcceptBatchInput = {}): Promise<BatchRecord> {
-  const body = await apiRequest<unknown>(`/batches/${encodeURIComponent(id)}/accept`, {
+export async function createBatch(
+  input: CreateBatchInput,
+): Promise<BatchRecord> {
+  const body = await apiRequest<unknown>("/batches", {
     method: "POST",
     body: input,
   });
   return parseBatch(body);
 }
 
-export async function rejectBatch(id: string, input: RejectBatchInput): Promise<BatchRecord> {
-  const body = await apiRequest<unknown>(`/batches/${encodeURIComponent(id)}/reject`, {
-    method: "POST",
-    body: input,
-  });
+export async function acceptBatch(
+  id: string,
+  input: AcceptBatchInput = {},
+): Promise<BatchRecord> {
+  const body = await apiRequest<unknown>(
+    `/batches/${encodeURIComponent(id)}/accept`,
+    {
+      method: "POST",
+      body: input,
+    },
+  );
   return parseBatch(body);
 }
 
-export async function cancelBatch(id: string, input: ReasonBatchInput): Promise<BatchRecord> {
-  const body = await apiRequest<unknown>(`/batches/${encodeURIComponent(id)}/cancel`, {
-    method: "POST",
-    body: input,
-  });
+export async function rejectBatch(
+  id: string,
+  input: RejectBatchInput,
+): Promise<BatchRecord> {
+  const body = await apiRequest<unknown>(
+    `/batches/${encodeURIComponent(id)}/reject`,
+    {
+      method: "POST",
+      body: input,
+    },
+  );
   return parseBatch(body);
 }
 
-export async function completeBatch(id: string, input: ReasonBatchInput): Promise<BatchRecord> {
-  const body = await apiRequest<unknown>(`/batches/${encodeURIComponent(id)}/complete`, {
-    method: "POST",
-    body: input,
-  });
+export async function cancelBatch(
+  id: string,
+  input: ReasonBatchInput,
+): Promise<BatchRecord> {
+  const body = await apiRequest<unknown>(
+    `/batches/${encodeURIComponent(id)}/cancel`,
+    {
+      method: "POST",
+      body: input,
+    },
+  );
   return parseBatch(body);
 }
 
-export async function assignBatch(id: string, input: AssignBatchInput): Promise<BatchRecord> {
-  const body = await apiRequest<unknown>(`/batches/${encodeURIComponent(id)}/assign`, {
-    method: "POST",
-    body: input,
-  });
+export async function completeBatch(
+  id: string,
+  input: ReasonBatchInput,
+): Promise<BatchRecord> {
+  const body = await apiRequest<unknown>(
+    `/batches/${encodeURIComponent(id)}/complete`,
+    {
+      method: "POST",
+      body: input,
+    },
+  );
   return parseBatch(body);
 }
 
-export async function reassignBatch(id: string, input: AssignBatchInput): Promise<BatchRecord> {
-  const body = await apiRequest<unknown>(`/batches/${encodeURIComponent(id)}/reassign`, {
-    method: "POST",
-    body: input,
-  });
+export async function assignBatch(
+  id: string,
+  input: AssignBatchInput,
+): Promise<BatchRecord> {
+  const body = await apiRequest<unknown>(
+    `/batches/${encodeURIComponent(id)}/assign`,
+    {
+      method: "POST",
+      body: input,
+    },
+  );
+  return parseBatch(body);
+}
+
+export async function reassignBatch(
+  id: string,
+  input: AssignBatchInput,
+): Promise<BatchRecord> {
+  const body = await apiRequest<unknown>(
+    `/batches/${encodeURIComponent(id)}/reassign`,
+    {
+      method: "POST",
+      body: input,
+    },
+  );
   return parseBatch(body);
 }

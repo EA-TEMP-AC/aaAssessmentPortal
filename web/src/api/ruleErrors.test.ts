@@ -4,13 +4,27 @@ import { explainBatchRule } from "./ruleErrors";
 import { formatMasterDataError } from "../pages/masterData/formatApiError";
 
 it("explains RULE_OUTSIDE_RECOGNITION with each failed check", () => {
-  const error = new ApiError(409, "RULE_OUTSIDE_RECOGNITION", "Outside recognition", {
-    checks: ["sector", "state", "not_started", "expired", "unconfigured", "other"],
-  });
+  const error = new ApiError(
+    409,
+    "RULE_OUTSIDE_RECOGNITION",
+    "Outside recognition",
+    {
+      checks: [
+        "sector",
+        "state",
+        "not_started",
+        "expired",
+        "unconfigured",
+        "other",
+      ],
+    },
+  );
   const text = errorMessage(error);
   expect(text).toContain("RULE_OUTSIDE_RECOGNITION");
   expect(text).toContain("Outside recognition");
-  expect(text).toContain("The qualification sector is not a recognised sector.");
+  expect(text).toContain(
+    "The qualification sector is not a recognised sector.",
+  );
   expect(text).toContain("The centre state is not a recognised state.");
   expect(text).toContain("The recognition period has not started.");
   expect(text).toContain("The recognition period has ended.");
@@ -21,21 +35,37 @@ it("explains RULE_OUTSIDE_RECOGNITION with each failed check", () => {
 });
 
 it("explains the other Phase 1 RULE_* codes", () => {
-  expect(errorMessage(new ApiError(409, "RULE_TOA_INVALID", "ToA invalid"))).toContain("Training of Assessor");
-  expect(errorMessage(new ApiError(409, "RULE_MAX_AAS", "Too many AAs"))).toContain("more than four");
-  expect(errorMessage(new ApiError(409, "RULE_ASSESSOR_CLASH", "Clash"))).toContain("different centre");
+  expect(
+    errorMessage(new ApiError(409, "RULE_TOA_INVALID", "ToA invalid")),
+  ).toContain("Training of Assessor");
+  expect(
+    errorMessage(new ApiError(409, "RULE_MAX_AAS", "Too many AAs")),
+  ).toContain("more than four");
+  expect(
+    errorMessage(new ApiError(409, "RULE_ASSESSOR_CLASH", "Clash")),
+  ).toContain("different centre");
   expect(
     errorMessage(
-      new ApiError(409, "RULE_RATIO", "Over ratio", { ratioClass: "manufacturing", candidateCount: 30, max: 25 }),
+      new ApiError(409, "RULE_RATIO", "Over ratio", {
+        ratioClass: "manufacturing",
+        candidateCount: 30,
+        max: 25,
+      }),
     ),
   ).toContain("Maximum for this class: 25");
 });
 
 it("explains RULE_ASSESSOR_LANGUAGE on master-data alerts as well", () => {
-  const error = new ApiError(409, "RULE_ASSESSOR_LANGUAGE", "Language does not match");
+  const error = new ApiError(
+    409,
+    "RULE_ASSESSOR_LANGUAGE",
+    "Language does not match",
+  );
   const formatted = formatMasterDataError(error);
   expect(formatted.message).toContain("RULE_ASSESSOR_LANGUAGE");
   expect(formatted.message).toContain("Language does not match");
-  expect(formatted.message).toContain("do not include this batch's assessment language");
+  expect(formatted.message).toContain(
+    "do not include this batch's assessment language",
+  );
   expect(formatted.message).toContain("override reason");
 });

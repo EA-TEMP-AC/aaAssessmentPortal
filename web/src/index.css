@@ -990,6 +990,8 @@ button.button-danger {
 .proctor-thumb:focus-visible { outline: 3px solid #1d4ed8; outline-offset: 2px; }
 .proctor-thumb img { width: 10rem; height: auto; max-height: 8rem; object-fit: cover; }
 .proctor-photo-meta { margin: 0; min-width: 12rem; }
+.proctor-flag-capture { display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-start; }
+.proctor-capture-meta { margin: 0.5rem 0; min-width: 14rem; flex: 1 1 14rem; }
 .proctor-photo-large { display: block; max-width: 100%; max-height: 70vh; margin: 0 auto 0.75rem; }
 .proctor-strip { list-style: none; padding: 0; margin: 0 0 0.75rem; display: grid; grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr)); gap: 0.75rem; }
 .exam-proctor-debug { border: 1px dashed #5c6670; padding: 0.5rem 0.75rem; }

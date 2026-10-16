@@ -9,9 +9,18 @@ import type { ProctorConfig } from "../exam/proctorBridge";
  *   GET  /proctoring/sessions/:id/warnings -> { items: [{ id, message, createdAt }] }
  */
 
-export type ProctoringSession = { id: string; status: string; config: ProctorConfig };
+export type ProctoringSession = {
+  id: string;
+  status: string;
+  config: ProctorConfig;
+  captureLocation: boolean;
+};
 
-export type ProctorWarning = { id: string; message: string; createdAt: string | null };
+export type ProctorWarning = {
+  id: string;
+  message: string;
+  createdAt: string | null;
+};
 
 /** Used when the server leaves a setting out. */
 export const DEFAULT_PROCTOR_CONFIG: ProctorConfig = {
@@ -22,7 +31,11 @@ export const DEFAULT_PROCTOR_CONFIG: ProctorConfig = {
 };
 
 function bad(what: string): ApiError {
-  return new ApiError(502, "INVALID_RESPONSE", `${what} response was not recognised.`);
+  return new ApiError(
+    502,
+    "INVALID_RESPONSE",
+    `${what} response was not recognised.`,
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -34,49 +47,99 @@ function str(value: unknown): string | null {
 }
 
 function positive(value: unknown, fallback: number): number {
-  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : fallback;
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? value
+    : fallback;
 }
 
 export function parseProctorConfig(value: unknown): ProctorConfig {
-  if (!isRecord(value)) return { ...DEFAULT_PROCTOR_CONFIG, sustainedSeconds: {} };
+  if (!isRecord(value))
+    return { ...DEFAULT_PROCTOR_CONFIG, sustainedSeconds: {} };
   const sustainedSeconds: Record<string, number> = {};
   if (isRecord(value.sustainedSeconds)) {
     for (const [key, seconds] of Object.entries(value.sustainedSeconds)) {
-      if (typeof seconds === "number" && Number.isFinite(seconds) && seconds >= 0) sustainedSeconds[key] = seconds;
+      if (
+        typeof seconds === "number" &&
+        Number.isFinite(seconds) &&
+        seconds >= 0
+      )
+        sustainedSeconds[key] = seconds;
+    }
+  }
+  const flagSeverity: Record<string, string> = {};
+  if (isRecord(value.flagSeverity)) {
+    for (const [key, level] of Object.entries(value.flagSeverity)) {
+      if (level === "low" || level === "medium" || level === "high")
+        flagSeverity[key] = level;
     }
   }
   return {
-    snapshotIntervalSeconds: positive(value.snapshotIntervalSeconds, DEFAULT_PROCTOR_CONFIG.snapshotIntervalSeconds),
-    detectionIntervalMs: positive(value.detectionIntervalMs, DEFAULT_PROCTOR_CONFIG.detectionIntervalMs),
-    flagCooldownSeconds: positive(value.flagCooldownSeconds, DEFAULT_PROCTOR_CONFIG.flagCooldownSeconds),
+    snapshotIntervalSeconds: positive(
+      value.snapshotIntervalSeconds,
+      DEFAULT_PROCTOR_CONFIG.snapshotIntervalSeconds,
+    ),
+    detectionIntervalMs: positive(
+      value.detectionIntervalMs,
+      DEFAULT_PROCTOR_CONFIG.detectionIntervalMs,
+    ),
+    flagCooldownSeconds: positive(
+      value.flagCooldownSeconds,
+      DEFAULT_PROCTOR_CONFIG.flagCooldownSeconds,
+    ),
     sustainedSeconds,
     ...(typeof value.snapshotAtStartAndEnd === "boolean"
       ? { snapshotAtStartAndEnd: value.snapshotAtStartAndEnd }
       : {}),
+    ...(Object.keys(flagSeverity).length > 0 ? { flagSeverity } : {}),
   };
 }
 
-export async function createProctoringSession(attemptId: string): Promise<ProctoringSession> {
-  const body = await apiRequest<unknown>("/proctoring/sessions", { method: "POST", body: { attemptId } });
+export async function createProctoringSession(
+  attemptId: string,
+): Promise<ProctoringSession> {
+  const body = await apiRequest<unknown>("/proctoring/sessions", {
+    method: "POST",
+    body: { attemptId },
+  });
   if (!isRecord(body)) throw bad("Proctoring session");
   const id = str(body.id);
   if (!id) throw bad("Proctoring session");
-  return { id, status: str(body.status) ?? "active", config: parseProctorConfig(body.config) };
+  return {
+    id,
+    status: str(body.status) ?? "active",
+    config: parseProctorConfig(body.config),
+    captureLocation: body.captureLocation === true,
+  };
 }
 
 /** B-20: the heartbeat also says whether the flag policy has paused the attempt. */
-export async function sendHeartbeat(sessionId: string): Promise<{ paused: boolean }> {
-  const body = await apiRequest<unknown>(`/proctoring/sessions/${encodeURIComponent(sessionId)}/heartbeat`, {
-    method: "POST",
-  });
+export async function sendHeartbeat(
+  sessionId: string,
+): Promise<{ paused: boolean }> {
+  const body = await apiRequest<unknown>(
+    `/proctoring/sessions/${encodeURIComponent(sessionId)}/heartbeat`,
+    {
+      method: "POST",
+    },
+  );
   return { paused: isRecord(body) && body.paused === true };
 }
 
-export async function listWarnings(sessionId: string, signal?: AbortSignal): Promise<ProctorWarning[]> {
-  const body = await apiRequest<unknown>(`/proctoring/sessions/${encodeURIComponent(sessionId)}/warnings`, {
-    signal,
-  });
-  const rows = Array.isArray(body) ? body : isRecord(body) && Array.isArray(body.items) ? body.items : null;
+export async function listWarnings(
+  sessionId: string,
+  signal?: AbortSignal,
+): Promise<ProctorWarning[]> {
+  const body = await apiRequest<unknown>(
+    `/proctoring/sessions/${encodeURIComponent(sessionId)}/warnings`,
+    {
+      signal,
+    },
+  );
+  const rows = Array.isArray(body)
+    ? body
+    : isRecord(body) && Array.isArray(body.items)
+      ? body.items
+      : null;
   if (!rows) throw bad("Warnings");
   return rows.flatMap((row) => {
     if (!isRecord(row)) return [];

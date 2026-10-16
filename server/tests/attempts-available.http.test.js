@@ -194,6 +194,7 @@ describe("GET /api/v1/attempts/available (B-19)", () => {
       batchName: `ELE/Q0001 Field Technician, ${day(-1)} to ${day(1)}`,
       assessmentStartDate: day(-1),
       assessmentEndDate: day(1),
+      captureLocation: false,
       paperId: String(w.paper._id),
       paperCode: expect.any(String),
       paperName: "Field Technician (en)",

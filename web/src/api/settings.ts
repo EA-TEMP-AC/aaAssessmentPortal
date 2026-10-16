@@ -12,7 +12,9 @@ export type SaveAccessSettingsInput = {
   ncvetViewerCanSeeAbQueue?: boolean;
 };
 
-export async function getAccessSettings(signal?: AbortSignal): Promise<AccessSettings> {
+export async function getAccessSettings(
+  signal?: AbortSignal,
+): Promise<AccessSettings> {
   return apiRequest<AccessSettings>("/settings/access", { signal });
 }
 

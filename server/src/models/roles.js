@@ -272,6 +272,9 @@ export const TEST_APPROVE_ROLES = Object.freeze(["ab_reviewer"]);
 /** PUT /batches/:id/test-paper. B-18a (D5): aa_admin picks the one paper of a batch. */
 export const BATCH_TEST_PAPER_ROLES = Object.freeze(["aa_admin"]);
 
+/** PUT /batches/:id/capture-location. X-07: aa_admin turns location on flag photos on or off. */
+export const BATCH_CAPTURE_LOCATION_ROLES = Object.freeze(["aa_admin"]);
+
 /** GET /tests, GET /tests/:id, regenerate-check. E-01: candidate, tp and the rest get nothing. */
 export const TEST_READ_ROLES = Object.freeze(["aa_admin", "sme", "ab_reviewer"]);
 /** Sector coverage reads. Q-05: same readers as the question bank. */
@@ -370,3 +373,11 @@ export const CANDIDATE_INFO_READ_ROLES = Object.freeze(["aa_admin", "tp"]);
 
 /** POST /proctoring/sessions/:id/unlock. B-20: aa_admin, or the proctor of that batch. */
 export const PROCTORING_UNLOCK_ROLES = Object.freeze(["aa_admin", "proctor"]);
+/**
+ * GET /proctoring/flags/:id/capture. X-07: photo details for a flag. The readers of the review
+ * page plus the batch's training partner (scoped to their own batches in the service).
+ */
+export const PROCTORING_CAPTURE_READ_ROLES = Object.freeze([...PROCTORING_READ_ROLES, "tp"]);
+
+/** X-07: who may see the coordinates of a flag photo. Coordinates are personal data. */
+export const PROCTORING_LOCATION_ROLES = Object.freeze(["aa_admin", "tp", "proctor"]);

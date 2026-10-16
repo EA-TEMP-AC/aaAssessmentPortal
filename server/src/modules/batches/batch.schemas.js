@@ -127,6 +127,9 @@ export const listBatchesQuerySchema = z
 /** PUT /batches/:id/test-paper. D5. */
 export const testPaperBodySchema = z.object({ testPaperId: objectIdSchema }).strict();
 
+/** X-07: PUT /batches/:id/capture-location. */
+export const captureLocationBodySchema = z.object({ captureLocation: z.boolean() }).strict();
+
 /** PUT /batches/:id/learner-feedback. `reason` is required exactly when `collected` is false. */
 export const learnerFeedbackBodySchema = z
   .object({

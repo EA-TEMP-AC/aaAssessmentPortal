@@ -65,7 +65,12 @@ export type SessionItem = {
   paused: boolean;
 };
 
-export type SessionPage = { page: number; pageSize: number; total: number; items: SessionItem[] };
+export type SessionPage = {
+  page: number;
+  pageSize: number;
+  total: number;
+  items: SessionItem[];
+};
 
 export type FlagReview = {
   decision: Decision;
@@ -83,6 +88,8 @@ export type Flag = {
   detail: { label?: string; count?: number; confidence?: number } | null;
   /** How long the condition must last before the browser raises this type; null for one-off events. */
   sustainedSeconds: number | null;
+  /** X-07: whether coordinates were kept for this flag. The coordinates come from getFlagCapture. */
+  locationStatus: "captured" | "not_shared";
   review: FlagReview | null;
 };
 
@@ -93,15 +100,31 @@ export type SessionLock = {
   pausedAt: string | null;
   timesPaused: number;
   countedFlags: number;
-  policy: { action: "record" | "pause"; pauseAfterFlags: number; countSeverities: string[] };
+  policy: {
+    action: "record" | "pause";
+    pauseAfterFlags: number;
+    countSeverities: string[];
+  };
 };
 
-export type SessionDetail = SessionItem & { flags: Flag[]; warnings: Warning[]; lock: SessionLock | null };
+export type SessionDetail = SessionItem & {
+  flags: Flag[];
+  warnings: Warning[];
+  lock: SessionLock | null;
+};
 
-export type SessionQuery = { batchId?: string; status?: string; minSeverity?: string };
+export type SessionQuery = {
+  batchId?: string;
+  status?: string;
+  minSeverity?: string;
+};
 
 function bad(what: string): ApiError {
-  return new ApiError(502, "INVALID_RESPONSE", `${what} response was not recognised.`);
+  return new ApiError(
+    502,
+    "INVALID_RESPONSE",
+    `${what} response was not recognised.`,
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -117,15 +140,25 @@ function num(value: unknown): number {
 }
 
 function isSeverity(value: unknown): value is Severity {
-  return typeof value === "string" && (SEVERITIES as readonly string[]).includes(value);
+  return (
+    typeof value === "string" &&
+    (SEVERITIES as readonly string[]).includes(value)
+  );
 }
 
 function isStatus(value: unknown): value is SessionStatus {
-  return typeof value === "string" && (SESSION_STATUSES as readonly string[]).includes(value);
+  return (
+    typeof value === "string" &&
+    (SESSION_STATUSES as readonly string[]).includes(value)
+  );
 }
 
 function isDecision(value: unknown): value is Decision {
-  return value === "dismiss" || value === "warn" || value === "invalidate_recommended";
+  return (
+    value === "dismiss" ||
+    value === "warn" ||
+    value === "invalidate_recommended"
+  );
 }
 
 function parseItem(value: unknown): SessionItem {
@@ -134,7 +167,13 @@ function parseItem(value: unknown): SessionItem {
   const attemptId = str(value.attemptId);
   const batchId = str(value.batchId);
   const candidateId = str(value.candidateId);
-  if (!id || !attemptId || !batchId || !candidateId || !isStatus(value.status)) {
+  if (
+    !id ||
+    !attemptId ||
+    !batchId ||
+    !candidateId ||
+    !isStatus(value.status)
+  ) {
     throw bad("Proctoring session");
   }
   const counts = isRecord(value.flagCounts) ? value.flagCounts : {};
@@ -147,7 +186,11 @@ function parseItem(value: unknown): SessionItem {
     status: value.status,
     startedAt: str(value.startedAt),
     lastSeenAt: str(value.lastSeenAt),
-    flagCounts: { low: num(counts.low), medium: num(counts.medium), high: num(counts.high) },
+    flagCounts: {
+      low: num(counts.low),
+      medium: num(counts.medium),
+      high: num(counts.high),
+    },
     unreviewedCount: num(value.unreviewedCount),
     warningCount: num(value.warningCount),
     invalidationRecommended: value.invalidationRecommended === true,
@@ -167,7 +210,9 @@ export function parseLock(value: unknown): SessionLock | null {
       action: policy.action === "pause" ? "pause" : "record",
       pauseAfterFlags: num(policy.pauseAfterFlags),
       countSeverities: Array.isArray(policy.countSeverities)
-        ? policy.countSeverities.filter((s): s is string => typeof s === "string")
+        ? policy.countSeverities.filter(
+            (s): s is string => typeof s === "string",
+          )
         : [],
     },
   };
@@ -188,12 +233,19 @@ function parseFlag(value: unknown): Flag {
   const id = str(value.id);
   const type = str(value.type);
   const capturedAt = str(value.capturedAt);
-  if (!id || !type || !capturedAt || !isSeverity(value.severity)) throw bad("Proctoring flag");
+  if (!id || !type || !capturedAt || !isSeverity(value.severity))
+    throw bad("Proctoring flag");
   const detail = isRecord(value.detail)
     ? {
         label: str(value.detail.label) ?? undefined,
-        count: typeof value.detail.count === "number" ? value.detail.count : undefined,
-        confidence: typeof value.detail.confidence === "number" ? value.detail.confidence : undefined,
+        count:
+          typeof value.detail.count === "number"
+            ? value.detail.count
+            : undefined,
+        confidence:
+          typeof value.detail.confidence === "number"
+            ? value.detail.confidence
+            : undefined,
       }
     : null;
   return {
@@ -204,7 +256,12 @@ function parseFlag(value: unknown): Flag {
     evidenceId: str(value.evidenceId),
     detail,
     sustainedSeconds:
-      typeof value.sustainedSeconds === "number" && Number.isFinite(value.sustainedSeconds) ? value.sustainedSeconds : null,
+      typeof value.sustainedSeconds === "number" &&
+      Number.isFinite(value.sustainedSeconds)
+        ? value.sustainedSeconds
+        : null,
+    locationStatus:
+      value.locationStatus === "captured" ? "captured" : "not_shared",
     review: parseReview(value.review),
   };
 }
@@ -217,15 +274,22 @@ function parseWarning(value: unknown): Warning | null {
   return id && message && createdAt ? { id, message, createdAt } : null;
 }
 
-export async function listProctoringSessions(query: SessionQuery, signal?: AbortSignal): Promise<SessionPage> {
+export async function listProctoringSessions(
+  query: SessionQuery,
+  signal?: AbortSignal,
+): Promise<SessionPage> {
   const params = new URLSearchParams();
   for (const key of ["batchId", "status", "minSeverity"] as const) {
     const value = query[key]?.trim();
     if (value) params.set(key, value);
   }
   const qs = params.toString();
-  const body = await apiRequest<unknown>(`/proctoring/sessions${qs ? `?${qs}` : ""}`, { signal });
-  if (!isRecord(body) || !Array.isArray(body.items)) throw bad("Proctoring sessions");
+  const body = await apiRequest<unknown>(
+    `/proctoring/sessions${qs ? `?${qs}` : ""}`,
+    { signal },
+  );
+  if (!isRecord(body) || !Array.isArray(body.items))
+    throw bad("Proctoring sessions");
   return {
     page: num(body.page) || 1,
     pageSize: num(body.pageSize) || 50,
@@ -234,9 +298,16 @@ export async function listProctoringSessions(query: SessionQuery, signal?: Abort
   };
 }
 
-export async function getProctoringSession(id: string, signal?: AbortSignal): Promise<SessionDetail> {
-  const body = await apiRequest<unknown>(`/proctoring/sessions/${encodeURIComponent(id)}`, { signal });
-  if (!isRecord(body) || !Array.isArray(body.flags)) throw bad("Proctoring session");
+export async function getProctoringSession(
+  id: string,
+  signal?: AbortSignal,
+): Promise<SessionDetail> {
+  const body = await apiRequest<unknown>(
+    `/proctoring/sessions/${encodeURIComponent(id)}`,
+    { signal },
+  );
+  if (!isRecord(body) || !Array.isArray(body.flags))
+    throw bad("Proctoring session");
   return {
     ...parseItem(body),
     flags: body.flags.map(parseFlag),
@@ -248,10 +319,15 @@ export async function getProctoringSession(id: string, signal?: AbortSignal): Pr
 }
 
 /** B-20: lifts a flag-policy pause. aa_admin, or the proctor of the batch. */
-export async function unlockProctoringSession(id: string): Promise<SessionLock | null> {
-  const body = await apiRequest<unknown>(`/proctoring/sessions/${encodeURIComponent(id)}/unlock`, {
-    method: "POST",
-  });
+export async function unlockProctoringSession(
+  id: string,
+): Promise<SessionLock | null> {
+  const body = await apiRequest<unknown>(
+    `/proctoring/sessions/${encodeURIComponent(id)}/unlock`,
+    {
+      method: "POST",
+    },
+  );
   return isRecord(body) ? parseLock(body.lock) : null;
 }
 
@@ -259,21 +335,96 @@ export async function unlockProctoringSession(id: string): Promise<SessionLock |
  * Every snapshot of a session (X-06), newest first. Reads the evidence list page by page; the
  * server caps a page at 100. Stops after 10 pages so a very long session cannot loop for long.
  */
-export async function listSessionSnapshots(sessionId: string, signal?: AbortSignal): Promise<EvidenceRow[]> {
+export async function listSessionSnapshots(
+  sessionId: string,
+  signal?: AbortSignal,
+): Promise<EvidenceRow[]> {
   const rows: EvidenceRow[] = [];
   for (let page = 1; page <= 10; page += 1) {
-    const result = await listEvidence({ sessionId, kind: "proctor_snapshot", page, pageSize: 100 }, signal);
+    const result = await listEvidence(
+      { sessionId, kind: "proctor_snapshot", page, pageSize: 100 },
+      signal,
+    );
     rows.push(...result.items);
     if (rows.length >= result.total || result.items.length === 0) break;
   }
   return rows;
 }
 
-export async function reviewProctoringFlag(id: string, decision: Decision, note?: string): Promise<Flag> {
+export async function reviewProctoringFlag(
+  id: string,
+  decision: Decision,
+  note?: string,
+): Promise<Flag> {
   const trimmed = note?.trim();
-  const body = await apiRequest<unknown>(`/proctoring/flags/${encodeURIComponent(id)}/review`, {
-    method: "PATCH",
-    body: trimmed ? { decision, note: trimmed } : { decision },
-  });
+  const body = await apiRequest<unknown>(
+    `/proctoring/flags/${encodeURIComponent(id)}/review`,
+    {
+      method: "PATCH",
+      body: trimmed ? { decision, note: trimmed } : { decision },
+    },
+  );
   return parseFlag(body);
+}
+
+/** X-07: what the server saved about a flag photo, to read next to the picture. */
+export type FlagCapture = {
+  flagId: string;
+  type: string;
+  reason: string;
+  severity: Severity;
+  /** The browser's clock; the time drawn on the photo comes from it. */
+  capturedAt: string;
+  /** The server's clock when the flag arrived. */
+  receivedAt: string;
+  evidenceId: string | null;
+  locationStatus: "captured" | "not_shared";
+  /** False for roles that may not see coordinates (assessor, awarding body reviewer, NCVET viewer). */
+  locationVisible: boolean;
+  location: {
+    latitude: number;
+    longitude: number;
+    accuracy: number | null;
+  } | null;
+};
+
+export async function getFlagCapture(
+  flagId: string,
+  signal?: AbortSignal,
+): Promise<FlagCapture> {
+  const body = await apiRequest<unknown>(
+    `/proctoring/flags/${encodeURIComponent(flagId)}/capture`,
+    { signal },
+  );
+  if (!isRecord(body)) throw bad("Flag photo details");
+  const id = str(body.flagId);
+  const type = str(body.type);
+  const capturedAt = str(body.capturedAt);
+  const receivedAt = str(body.receivedAt);
+  if (!id || !type || !capturedAt || !receivedAt || !isSeverity(body.severity))
+    throw bad("Flag photo details");
+  const loc = body.location;
+  const location =
+    isRecord(loc) &&
+    typeof loc.latitude === "number" &&
+    typeof loc.longitude === "number"
+      ? {
+          latitude: loc.latitude,
+          longitude: loc.longitude,
+          accuracy: typeof loc.accuracy === "number" ? loc.accuracy : null,
+        }
+      : null;
+  return {
+    flagId: id,
+    type,
+    reason: str(body.reason) ?? type,
+    severity: body.severity,
+    capturedAt,
+    receivedAt,
+    evidenceId: str(body.evidenceId),
+    locationStatus:
+      body.locationStatus === "captured" ? "captured" : "not_shared",
+    locationVisible: body.locationVisible === true,
+    location,
+  };
 }

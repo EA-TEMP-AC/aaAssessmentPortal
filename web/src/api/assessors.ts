@@ -114,7 +114,11 @@ export type AvailableAssessorsQuery = {
 };
 
 function responseError(kind: string): ApiError {
-  return new ApiError(502, "INVALID_RESPONSE", `${kind} response was not recognised.`);
+  return new ApiError(
+    502,
+    "INVALID_RESPONSE",
+    `${kind} response was not recognised.`,
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -133,7 +137,8 @@ function nullableString(value: unknown): string | null | undefined {
 }
 
 function stringList(value: unknown): string[] | null {
-  if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) return null;
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string"))
+    return null;
   return value;
 }
 
@@ -155,7 +160,8 @@ export function parseAssessor(value: unknown): AssessorRecord {
   const email = nullableString(value.email);
   const qualifications = stringList(value.qualifications) ?? [];
   const languages = stringList(value.languages) ?? [];
-  if (!id || !name || code === undefined || email === undefined) throw responseError("Assessor");
+  if (!id || !name || code === undefined || email === undefined)
+    throw responseError("Assessor");
   const years =
     value.yearsOfExperience === null || value.yearsOfExperience === undefined
       ? null
@@ -163,7 +169,10 @@ export function parseAssessor(value: unknown): AssessorRecord {
         ? value.yearsOfExperience
         : undefined;
   if (years === undefined) throw responseError("Assessor");
-  if (typeof value.otherAaCount !== "number" || typeof value.undertaking !== "boolean") {
+  if (
+    typeof value.otherAaCount !== "number" ||
+    typeof value.undertaking !== "boolean"
+  ) {
     throw responseError("Assessor");
   }
   if (typeof value.active !== "boolean") throw responseError("Assessor");
@@ -190,9 +199,18 @@ export function parseProctor(value: unknown): ProctorRecord {
   const email = nullableString(value.email);
   const qualifications = stringList(value.qualifications) ?? [];
   const languages = stringList(value.languages) ?? [];
-  if (!id || !name || code === undefined || email === undefined) throw responseError("Proctor");
+  if (!id || !name || code === undefined || email === undefined)
+    throw responseError("Proctor");
   if (typeof value.active !== "boolean") throw responseError("Proctor");
-  return { id, name, code, email, qualifications, languages, active: value.active };
+  return {
+    id,
+    name,
+    code,
+    email,
+    qualifications,
+    languages,
+    active: value.active,
+  };
 }
 
 export async function listAvailableAssessors(
@@ -205,8 +223,11 @@ export async function listAvailableAssessors(
   if (query.languages) params.set("languages", query.languages);
   if (query.batchId) params.set("batchId", query.batchId);
   const suffix = params.toString() ? `?${params.toString()}` : "";
-  const body = await apiRequest<unknown>(`/assessors/available${suffix}`, { signal });
-  if (!isRecord(body) || !Array.isArray(body.items)) throw responseError("Available assessors");
+  const body = await apiRequest<unknown>(`/assessors/available${suffix}`, {
+    signal,
+  });
+  if (!isRecord(body) || !Array.isArray(body.items))
+    throw responseError("Available assessors");
   return body.items.map((item) => parseAssessor(item));
 }
 
@@ -216,12 +237,20 @@ export async function listAssessors(
 ): Promise<AssessorListPage> {
   const params = new URLSearchParams();
   params.set("page", String(query.page && query.page > 0 ? query.page : 1));
-  params.set("pageSize", String(query.pageSize && query.pageSize > 0 ? query.pageSize : 20));
-  if (query.active !== undefined) params.set("active", query.active ? "true" : "false");
-  const body = await apiRequest<unknown>(`/assessors?${params.toString()}`, { signal });
-  if (!isRecord(body) || !Array.isArray(body.items)) throw responseError("Assessor list");
+  params.set(
+    "pageSize",
+    String(query.pageSize && query.pageSize > 0 ? query.pageSize : 20),
+  );
+  if (query.active !== undefined)
+    params.set("active", query.active ? "true" : "false");
+  const body = await apiRequest<unknown>(`/assessors?${params.toString()}`, {
+    signal,
+  });
+  if (!isRecord(body) || !Array.isArray(body.items))
+    throw responseError("Assessor list");
   const page = typeof body.page === "number" ? body.page : 1;
-  const pageSize = typeof body.pageSize === "number" ? body.pageSize : body.items.length;
+  const pageSize =
+    typeof body.pageSize === "number" ? body.pageSize : body.items.length;
   const total = typeof body.total === "number" ? body.total : body.items.length;
   return {
     page,
@@ -231,28 +260,48 @@ export async function listAssessors(
   };
 }
 
-export async function getAssessor(id: string, signal?: AbortSignal): Promise<AssessorRecord> {
-  const body = await apiRequest<unknown>(`/assessors/${encodeURIComponent(id)}`, { signal });
+export async function getAssessor(
+  id: string,
+  signal?: AbortSignal,
+): Promise<AssessorRecord> {
+  const body = await apiRequest<unknown>(
+    `/assessors/${encodeURIComponent(id)}`,
+    { signal },
+  );
   return parseAssessor(body);
 }
 
-export async function createAssessor(input: CreateAssessorInput): Promise<AssessorRecord> {
-  const body = await apiRequest<unknown>("/assessors", { method: "POST", body: input });
-  return parseAssessor(body);
-}
-
-export async function updateAssessor(id: string, input: PatchAssessorInput): Promise<AssessorRecord> {
-  const body = await apiRequest<unknown>(`/assessors/${encodeURIComponent(id)}`, {
-    method: "PATCH",
+export async function createAssessor(
+  input: CreateAssessorInput,
+): Promise<AssessorRecord> {
+  const body = await apiRequest<unknown>("/assessors", {
+    method: "POST",
     body: input,
   });
   return parseAssessor(body);
 }
 
+export async function updateAssessor(
+  id: string,
+  input: PatchAssessorInput,
+): Promise<AssessorRecord> {
+  const body = await apiRequest<unknown>(
+    `/assessors/${encodeURIComponent(id)}`,
+    {
+      method: "PATCH",
+      body: input,
+    },
+  );
+  return parseAssessor(body);
+}
+
 export async function deactivateAssessor(id: string): Promise<AssessorRecord> {
-  const body = await apiRequest<unknown>(`/assessors/${encodeURIComponent(id)}`, {
-    method: "DELETE",
-  });
+  const body = await apiRequest<unknown>(
+    `/assessors/${encodeURIComponent(id)}`,
+    {
+      method: "DELETE",
+    },
+  );
   return parseAssessor(body);
 }
 
@@ -262,12 +311,20 @@ export async function listProctors(
 ): Promise<ProctorListPage> {
   const params = new URLSearchParams();
   params.set("page", String(query.page && query.page > 0 ? query.page : 1));
-  params.set("pageSize", String(query.pageSize && query.pageSize > 0 ? query.pageSize : 20));
-  if (query.active !== undefined) params.set("active", query.active ? "true" : "false");
-  const body = await apiRequest<unknown>(`/proctors?${params.toString()}`, { signal });
-  if (!isRecord(body) || !Array.isArray(body.items)) throw responseError("Proctor list");
+  params.set(
+    "pageSize",
+    String(query.pageSize && query.pageSize > 0 ? query.pageSize : 20),
+  );
+  if (query.active !== undefined)
+    params.set("active", query.active ? "true" : "false");
+  const body = await apiRequest<unknown>(`/proctors?${params.toString()}`, {
+    signal,
+  });
+  if (!isRecord(body) || !Array.isArray(body.items))
+    throw responseError("Proctor list");
   const page = typeof body.page === "number" ? body.page : 1;
-  const pageSize = typeof body.pageSize === "number" ? body.pageSize : body.items.length;
+  const pageSize =
+    typeof body.pageSize === "number" ? body.pageSize : body.items.length;
   const total = typeof body.total === "number" ? body.total : body.items.length;
   return {
     page,
@@ -277,28 +334,47 @@ export async function listProctors(
   };
 }
 
-export async function getProctor(id: string, signal?: AbortSignal): Promise<ProctorRecord> {
-  const body = await apiRequest<unknown>(`/proctors/${encodeURIComponent(id)}`, { signal });
+export async function getProctor(
+  id: string,
+  signal?: AbortSignal,
+): Promise<ProctorRecord> {
+  const body = await apiRequest<unknown>(
+    `/proctors/${encodeURIComponent(id)}`,
+    { signal },
+  );
   return parseProctor(body);
 }
 
-export async function createProctor(input: CreateProctorInput): Promise<ProctorRecord> {
-  const body = await apiRequest<unknown>("/proctors", { method: "POST", body: input });
-  return parseProctor(body);
-}
-
-export async function updateProctor(id: string, input: PatchProctorInput): Promise<ProctorRecord> {
-  const body = await apiRequest<unknown>(`/proctors/${encodeURIComponent(id)}`, {
-    method: "PATCH",
+export async function createProctor(
+  input: CreateProctorInput,
+): Promise<ProctorRecord> {
+  const body = await apiRequest<unknown>("/proctors", {
+    method: "POST",
     body: input,
   });
   return parseProctor(body);
 }
 
-export async function deactivateProctor(id: string): Promise<ProctorRecord> {
-  const body = await apiRequest<unknown>(`/proctors/${encodeURIComponent(id)}`, {
-    method: "DELETE",
-  });
+export async function updateProctor(
+  id: string,
+  input: PatchProctorInput,
+): Promise<ProctorRecord> {
+  const body = await apiRequest<unknown>(
+    `/proctors/${encodeURIComponent(id)}`,
+    {
+      method: "PATCH",
+      body: input,
+    },
+  );
   return parseProctor(body);
 }
 
+export async function deactivateProctor(id: string): Promise<ProctorRecord> {
+  const body = await apiRequest<unknown>(
+    `/proctors/${encodeURIComponent(id)}`,
+    {
+      method: "DELETE",
+    },
+  );
+  return parseProctor(body);
+}

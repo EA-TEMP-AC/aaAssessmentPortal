@@ -32,7 +32,11 @@ export type PublicSiteQuery = {
 };
 
 function invalid(what: string): ApiError {
-  return new ApiError(502, "INVALID_RESPONSE", `${what} response was not recognised.`);
+  return new ApiError(
+    502,
+    "INVALID_RESPONSE",
+    `${what} response was not recognised.`,
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -40,7 +44,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export function parsePublicSiteItem(value: unknown): PublicSiteItem {
-  if (!isRecord(value) || typeof value.id !== "string" || value.id.length === 0) {
+  if (
+    !isRecord(value) ||
+    typeof value.id !== "string" ||
+    value.id.length === 0
+  ) {
     throw invalid("Public site item");
   }
   return {
@@ -65,21 +73,39 @@ export async function listPublicSite(
 ): Promise<PublicSiteList> {
   const params = new URLSearchParams();
   params.set("page", String(query.page && query.page > 0 ? query.page : 1));
-  params.set("pageSize", String(query.pageSize && query.pageSize > 0 ? query.pageSize : PUBLIC_SITE_PAGE_SIZE));
-  if (query.published !== undefined) params.set("published", query.published ? "true" : "false");
-  if (query.archived !== undefined) params.set("archived", query.archived ? "true" : "false");
-  const body = await apiRequest<unknown>(`${path(slug)}?${params.toString()}`, { signal });
-  if (!isRecord(body) || !Array.isArray(body.items)) throw invalid("Public site list");
+  params.set(
+    "pageSize",
+    String(
+      query.pageSize && query.pageSize > 0
+        ? query.pageSize
+        : PUBLIC_SITE_PAGE_SIZE,
+    ),
+  );
+  if (query.published !== undefined)
+    params.set("published", query.published ? "true" : "false");
+  if (query.archived !== undefined)
+    params.set("archived", query.archived ? "true" : "false");
+  const body = await apiRequest<unknown>(`${path(slug)}?${params.toString()}`, {
+    signal,
+  });
+  if (!isRecord(body) || !Array.isArray(body.items))
+    throw invalid("Public site list");
   return {
     page: typeof body.page === "number" ? body.page : 1,
-    pageSize: typeof body.pageSize === "number" ? body.pageSize : body.items.length,
+    pageSize:
+      typeof body.pageSize === "number" ? body.pageSize : body.items.length,
     total: typeof body.total === "number" ? body.total : body.items.length,
     items: body.items.map(parsePublicSiteItem),
   };
 }
 
-export async function createPublicSiteItem(slug: string, body: Record<string, unknown>): Promise<PublicSiteItem> {
-  return parsePublicSiteItem(await apiRequest<unknown>(path(slug), { method: "POST", body }));
+export async function createPublicSiteItem(
+  slug: string,
+  body: Record<string, unknown>,
+): Promise<PublicSiteItem> {
+  return parsePublicSiteItem(
+    await apiRequest<unknown>(path(slug), { method: "POST", body }),
+  );
 }
 
 export async function updatePublicSiteItem(
@@ -87,10 +113,15 @@ export async function updatePublicSiteItem(
   id: string,
   body: Record<string, unknown>,
 ): Promise<PublicSiteItem> {
-  return parsePublicSiteItem(await apiRequest<unknown>(path(slug, id), { method: "PATCH", body }));
+  return parsePublicSiteItem(
+    await apiRequest<unknown>(path(slug, id), { method: "PATCH", body }),
+  );
 }
 
 /** DELETE archives the item on the server. Nothing is ever deleted. */
-export async function archivePublicSiteItem(slug: string, id: string): Promise<void> {
+export async function archivePublicSiteItem(
+  slug: string,
+  id: string,
+): Promise<void> {
   await apiRequest<void>(path(slug, id), { method: "DELETE" });
 }

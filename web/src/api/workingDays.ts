@@ -57,7 +57,11 @@ export function isCalendarDate(value: string): boolean {
   const month = Number(match[2]);
   const day = Number(match[3]);
   const date = new Date(Date.UTC(year, month - 1, day));
-  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+  );
 }
 
 export function isWeekday(value: number): value is Weekday {
@@ -65,7 +69,11 @@ export function isWeekday(value: number): value is Weekday {
 }
 
 function responseError(subject: string): ApiError {
-  return new ApiError(502, "INVALID_RESPONSE", `${subject} response was not recognised.`);
+  return new ApiError(
+    502,
+    "INVALID_RESPONSE",
+    `${subject} response was not recognised.`,
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -76,7 +84,8 @@ function parseWeekendDays(value: unknown): Weekday[] | null {
   if (!Array.isArray(value) || value.length > 6) return null;
   const days: Weekday[] = [];
   for (const item of value) {
-    if (typeof item !== "number" || !isWeekday(item) || days.includes(item)) return null;
+    if (typeof item !== "number" || !isWeekday(item) || days.includes(item))
+      return null;
     days.push(item);
   }
   return days.sort((left, right) => left - right);
@@ -85,12 +94,16 @@ function parseWeekendDays(value: unknown): Weekday[] | null {
 export function parseWorkingDayConfig(value: unknown): WorkingDayConfig {
   if (!isRecord(value)) throw responseError("Working-day");
   const weekendDays = parseWeekendDays(value.weekendDays);
-  const timezone = typeof value.timezone === "string" && value.timezone.length > 0 ? value.timezone : null;
+  const timezone =
+    typeof value.timezone === "string" && value.timezone.length > 0
+      ? value.timezone
+      : null;
   if (!weekendDays || !timezone) throw responseError("Working-day");
 
   let id: string | null = null;
   if ("id" in value && value.id != null) {
-    if (typeof value.id !== "string" || value.id.length === 0) throw responseError("Working-day");
+    if (typeof value.id !== "string" || value.id.length === 0)
+      throw responseError("Working-day");
     id = value.id;
   }
 
@@ -100,19 +113,35 @@ export function parseWorkingDayConfig(value: unknown): WorkingDayConfig {
 function parseHoliday(value: unknown): Holiday | null {
   if (!isRecord(value)) return null;
   if (typeof value.id !== "string" || value.id.length === 0) return null;
-  if (typeof value.date !== "string" || !isCalendarDate(value.date)) return null;
-  if (typeof value.name !== "string" || value.name.trim().length === 0 || value.name.length > NAME_MAX) return null;
+  if (typeof value.date !== "string" || !isCalendarDate(value.date))
+    return null;
+  if (
+    typeof value.name !== "string" ||
+    value.name.trim().length === 0 ||
+    value.name.length > NAME_MAX
+  )
+    return null;
   if (value.region === null) {
     return { id: value.id, date: value.date, name: value.name, region: null };
   }
-  if (typeof value.region !== "string" || value.region.trim().length === 0 || value.region.length > REGION_MAX) {
+  if (
+    typeof value.region !== "string" ||
+    value.region.trim().length === 0 ||
+    value.region.length > REGION_MAX
+  ) {
     return null;
   }
-  return { id: value.id, date: value.date, name: value.name, region: value.region };
+  return {
+    id: value.id,
+    date: value.date,
+    name: value.name,
+    region: value.region,
+  };
 }
 
 export function parseHolidayList(value: unknown): HolidayList {
-  if (!isRecord(value) || !Array.isArray(value.items)) throw responseError("Holiday");
+  if (!isRecord(value) || !Array.isArray(value.items))
+    throw responseError("Holiday");
   const items: Holiday[] = [];
   for (const item of value.items) {
     const holiday = parseHoliday(item);
@@ -122,12 +151,18 @@ export function parseHolidayList(value: unknown): HolidayList {
   return { items };
 }
 
-export async function getWorkingDayConfig(signal?: AbortSignal): Promise<WorkingDayConfig> {
-  const body = await apiRequest<unknown>("/admin/working-day-config", { signal });
+export async function getWorkingDayConfig(
+  signal?: AbortSignal,
+): Promise<WorkingDayConfig> {
+  const body = await apiRequest<unknown>("/admin/working-day-config", {
+    signal,
+  });
   return parseWorkingDayConfig(body);
 }
 
-export async function saveWorkingDayConfig(weekendDays: readonly Weekday[]): Promise<WorkingDayConfig> {
+export async function saveWorkingDayConfig(
+  weekendDays: readonly Weekday[],
+): Promise<WorkingDayConfig> {
   const body = await apiRequest<unknown>("/admin/working-day-config", {
     method: "PUT",
     body: { weekendDays: [...weekendDays] },
@@ -135,25 +170,37 @@ export async function saveWorkingDayConfig(weekendDays: readonly Weekday[]): Pro
   return parseWorkingDayConfig(body);
 }
 
-export async function listHolidays(query: HolidayQuery, signal?: AbortSignal): Promise<HolidayList> {
+export async function listHolidays(
+  query: HolidayQuery,
+  signal?: AbortSignal,
+): Promise<HolidayList> {
   const params = new URLSearchParams();
   if (query.from) params.set("from", query.from);
   if (query.to) params.set("to", query.to);
   const search = params.toString();
-  const body = await apiRequest<unknown>(`/admin/holidays${search ? `?${search}` : ""}`, { signal });
+  const body = await apiRequest<unknown>(
+    `/admin/holidays${search ? `?${search}` : ""}`,
+    { signal },
+  );
   return parseHolidayList(body);
 }
 
 export async function createHoliday(input: HolidayWrite): Promise<Holiday> {
-  const body = await apiRequest<unknown>("/admin/holidays", { method: "POST", body: input });
+  const body = await apiRequest<unknown>("/admin/holidays", {
+    method: "POST",
+    body: input,
+  });
   const holiday = parseHoliday(body);
   if (!holiday) throw responseError("Holiday");
   return holiday;
 }
 
 export async function deleteHoliday(id: string): Promise<void> {
-  const result = await apiRequestResult<undefined>(`/admin/holidays/${encodeURIComponent(id)}`, {
-    method: "DELETE",
-  });
+  const result = await apiRequestResult<undefined>(
+    `/admin/holidays/${encodeURIComponent(id)}`,
+    {
+      method: "DELETE",
+    },
+  );
   if (result.status !== 204) throw responseError("Holiday delete");
 }

@@ -42,10 +42,16 @@ export function parseAuthSession(value: unknown): AuthSession | null {
     return null;
   }
 
-  const { accessToken, refreshToken, expiresInMs, offlineSessionMaxMs, user } = value;
+  const { accessToken, refreshToken, expiresInMs, offlineSessionMaxMs, user } =
+    value;
   if (typeof accessToken !== "string" || accessToken.length === 0) return null;
-  if (typeof refreshToken !== "string" || refreshToken.length === 0) return null;
-  if (typeof expiresInMs !== "number" || typeof offlineSessionMaxMs !== "number") return null;
+  if (typeof refreshToken !== "string" || refreshToken.length === 0)
+    return null;
+  if (
+    typeof expiresInMs !== "number" ||
+    typeof offlineSessionMaxMs !== "number"
+  )
+    return null;
   if (typeof user.id !== "string" || user.id.length === 0) return null;
   if (typeof user.name !== "string" || user.name.length === 0) return null;
   if (typeof user.role !== "string" || !isRole(user.role)) return null;

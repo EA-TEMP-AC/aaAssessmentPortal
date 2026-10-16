@@ -62,5 +62,9 @@ export function useSession() {
 }
 
 export function useSessionAccessSettings(): AccessSettings | null {
-  return useSyncExternalStore(subscribe, getAccessSettingsSnapshot, getAccessSettingsSnapshot);
+  return useSyncExternalStore(
+    subscribe,
+    getAccessSettingsSnapshot,
+    getAccessSettingsSnapshot,
+  );
 }

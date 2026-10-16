@@ -43,6 +43,8 @@ export interface ProctorConfig {
   detectionIntervalMs: number;
   flagCooldownSeconds: number;
   sustainedSeconds: Record<string, number>;
+  /** X-07: severity by flag type, drawn on the flag photo. Missing: the built-in table. */
+  flagSeverity?: Record<string, string>;
 }
 
 export type ProctorStatus = {
@@ -64,6 +66,8 @@ export interface ProctorEngine {
     faceMatcher?: FaceMatcher;
     /** X-08: false in the exam window, where full screen is not asked for. Default true. */
     watchFullscreen?: boolean;
+    /** X-07: the batch has location capture on, so flag photos and flags may carry the location. */
+    captureLocation?: boolean;
   }): Promise<void>;
   stop(): void;
 }
@@ -98,6 +102,8 @@ export type FlagBody = {
   capturedAt: string;
   detail?: FlagDetail;
   evidenceId?: string;
+  /** X-07: only when the batch has location capture on and the candidate allowed it. */
+  location?: { latitude: number; longitude: number; accuracy?: number };
 };
 
 export type SnapshotUpload = {

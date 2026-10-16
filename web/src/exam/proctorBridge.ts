@@ -30,9 +30,13 @@ export interface ProctorConfig {
   sustainedSeconds: Record<string, number>;
   /** B-20: the batch's start-and-end photo switch. Carried here for the engine; not acted on yet. */
   snapshotAtStartAndEnd?: boolean;
+  flagSeverity?: Record<string, string>;
 }
 
-export type ProctorStatus = { state: "starting" | "running" | "degraded" | "stopped"; message?: string };
+export type ProctorStatus = {
+  state: "starting" | "running" | "degraded" | "stopped";
+  message?: string;
+};
 
 export interface ProctorEngine {
   start(o: {
@@ -48,6 +52,8 @@ export interface ProctorEngine {
     faceMatcher?: FaceMatcher;
     /** X-08: false in the exam window, where full screen is not asked for. Default true. */
     watchFullscreen?: boolean;
+    /** X-07: flag photos and flags may carry the location. */
+    captureLocation?: boolean;
   }): Promise<void>;
   stop(): void;
 }

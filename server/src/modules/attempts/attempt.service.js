@@ -395,7 +395,7 @@ export async function listAvailable(user) {
     ],
   })
     .select(
-      "status qualificationId assessmentStartDate assessmentEndDate assessmentLanguage testPaperId",
+      "status qualificationId assessmentStartDate assessmentEndDate assessmentLanguage testPaperId captureLocation",
     )
     .sort({ assessmentStartDate: 1, _id: 1 })
     .lean();
@@ -457,6 +457,8 @@ export async function listAvailable(user) {
         batchName,
         assessmentStartDate: batch.assessmentStartDate,
         assessmentEndDate: batch.assessmentEndDate,
+        // X-07: the check screen tells the candidate their location goes with flag photos.
+        captureLocation: batch.captureLocation === true,
         paperId: idStr(paper._id),
         paperCode: shortCode(paper._id),
         paperName: paper.name || defaultPaperName(qual?.name, paper.rules?.language),

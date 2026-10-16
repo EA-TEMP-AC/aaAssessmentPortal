@@ -1,9 +1,28 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { createProctoringSession, listWarnings, sendHeartbeat, type ProctorWarning } from "../api/proctoringSession";
+import {
+  createProctoringSession,
+  listWarnings,
+  sendHeartbeat,
+  type ProctorWarning,
+} from "../api/proctoringSession";
 import { createTransport } from "../proctoring/transport";
-import { FACE_EVIDENCE_NOTICE, submitFaceEvidence, type FaceStart } from "./faceEvidence";
-import { addNotice, dismissNotice, NO_NOTICES, type NoticeState } from "./flagNotices";
-import { getProctorEngine, type ProctorEngine, type ProctorFlagType, type ProctorStatus } from "./proctorBridge";
+import {
+  FACE_EVIDENCE_NOTICE,
+  submitFaceEvidence,
+  type FaceStart,
+} from "./faceEvidence";
+import {
+  addNotice,
+  dismissNotice,
+  NO_NOTICES,
+  type NoticeState,
+} from "./flagNotices";
+import {
+  getProctorEngine,
+  type ProctorEngine,
+  type ProctorFlagType,
+  type ProctorStatus,
+} from "./proctorBridge";
 
 export const HEARTBEAT_MS = 15000;
 export const WARNING_POLL_MS = 15000;
@@ -37,7 +56,13 @@ export type ProctoringView = {
  * Opens the proctoring session for an attempt, starts the engine with the camera
  * stream, sends heartbeats and polls warnings. Nothing here is stored in the browser.
  */
-export function useProctoring({ attemptId, batchId, stream, face, requireFullscreen = false }: Input): ProctoringView {
+export function useProctoring({
+  attemptId,
+  batchId,
+  stream,
+  face,
+  requireFullscreen = false,
+}: Input): ProctoringView {
   const [unavailable, setUnavailable] = useState<string | null>(null);
   const [status, setStatus] = useState<ProctorStatus>({ state: "starting" });
   const [warnings, setWarnings] = useState<ProctorWarning[]>([]);
@@ -99,7 +124,9 @@ export function useProctoring({ attemptId, batchId, stream, face, requireFullscr
       } catch {
         if (!live) return;
         clearMatcher();
-        setUnavailable("Proctoring is unavailable right now. You can carry on with the exam.");
+        setUnavailable(
+          "Proctoring is unavailable right now. You can carry on with the exam.",
+        );
         setStatus({ state: "degraded", message: "Proctoring unavailable" });
         return;
       }
@@ -110,9 +137,14 @@ export function useProctoring({ attemptId, batchId, stream, face, requireFullscr
         // The exam does not wait for this and never stops if it fails.
         const transport = createTransport();
         faceTransport.current = transport;
-        void submitFaceEvidence(faceStart, { sessionId: session.id, attemptId, batchId }, { transport })
+        void submitFaceEvidence(
+          faceStart,
+          { sessionId: session.id, attemptId, batchId },
+          { transport },
+        )
           .then((sent) => {
-            if (!sent && live && !stopped.current) setUnavailable((cur) => cur ?? FACE_EVIDENCE_NOTICE);
+            if (!sent && live && !stopped.current)
+              setUnavailable((cur) => cur ?? FACE_EVIDENCE_NOTICE);
           })
           .catch(() => {});
       }
@@ -133,7 +165,8 @@ export function useProctoring({ attemptId, batchId, stream, face, requireFullscr
         setStatus({ state: "degraded", message: "Camera not available" });
         return;
       }
-      cooldownMs.current = Math.max(0, session.config.flagCooldownSeconds) * 1000;
+      cooldownMs.current =
+        Math.max(0, session.config.flagCooldownSeconds) * 1000;
       const next = getProctorEngine();
       engine.current = next;
       try {
@@ -145,10 +178,13 @@ export function useProctoring({ attemptId, batchId, stream, face, requireFullscr
           config: session.config,
           faceMatcher: faceStart?.matcher ?? undefined,
           watchFullscreen: requireFullscreen,
+          captureLocation: session.captureLocation,
           onFlag: (flag) => {
             if (live && !stopped.current) {
               const at = Date.now();
-              setNotices((cur) => addNotice(cur, flag.type, at, cooldownMs.current));
+              setNotices((cur) =>
+                addNotice(cur, flag.type, at, cooldownMs.current),
+              );
             }
           },
           onStatus: (s) => {
@@ -174,7 +210,10 @@ export function useProctoring({ attemptId, batchId, stream, face, requireFullscr
     setWarnings((current) => current.filter((row) => row.id !== id));
   }, []);
 
-  const dismiss = useCallback(() => setNotices((cur) => dismissNotice(cur)), []);
+  const dismiss = useCallback(
+    () => setNotices((cur) => dismissNotice(cur)),
+    [],
+  );
 
   return {
     unavailable,

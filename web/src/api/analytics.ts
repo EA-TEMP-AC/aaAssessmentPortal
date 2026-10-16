@@ -1,6 +1,7 @@
 import { ApiError, apiRequest } from "./client";
 
-export type AnalyticsDimension = "assessor" | "training-partner" | "job-role" | "state";
+export type AnalyticsDimension =
+  "assessor" | "training-partner" | "job-role" | "state";
 
 export type AnalyticsSummary = {
   from: string;
@@ -48,20 +49,33 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function count(value: unknown): number | null {
-  return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : null;
+  return typeof value === "number" && Number.isInteger(value) && value >= 0
+    ? value
+    : null;
 }
 
 function rate(value: unknown): number | null | undefined {
   if (value === null) return null;
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : undefined;
 }
 
 function invalid(what: string): ApiError {
-  return new ApiError(502, "INVALID_RESPONSE", `Analytics ${what} response was not recognised.`);
+  return new ApiError(
+    502,
+    "INVALID_RESPONSE",
+    `Analytics ${what} response was not recognised.`,
+  );
 }
 
 export function parseSummary(value: unknown): AnalyticsSummary {
-  if (!isRecord(value) || !isRecord(value.batches) || !isRecord(value.publishedResults)) throw invalid("summary");
+  if (
+    !isRecord(value) ||
+    !isRecord(value.batches) ||
+    !isRecord(value.publishedResults)
+  )
+    throw invalid("summary");
   const { batches, publishedResults } = value;
   const total = count(batches.total);
   const pubTotal = count(publishedResults.total);
@@ -71,9 +85,16 @@ export function parseSummary(value: unknown): AnalyticsSummary {
   const slaBreaches = count(value.slaBreaches);
   const passRate = rate(value.passRate);
   if (
-    total === null || pubTotal === null || onTime === null || late === null ||
-    learnersAssessed === null || slaBreaches === null || passRate === undefined ||
-    !isRecord(batches.byStatus) || typeof value.from !== "string" || typeof value.to !== "string"
+    total === null ||
+    pubTotal === null ||
+    onTime === null ||
+    late === null ||
+    learnersAssessed === null ||
+    slaBreaches === null ||
+    passRate === undefined ||
+    !isRecord(batches.byStatus) ||
+    typeof value.from !== "string" ||
+    typeof value.to !== "string"
   ) {
     throw invalid("summary");
   }
@@ -96,8 +117,14 @@ export function parseSummary(value: unknown): AnalyticsSummary {
 
 function parseRow(value: unknown): AnalyticsRow {
   if (!isRecord(value) || typeof value.id !== "string") throw invalid("list");
-  const name = value.name === null || typeof value.name === "string" ? (value.name as string | null) : undefined;
-  const code = value.code === null || typeof value.code === "string" ? (value.code as string | null) : undefined;
+  const name =
+    value.name === null || typeof value.name === "string"
+      ? (value.name as string | null)
+      : undefined;
+  const code =
+    value.code === null || typeof value.code === "string"
+      ? (value.code as string | null)
+      : undefined;
   const batches = count(value.batches);
   const publishedBatches = count(value.publishedBatches);
   const learnersAssessed = count(value.learnersAssessed);
@@ -108,15 +135,33 @@ function parseRow(value: unknown): AnalyticsRow {
   const passRate = rate(value.passRate);
   const avg = rate(value.avgTurnaroundDays);
   if (
-    name === undefined || code === undefined || batches === null || publishedBatches === null ||
-    learnersAssessed === null || passed === null || failed === null || absent === null ||
-    slaBreaches === null || passRate === undefined || avg === undefined
+    name === undefined ||
+    code === undefined ||
+    batches === null ||
+    publishedBatches === null ||
+    learnersAssessed === null ||
+    passed === null ||
+    failed === null ||
+    absent === null ||
+    slaBreaches === null ||
+    passRate === undefined ||
+    avg === undefined
   ) {
     throw invalid("list");
   }
   return {
-    id: value.id, name, code, batches, publishedBatches, learnersAssessed,
-    passed, failed, absent, passRate, avgTurnaroundDays: avg, slaBreaches,
+    id: value.id,
+    name,
+    code,
+    batches,
+    publishedBatches,
+    learnersAssessed,
+    passed,
+    failed,
+    absent,
+    passRate,
+    avgTurnaroundDays: avg,
+    slaBreaches,
   };
 }
 
@@ -125,15 +170,35 @@ export function parseAnalyticsPage(value: unknown): AnalyticsPage {
   const page = count(value.page);
   const pageSize = count(value.pageSize);
   const total = count(value.total);
-  if (page === null || pageSize === null || total === null || typeof value.from !== "string" || typeof value.to !== "string") {
+  if (
+    page === null ||
+    pageSize === null ||
+    total === null ||
+    typeof value.from !== "string" ||
+    typeof value.to !== "string"
+  ) {
     throw invalid("list");
   }
-  return { from: value.from, to: value.to, page, pageSize, total, items: value.items.map(parseRow) };
+  return {
+    from: value.from,
+    to: value.to,
+    page,
+    pageSize,
+    total,
+    items: value.items.map(parseRow),
+  };
 }
 
-export async function getAnalyticsSummary(range: { from: string; to: string }, signal?: AbortSignal) {
+export async function getAnalyticsSummary(
+  range: { from: string; to: string },
+  signal?: AbortSignal,
+) {
   const params = new URLSearchParams({ from: range.from, to: range.to });
-  return parseSummary(await apiRequest<unknown>(`/analytics/summary?${params.toString()}`, { signal }));
+  return parseSummary(
+    await apiRequest<unknown>(`/analytics/summary?${params.toString()}`, {
+      signal,
+    }),
+  );
 }
 
 export async function listAnalytics(
@@ -148,7 +213,10 @@ export async function listAnalytics(
     pageSize: String(query.pageSize),
   });
   return parseAnalyticsPage(
-    await apiRequest<unknown>(`/analytics/${DIMENSION_PATH[dimension]}?${params.toString()}`, { signal }),
+    await apiRequest<unknown>(
+      `/analytics/${DIMENSION_PATH[dimension]}?${params.toString()}`,
+      { signal },
+    ),
   );
 }
 
@@ -157,7 +225,9 @@ const DATE_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/;
 function parseDate(value: string): Date | null {
   const match = DATE_ONLY.exec(value);
   if (!match) return null;
-  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+  const date = new Date(
+    Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])),
+  );
   return date.toISOString().slice(0, 10) === value ? date : null;
 }
 
@@ -166,7 +236,10 @@ export function istToday(now: Date = new Date()): string {
 }
 
 /** The last 90 calendar days ending today (IST), both ends inclusive. */
-export function defaultRange(now: Date = new Date()): { from: string; to: string } {
+export function defaultRange(now: Date = new Date()): {
+  from: string;
+  to: string;
+} {
   const to = istToday(now);
   const start = parseDate(to) as Date;
   start.setUTCDate(start.getUTCDate() - 89);

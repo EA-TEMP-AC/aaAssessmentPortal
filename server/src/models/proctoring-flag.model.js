@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { encryptedFieldsPlugin } from "../lib/encrypted-fields.plugin.js";
 
 /**
  * proctoringFlags. docs/SCHEMA.md §3.40. Tasks P-01, P-04, P-08.
@@ -23,6 +24,8 @@ export const PROCTORING_FLAG_TYPES = Object.freeze([
   "id_unreadable",
 ]);
 export const PROCTORING_SEVERITIES = Object.freeze(["low", "medium", "high"]);
+/** X-07: whether the flag photo carries coordinates. `captured` means `location` is set. */
+export const PROCTORING_LOCATION_STATUSES = Object.freeze(["captured", "not_shared"]);
 export const PROCTORING_DECISIONS = Object.freeze(["dismiss", "warn", "invalidate_recommended"]);
 
 const detailSchema = new mongoose.Schema(
@@ -60,11 +63,27 @@ const proctoringFlagSchema = new mongoose.Schema(
     receivedAt: { type: Date, required: true },
     detail: { type: detailSchema, default: null },
     evidenceId: { type: mongoose.Schema.Types.ObjectId, default: null, ref: "Evidence" },
+    /**
+     * X-07: `{"latitude":n,"longitude":n,"accuracy":n}` as JSON text, encrypted at rest (personal
+     * data). Only the photo-details read returns it, and only to aa_admin, tp and proctor.
+     */
+    location: { type: String, default: null },
+    locationStatus: {
+      type: String,
+      required: true,
+      enum: PROCTORING_LOCATION_STATUSES,
+      default: "not_shared",
+    },
     payloadHash: { type: String, required: true },
     review: { type: reviewSchema, default: null },
   },
   { timestamps: false },
 );
+
+proctoringFlagSchema.plugin(encryptedFieldsPlugin, {
+  collection: "proctoringFlags",
+  fields: { location: {} },
+});
 
 proctoringFlagSchema.index({ sessionId: 1, clientEventId: 1 }, { unique: true });
 proctoringFlagSchema.index({ sessionId: 1, capturedAt: 1 });

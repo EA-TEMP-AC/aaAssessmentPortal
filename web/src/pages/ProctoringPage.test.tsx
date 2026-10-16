@@ -97,8 +97,27 @@ const EVIDENCE = [
   evidenceRow({ id: "ev2", capturedAt: "2026-11-20T04:55:00.000Z", size: 20_480 }),
 ];
 
-/** The evidence list and file calls, for tests that write their own handler. */
+/** The saved photo details of a flag (X-07). */
+function captureBody(flagId: string) {
+  return {
+    flagId,
+    sessionId: "s1",
+    type: flagId === "f2" ? "tab_hidden" : "phone_detected",
+    reason: flagId === "f2" ? "The exam tab was hidden" : "A phone in view",
+    severity: flagId === "f2" ? "low" : "high",
+    capturedAt: "2026-11-20T05:00:00.000Z",
+    receivedAt: "2026-11-20T05:00:01.000Z",
+    evidenceId: flagId === "f2" ? null : "ev1",
+    locationStatus: "not_shared",
+    locationVisible: true,
+    location: null,
+  };
+}
+
+/** The evidence list, file and flag photo detail calls, for tests that write their own handler. */
 function evidenceApi(u: URL): Response | undefined {
+  const capture = /\/proctoring\/flags\/([^/]+)\/capture$/.exec(u.pathname);
+  if (capture) return jsonResponse(200, captureBody(capture[1]));
   if (u.pathname.endsWith("/evidence")) return jsonResponse(200, evidencePage(EVIDENCE));
   if (u.pathname.endsWith("/file")) {
     return new Response(new Uint8Array([0xff, 0xd8, 0xff]), { status: 200, headers: { "Content-Type": "image/jpeg" } });
@@ -285,6 +304,25 @@ it("loads each flag photo through the evidence file API and never prints a signe
   expect(thumb.querySelector("img")).toHaveAttribute("src", SIGNED);
   expect(calls(mock, "/evidence/ev1/file")).toHaveLength(1);
   expect(document.body.textContent).not.toContain("secret-signature");
+});
+
+it("shows what the server saved next to the photo, and says so when a flag has no image", async () => {
+  const user = userEvent.setup();
+  api();
+  setSession(sessionFor("proctor"));
+  renderApp("/proctoring");
+  const panel = await openSession(user);
+  const entries = within(await within(panel).findByRole("list", { name: "Flag timeline" })).getAllByRole("listitem");
+
+  const withPhoto = entries[0];
+  expect(await within(withPhoto).findByText("A phone in view")).toBeInTheDocument();
+  expect(within(withPhoto).getByText("Server time")).toBeInTheDocument();
+  expect(within(withPhoto).getByText("Browser time (drawn on the photo)")).toBeInTheDocument();
+  expect(within(withPhoto).getByText("Location not shared")).toBeInTheDocument();
+
+  const withoutPhoto = entries[1];
+  expect(withoutPhoto).toHaveTextContent("No image for this flag");
+  expect(await within(withoutPhoto).findByText("The exam tab was hidden")).toBeInTheDocument();
 });
 
 it("shows the photo details next to the thumbnail, the sustained time and the browser details", async () => {

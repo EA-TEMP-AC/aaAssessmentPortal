@@ -59,10 +59,13 @@ export async function addCandidate(
   batchId: string,
   input: AddCandidateInput,
 ): Promise<CandidateRecord> {
-  return apiRequest<CandidateRecord>(`/batches/${encodeURIComponent(batchId)}/candidates`, {
-    method: "POST",
-    body: input,
-  });
+  return apiRequest<CandidateRecord>(
+    `/batches/${encodeURIComponent(batchId)}/candidates`,
+    {
+      method: "POST",
+      body: input,
+    },
+  );
 }
 
 export async function patchCandidate(

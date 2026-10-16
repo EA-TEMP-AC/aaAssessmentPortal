@@ -17,7 +17,12 @@ export const PAUSE_AFTER_MAX = 20;
 export const INTERVAL_MIN_SECONDS = 10;
 export const INTERVAL_MAX_SECONDS = 120;
 
-export const INFO_FIELDS = ["email", "fatherName", "gender", "dateOfBirth"] as const;
+export const INFO_FIELDS = [
+  "email",
+  "fatherName",
+  "gender",
+  "dateOfBirth",
+] as const;
 export type InfoField = (typeof INFO_FIELDS)[number];
 
 export const INFO_FIELD_LABELS: Record<InfoField, string> = {
@@ -39,7 +44,11 @@ export type BatchSettings = {
   shuffleOptions: boolean;
   showMarksToCandidate: boolean;
   questionsMandatory: boolean;
-  flagPolicy: { action: FlagAction; pauseAfterFlags: number; countSeverities: ("medium" | "high")[] };
+  flagPolicy: {
+    action: FlagAction;
+    pauseAfterFlags: number;
+    countSeverities: ("medium" | "high")[];
+  };
   imageCapture: { intervalSeconds: number; atStartAndEnd: boolean };
   candidateInfoPopup: { enabled: boolean; fields: InfoField[] };
   captureLocation: boolean;
@@ -59,14 +68,22 @@ export const DEFAULT_BATCH_SETTINGS: BatchSettings = {
   shuffleOptions: false,
   showMarksToCandidate: false,
   questionsMandatory: false,
-  flagPolicy: { action: "record", pauseAfterFlags: 3, countSeverities: ["high"] },
+  flagPolicy: {
+    action: "record",
+    pauseAfterFlags: 3,
+    countSeverities: ["high"],
+  },
   imageCapture: { intervalSeconds: 30, atStartAndEnd: true },
   candidateInfoPopup: { enabled: false, fields: [] },
   captureLocation: false,
 };
 
 function bad(what: string): ApiError {
-  return new ApiError(502, "INVALID_RESPONSE", `${what} response was not recognised.`);
+  return new ApiError(
+    502,
+    "INVALID_RESPONSE",
+    `${what} response was not recognised.`,
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -78,31 +95,46 @@ function bool(value: unknown, fallback: boolean): boolean {
 }
 
 function int(value: unknown, fallback: number): number {
-  return typeof value === "number" && Number.isInteger(value) ? value : fallback;
+  return typeof value === "number" && Number.isInteger(value)
+    ? value
+    : fallback;
 }
 
 export function parseBatchSettings(value: unknown): BatchSettings {
-  const root = isRecord(value) && isRecord(value.settings) ? value.settings : null;
+  const root =
+    isRecord(value) && isRecord(value.settings) ? value.settings : null;
   if (!root) throw bad("Batch settings");
   const d = DEFAULT_BATCH_SETTINGS;
   const policy = isRecord(root.flagPolicy) ? root.flagPolicy : {};
   const image = isRecord(root.imageCapture) ? root.imageCapture : {};
   const info = isRecord(root.candidateInfoPopup) ? root.candidateInfoPopup : {};
   const severities = Array.isArray(policy.countSeverities)
-    ? (policy.countSeverities.filter((s) => s === "medium" || s === "high") as ("medium" | "high")[])
+    ? (policy.countSeverities.filter((s) => s === "medium" || s === "high") as (
+        "medium" | "high"
+      )[])
     : d.flagPolicy.countSeverities;
   return {
     shuffleQuestions: bool(root.shuffleQuestions, d.shuffleQuestions),
     shuffleOptions: bool(root.shuffleOptions, d.shuffleOptions),
-    showMarksToCandidate: bool(root.showMarksToCandidate, d.showMarksToCandidate),
+    showMarksToCandidate: bool(
+      root.showMarksToCandidate,
+      d.showMarksToCandidate,
+    ),
     questionsMandatory: bool(root.questionsMandatory, d.questionsMandatory),
     flagPolicy: {
       action: policy.action === "pause" ? "pause" : "record",
-      pauseAfterFlags: int(policy.pauseAfterFlags, d.flagPolicy.pauseAfterFlags),
-      countSeverities: severities.length > 0 ? severities : d.flagPolicy.countSeverities,
+      pauseAfterFlags: int(
+        policy.pauseAfterFlags,
+        d.flagPolicy.pauseAfterFlags,
+      ),
+      countSeverities:
+        severities.length > 0 ? severities : d.flagPolicy.countSeverities,
     },
     imageCapture: {
-      intervalSeconds: int(image.intervalSeconds, d.imageCapture.intervalSeconds),
+      intervalSeconds: int(
+        image.intervalSeconds,
+        d.imageCapture.intervalSeconds,
+      ),
       atStartAndEnd: bool(image.atStartAndEnd, d.imageCapture.atStartAndEnd),
     },
     candidateInfoPopup: {
@@ -115,38 +147,68 @@ export function parseBatchSettings(value: unknown): BatchSettings {
   };
 }
 
-export async function getBatchSettings(batchId: string, signal?: AbortSignal): Promise<BatchSettings> {
-  const body = await apiRequest<unknown>(`/batches/${encodeURIComponent(batchId)}/settings`, { signal });
+export async function getBatchSettings(
+  batchId: string,
+  signal?: AbortSignal,
+): Promise<BatchSettings> {
+  const body = await apiRequest<unknown>(
+    `/batches/${encodeURIComponent(batchId)}/settings`,
+    { signal },
+  );
   return parseBatchSettings(body);
 }
 
-export async function saveBatchSettings(batchId: string, patch: BatchSettingsPatch): Promise<BatchSettings> {
-  const body = await apiRequest<unknown>(`/batches/${encodeURIComponent(batchId)}/settings`, {
-    method: "PATCH",
-    body: patch,
-  });
+export async function saveBatchSettings(
+  batchId: string,
+  patch: BatchSettingsPatch,
+): Promise<BatchSettings> {
+  const body = await apiRequest<unknown>(
+    `/batches/${encodeURIComponent(batchId)}/settings`,
+    {
+      method: "PATCH",
+      body: patch,
+    },
+  );
   return parseBatchSettings(body);
 }
 
 /* ---------------------------------------------------------- candidate pop-up */
 
-export type CandidateInfoStatus = { enabled: boolean; fields: InfoField[]; submitted: boolean };
+export type CandidateInfoStatus = {
+  enabled: boolean;
+  fields: InfoField[];
+  submitted: boolean;
+};
 
 export type CandidateInfoValues = Partial<Record<InfoField, string>>;
 
-export async function getCandidateInfoStatus(batchId: string, signal?: AbortSignal): Promise<CandidateInfoStatus> {
-  const body = await apiRequest<unknown>(`/batches/${encodeURIComponent(batchId)}/candidate-info/mine`, { signal });
+export async function getCandidateInfoStatus(
+  batchId: string,
+  signal?: AbortSignal,
+): Promise<CandidateInfoStatus> {
+  const body = await apiRequest<unknown>(
+    `/batches/${encodeURIComponent(batchId)}/candidate-info/mine`,
+    { signal },
+  );
   if (!isRecord(body)) throw bad("Candidate details");
   return {
     enabled: body.enabled === true,
-    fields: Array.isArray(body.fields) ? INFO_FIELDS.filter((f) => (body.fields as unknown[]).includes(f)) : [],
+    fields: Array.isArray(body.fields)
+      ? INFO_FIELDS.filter((f) => (body.fields as unknown[]).includes(f))
+      : [],
     submitted: body.submitted === true,
   };
 }
 
-export async function saveCandidateInfo(batchId: string, values: CandidateInfoValues): Promise<void> {
-  await apiRequest<unknown>(`/batches/${encodeURIComponent(batchId)}/candidate-info`, {
-    method: "PUT",
-    body: values,
-  });
+export async function saveCandidateInfo(
+  batchId: string,
+  values: CandidateInfoValues,
+): Promise<void> {
+  await apiRequest<unknown>(
+    `/batches/${encodeURIComponent(batchId)}/candidate-info`,
+    {
+      method: "PUT",
+      body: values,
+    },
+  );
 }

@@ -1,6 +1,11 @@
 import { API_BASE_URL } from "../config/app";
 import { explainBatchRule, joinErrorParts } from "./ruleErrors";
-import { clearSession, getAccessToken, getSnapshot, updateSession } from "./session";
+import {
+  clearSession,
+  getAccessToken,
+  getSnapshot,
+  updateSession,
+} from "./session";
 import { parseAuthSession, type ApiErrorBody } from "./types";
 
 export class ApiError extends Error {
@@ -8,7 +13,12 @@ export class ApiError extends Error {
   readonly code: string;
   readonly details?: unknown;
 
-  constructor(status: number, code: string, message: string, details?: unknown) {
+  constructor(
+    status: number,
+    code: string,
+    message: string,
+    details?: unknown,
+  ) {
     super(message);
     this.name = "ApiError";
     this.status = status;
@@ -18,7 +28,8 @@ export class ApiError extends Error {
 }
 
 export function errorMessage(error: unknown): string {
-  if (!(error instanceof ApiError)) return "Could not reach the server. Try again.";
+  if (!(error instanceof ApiError))
+    return "Could not reach the server. Try again.";
   const explanation = explainBatchRule(error.code, error.details);
   if (!explanation) return error.message;
   return joinErrorParts([error.code, error.message, explanation]);
@@ -81,7 +92,11 @@ async function performRefresh(): Promise<boolean> {
     });
     const next = parseAuthSession(body);
     if (!next) {
-      throw new ApiError(502, "INVALID_RESPONSE", "Refresh response was not recognised.");
+      throw new ApiError(
+        502,
+        "INVALID_RESPONSE",
+        "Refresh response was not recognised.",
+      );
     }
     updateSession(next);
     return true;
@@ -94,8 +109,14 @@ async function performRefresh(): Promise<boolean> {
 
 async function readError(response: Response): Promise<ApiError> {
   try {
-    const body = (await response.json()) as Partial<ApiErrorBody> & { code?: unknown };
-    if (body.error && typeof body.error.message === "string" && body.error.message.length > 0) {
+    const body = (await response.json()) as Partial<ApiErrorBody> & {
+      code?: unknown;
+    };
+    if (
+      body.error &&
+      typeof body.error.message === "string" &&
+      body.error.message.length > 0
+    ) {
       return new ApiError(
         response.status,
         typeof body.error.code === "string" ? body.error.code : "UNKNOWN",
@@ -105,7 +126,12 @@ async function readError(response: Response): Promise<ApiError> {
     }
     // The question import refuses with a flat body: { code, errors: [...] } (no `error` wrapper).
     if (typeof body.code === "string" && body.code.length > 0) {
-      return new ApiError(response.status, body.code, "The request was refused.", body);
+      return new ApiError(
+        response.status,
+        body.code,
+        "The request was refused.",
+        body,
+      );
     }
   } catch {
     // Non-JSON bodies fall through to a generic error.
@@ -120,7 +146,10 @@ export async function apiRequestResult<T>(
   return performRequest<T>(path, options);
 }
 
-async function performRequest<T>(path: string, options: RequestOptions): Promise<{ status: number; body: T }> {
+async function performRequest<T>(
+  path: string,
+  options: RequestOptions,
+): Promise<{ status: number; body: T }> {
   const headers = new Headers(options.headers);
   let requestBody: BodyInit | undefined;
   if (options.body !== undefined) {
@@ -128,7 +157,10 @@ async function performRequest<T>(path: string, options: RequestOptions): Promise
       requestBody = options.body;
     } else if (typeof Blob !== "undefined" && options.body instanceof Blob) {
       requestBody = options.body;
-    } else if (typeof options.body === "string" && headers.has("Content-Type")) {
+    } else if (
+      typeof options.body === "string" &&
+      headers.has("Content-Type")
+    ) {
       requestBody = options.body;
     } else {
       if (!headers.has("Content-Type")) {
@@ -150,12 +182,20 @@ async function performRequest<T>(path: string, options: RequestOptions): Promise
     signal: options.signal,
   });
 
-  if (response.status === 401 && options.auth !== false && options.retryOn401 !== false) {
+  if (
+    response.status === 401 &&
+    options.auth !== false &&
+    options.retryOn401 !== false
+  ) {
     const refreshed = await refreshSession();
     if (refreshed) {
       return performRequest<T>(path, { ...options, retryOn401: false });
     }
-    throw new ApiError(401, "UNAUTHORIZED", "Your session has ended. Sign in again.");
+    throw new ApiError(
+      401,
+      "UNAUTHORIZED",
+      "Your session has ended. Sign in again.",
+    );
   }
 
   if (!response.ok) {
@@ -178,7 +218,10 @@ async function performRequest<T>(path: string, options: RequestOptions): Promise
   return { status: response.status, body: (await response.json()) as T };
 }
 
-export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+export async function apiRequest<T>(
+  path: string,
+  options: RequestOptions = {},
+): Promise<T> {
   const result = await apiRequestResult<T>(path, options);
   return result.body;
 }
