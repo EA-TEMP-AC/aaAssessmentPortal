@@ -367,6 +367,17 @@ export async function listApprovedWeightProfiles(
 }
 
 /** D5: PUT /batches/:id/test-paper. Returns nothing the page keeps; it re-reads the batch. */
+/** X-33: PUT /batches/:id/language-papers. The full list of extra papers; an empty list clears it. */
+export async function setBatchLanguagePapers(
+  batchId: string,
+  papers: { language: string; testPaperId: string }[],
+): Promise<void> {
+  await apiRequest<unknown>(`/batches/${batchId}/language-papers`, {
+    method: "PUT",
+    body: { papers },
+  });
+}
+
 export async function setBatchTestPaper(
   batchId: string,
   testPaperId: string,

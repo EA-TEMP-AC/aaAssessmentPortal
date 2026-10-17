@@ -127,6 +127,8 @@ export type BatchRecord = {
   resultId: string | null;
   /** D5: the one test paper candidates of this batch can start. Null until aa_admin sets it. */
   testPaperId: string | null;
+  /** X-33: extra papers, one per extra language. The candidate takes one. */
+  languagePapers?: { language: string; testPaperId: string }[];
   /** X-22: the batch is set up as a mock test (papers without reviewer approval). */
   mockTest?: boolean;
   /** X-29: the training partner's contact person for this batch. */
@@ -258,6 +260,17 @@ export function isBatchPageSize(value: number): value is BatchPageSize {
 
 export function isBatchStatusValue(value: string): value is BatchStatus {
   return isBatchStatus(value);
+}
+
+function parseLanguagePapers(value: unknown): { language: string; testPaperId: string }[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    if (typeof entry !== "object" || entry === null) return [];
+    const row = entry as Record<string, unknown>;
+    return typeof row.language === "string" && typeof row.testPaperId === "string"
+      ? [{ language: row.language, testPaperId: row.testPaperId }]
+      : [];
+  });
 }
 
 function parseSla(value: unknown): BatchSla {
@@ -444,6 +457,7 @@ export function parseBatch(value: unknown): BatchRecord {
     ...(parseNames(value.names) ? { names: parseNames(value.names) } : {}),
     resultId,
     testPaperId,
+    languagePapers: parseLanguagePapers(value.languagePapers),
     mockTest: value.mockTest === true,
     tpSpoc:
       isRecord(value.tpSpoc) && typeof value.tpSpoc.name === "string"

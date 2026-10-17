@@ -10,6 +10,7 @@ import { SCHEME_DATA_KEY } from "../schemes/schemeData";
 import { visibleBatchActions, type BatchAction } from "./access";
 import { ActionDialog } from "./ActionDialog";
 import { BatchReportsSection } from "./BatchReportsSection";
+import { LanguagePapersSection } from "./LanguagePapersSection";
 import { TestPaperSection } from "./TestPaperSection";
 import { TpSpocSection } from "./TpSpocSection";
 import { BATCH_ACTION_LABELS, BATCH_STATUS_LABELS } from "./labels";
@@ -273,6 +274,7 @@ export function BatchDetailPage() {
             ) : null}
             <TpSpocSection key={batch.updatedAt} batch={batch} role={session.user.role} />
             <TestPaperSection batch={batch} role={session.user.role} />
+            <LanguagePapersSection batch={batch} role={session.user.role} />
             {REPORT_ROLES.includes(session.user.role) ? <BatchReportsSection batchId={batch.id} /> : null}
             <CandidateRoster batch={batch} role={session.user.role} />
             {canSeeResultSection(session.user.role) ? (

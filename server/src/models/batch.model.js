@@ -231,6 +231,19 @@ const batchSchema = new mongoose.Schema(
     resultId: { type: mongoose.Schema.Types.ObjectId, default: null },
     // D5: the one test paper candidates of this batch can start. Set by aa_admin.
     testPaperId: { type: mongoose.Schema.Types.ObjectId, default: null, ref: "TestPaper" },
+    // X-33: more question papers, one per extra language. The candidate picks one at the start.
+    languagePapers: {
+      type: [
+        new mongoose.Schema(
+          {
+            language: { type: String, required: true, trim: true, maxlength: 80 },
+            testPaperId: { type: mongoose.Schema.Types.ObjectId, required: true, ref: "TestPaper" },
+          },
+          { _id: false },
+        ),
+      ],
+      default: [],
+    },
     // X-07: when true, the candidate's browser may add its location to proctoring flag photos.
     captureLocation: { type: Boolean, required: true, default: false },
     isReassessment: { type: Boolean, required: true, default: false },

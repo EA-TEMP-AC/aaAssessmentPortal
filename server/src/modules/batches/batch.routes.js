@@ -32,6 +32,7 @@ import {
   reassessmentBodySchema,
   reassignBodySchema,
   rejectBodySchema,
+  languagePapersBodySchema,
   testPaperBodySchema,
   tpSpocBodySchema,
 } from "./batch.schemas.js";
@@ -43,7 +44,7 @@ import { mountCandidateRoutes } from "../candidates/candidate.routes.js";
 import { mountResultRoutes } from "../results/result.routes.js";
 import { assignAssessor, reassignAssessor } from "./assign.service.js";
 import { setBatchCaptureLocation } from "./batch-capture-location.service.js";
-import { setBatchTestPaper } from "./batch-test-paper.service.js";
+import { setBatchLanguagePapers, setBatchTestPaper } from "./batch-test-paper.service.js";
 import { recordAccess } from "../audit/access-log.service.js";
 import { getBatchSettings, updateBatchSettings } from "./batch-settings.service.js";
 import { getOwnPopup, listBatchInfo, saveOwnInfo } from "./candidate-info.service.js";
@@ -219,6 +220,26 @@ batchesRouter.put(
     const saved = await setBatchTestPaper(req.user, id, body);
     setAudit(req, {
       action: "batch.set_test_paper",
+      entity: "batch",
+      entityId: saved.batch.id,
+      abId: saved.abId,
+      batchId: saved.batch.id,
+      before: saved.before,
+      after: saved.after,
+    });
+    await res.status(200).json(saved.batch);
+  }),
+);
+
+batchesRouter.put(
+  "/:id/language-papers",
+  requireRoles(...BATCH_TEST_PAPER_ROLES),
+  asyncHandler(async (req, res) => {
+    const { id } = batchIdParamSchema.parse(req.params);
+    const body = languagePapersBodySchema.parse(req.body ?? {});
+    const saved = await setBatchLanguagePapers(req.user, id, body);
+    setAudit(req, {
+      action: "batch.set_language_papers",
       entity: "batch",
       entityId: saved.batch.id,
       abId: saved.abId,

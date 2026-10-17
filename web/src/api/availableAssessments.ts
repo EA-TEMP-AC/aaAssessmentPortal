@@ -37,6 +37,8 @@ export type AvailableAssessment = {
   durationMinutes: number;
   attempt: AvailableAttempt | null;
   startable: Startable;
+  /** X-33: the exam is offered in more than one language and this candidate has not chosen yet. */
+  languageChoice: boolean;
 };
 
 const STATUSES: readonly string[] = ["in_progress", "submitted", "timed_out"];
@@ -105,7 +107,8 @@ export function parseAvailableAssessment(value: unknown): AvailableAssessment {
     captureLocation: value.captureLocation === true,
     requireScreenShare: value.requireScreenShare === true,
     recordVideo: value.recordVideo === true,
-    videoFailureAction: value.videoFailureAction === "require" ? "require" : "continue",
+    videoFailureAction:
+      value.videoFailureAction === "require" ? "require" : "continue",
     paperId,
     paperName: str(value.paperName) ?? str(value.paperCode) ?? paperId,
     language: str(value.language),
@@ -113,6 +116,7 @@ export function parseAvailableAssessment(value: unknown): AvailableAssessment {
     durationMinutes,
     attempt: parseAttempt(value.attempt),
     startable: parseStartable(value.startable),
+    languageChoice: value.languageChoice === true,
   };
 }
 

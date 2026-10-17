@@ -1,17 +1,40 @@
-import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from "react";
 import { useQuery } from "@tanstack/react-query";
 import { errorMessage } from "../api/client";
-import { listAvailableAssessments, type AvailableAssessment } from "../api/availableAssessments";
-import { dateText, languageName, reasonText, timeLeftText } from "../exam/examText";
+import {
+  listAvailableAssessments,
+  type AvailableAssessment,
+} from "../api/availableAssessments";
+import {
+  dateText,
+  languageName,
+  reasonText,
+  timeLeftText,
+} from "../exam/examText";
 import { installDashboardBridge, openExamWindow } from "../exam/examWindow";
 
 type TabId = "upcoming" | "ongoing" | "completed";
 type View = "grid" | "list";
 
 const TABS: { id: TabId; label: string; empty: string }[] = [
-  { id: "upcoming", label: "Upcoming", empty: "No upcoming assessments right now." },
+  {
+    id: "upcoming",
+    label: "Upcoming",
+    empty: "No upcoming assessments right now.",
+  },
   { id: "ongoing", label: "Ongoing", empty: "No exam is in progress." },
-  { id: "completed", label: "Completed", empty: "No completed assessments yet." },
+  {
+    id: "completed",
+    label: "Completed",
+    empty: "No completed assessments yet.",
+  },
 ];
 
 /** Which tab an assessment sits in, from the candidate's own attempt. */
@@ -24,7 +47,10 @@ function tabOf(item: AvailableAssessment): TabId {
 function matches(item: AvailableAssessment, search: string): boolean {
   const needle = search.trim().toLowerCase();
   if (!needle) return true;
-  return item.paperName.toLowerCase().includes(needle) || item.batchName.toLowerCase().includes(needle);
+  return (
+    item.paperName.toLowerCase().includes(needle) ||
+    item.batchName.toLowerCase().includes(needle)
+  );
 }
 
 type CardProps = {
@@ -35,13 +61,17 @@ type CardProps = {
 };
 
 function AssessmentCard({ item, secondsLeft, onStart }: CardProps) {
+  const languageChoice = item.languageChoice;
   const stateId = useId();
   const tab = tabOf(item);
   let stateLine: string;
   let label: string;
   let enabled: boolean;
   if (tab === "completed") {
-    stateLine = item.attempt?.status === "timed_out" ? "Timed out. Your saved answers were submitted." : "Submitted.";
+    stateLine =
+      item.attempt?.status === "timed_out"
+        ? "Timed out. Your saved answers were submitted."
+        : "Submitted.";
     label = "Completed";
     enabled = false;
   } else if (tab === "ongoing") {
@@ -54,8 +84,16 @@ function AssessmentCard({ item, secondsLeft, onStart }: CardProps) {
     label = "Resume";
   } else {
     enabled = item.startable.ok;
-    stateLine = item.startable.ok ? "You can start today." : `Not available now: ${reasonText(item.startable.reason)}`;
-    label = "Start exam";
+    stateLine = item.startable.ok
+      ? "You can start today."
+      : `Not available now: ${reasonText(item.startable.reason)}`;
+    if (item.startable.ok && languageChoice) {
+      stateLine +=
+        " This exam is offered in more than one language. Choose one; you cannot change it after you start.";
+    }
+    label = languageChoice
+      ? `Start in ${languageName(item.language)}`
+      : "Start exam";
   }
   return (
     <li className="exam-card" aria-labelledby={`${stateId}-title`}>
@@ -90,7 +128,12 @@ function AssessmentCard({ item, secondsLeft, onStart }: CardProps) {
       <p id={stateId} className="exam-card-state">
         {stateLine}
       </p>
-      <button type="button" disabled={!enabled} aria-describedby={stateId} onClick={() => onStart(item)}>
+      <button
+        type="button"
+        disabled={!enabled}
+        aria-describedby={stateId}
+        onClick={() => onStart(item)}
+      >
         {label}
         <span className="visually-hidden"> {item.paperName}</span>
       </button>
@@ -100,7 +143,11 @@ function AssessmentCard({ item, secondsLeft, onStart }: CardProps) {
 
 export function ExamPage() {
   const headingRef = useRef<HTMLHeadingElement>(null);
-  const tabRefs = useRef<Record<TabId, HTMLButtonElement | null>>({ upcoming: null, ongoing: null, completed: null });
+  const tabRefs = useRef<Record<TabId, HTMLButtonElement | null>>({
+    upcoming: null,
+    ongoing: null,
+    completed: null,
+  });
   const examWindow = useRef<Window | null>(null);
   const idBase = useId();
   const [tab, setTab] = useState<TabId>("upcoming");
@@ -120,7 +167,14 @@ export function ExamPage() {
   }, []);
 
   // The exam window reads the session from here and asks for a refresh when it closes.
-  useEffect(() => installDashboardBridge(() => examWindow.current, () => void refetch()), [refetch]);
+  useEffect(
+    () =>
+      installDashboardBridge(
+        () => examWindow.current,
+        () => void refetch(),
+      ),
+    [refetch],
+  );
 
   // When the candidate closes the exam window by hand, the list is read again.
   useEffect(() => {
@@ -149,7 +203,10 @@ export function ExamPage() {
   }
 
   const items = useMemo(() => query.data ?? [], [query.data]);
-  const visible = useMemo(() => items.filter((item) => matches(item, search)), [items, search]);
+  const visible = useMemo(
+    () => items.filter((item) => matches(item, search)),
+    [items, search],
+  );
   const byTab = (id: TabId) => visible.filter((item) => tabOf(item) === id);
   const shown = byTab(tab);
   // The list was read at dataUpdatedAt; time left counts down from there.
@@ -164,7 +221,8 @@ export function ExamPage() {
     const index = TABS.findIndex((t) => t.id === tab);
     let next = index;
     if (event.key === "ArrowRight") next = (index + 1) % TABS.length;
-    else if (event.key === "ArrowLeft") next = (index + TABS.length - 1) % TABS.length;
+    else if (event.key === "ArrowLeft")
+      next = (index + TABS.length - 1) % TABS.length;
     else if (event.key === "Home") next = 0;
     else if (event.key === "End") next = TABS.length - 1;
     else return;
@@ -179,8 +237,8 @@ export function ExamPage() {
         Exam
       </h1>
       <p>
-        The assessments you can take are listed here. Each exam opens in its own window and needs a working camera.
-        Allow pop-ups for this site.
+        The assessments you can take are listed here. Each exam opens in its own
+        window and needs a working camera. Allow pop-ups for this site.
       </p>
 
       <div className="exam-toolbar">
@@ -195,10 +253,18 @@ export function ExamPage() {
           />
         </div>
         <div role="group" aria-label="Layout" className="exam-view-toggle">
-          <button type="button" aria-pressed={view === "grid"} onClick={() => setView("grid")}>
+          <button
+            type="button"
+            aria-pressed={view === "grid"}
+            onClick={() => setView("grid")}
+          >
             Grid view
           </button>
-          <button type="button" aria-pressed={view === "list"} onClick={() => setView("list")}>
+          <button
+            type="button"
+            aria-pressed={view === "list"}
+            onClick={() => setView("list")}
+          >
             List view
           </button>
         </div>
@@ -207,8 +273,9 @@ export function ExamPage() {
       {blocked ? (
         <div role="alert" className="form-error">
           <p>
-            Your browser blocked the exam window. Allow pop-ups for this site (look for the pop-up icon in the address
-            bar), then select Try again.
+            Your browser blocked the exam window. Allow pop-ups for this site
+            (look for the pop-up icon in the address bar), then select Try
+            again.
           </p>
           <button type="button" onClick={() => startExam(blocked)}>
             Try again
@@ -217,7 +284,8 @@ export function ExamPage() {
       ) : null}
       {opened ? (
         <p role="status">
-          {opened.paperName} is open in another window. When you finish, close that window to come back here.
+          {opened.paperName} is open in another window. When you finish, close
+          that window to come back here.
         </p>
       ) : null}
 
@@ -269,7 +337,13 @@ export function ExamPage() {
                 : t.empty}
             </p>
           ) : (
-            <ul className={view === "grid" ? "exam-cards exam-cards-grid" : "exam-cards exam-cards-list"}>
+            <ul
+              className={
+                view === "grid"
+                  ? "exam-cards exam-cards-grid"
+                  : "exam-cards exam-cards-list"
+              }
+            >
               {shown.map((item) => (
                 <AssessmentCard
                   key={`${item.batchId}-${item.paperId}`}

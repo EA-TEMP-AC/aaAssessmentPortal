@@ -136,6 +136,19 @@ export const listBatchesQuerySchema = z
 /** PUT /batches/:id/test-paper. D5. */
 export const testPaperBodySchema = z.object({ testPaperId: objectIdSchema }).strict();
 
+/** X-33: PUT /batches/:id/language-papers. The full list of extra papers, one per language (empty list clears). */
+export const languagePapersBodySchema = z
+  .object({
+    papers: z
+      .array(
+        z
+          .object({ language: z.string().trim().min(1).max(80), testPaperId: objectIdSchema })
+          .strict(),
+      )
+      .max(10),
+  })
+  .strict();
+
 /** X-07: PUT /batches/:id/capture-location. */
 export const captureLocationBodySchema = z.object({ captureLocation: z.boolean() }).strict();
 

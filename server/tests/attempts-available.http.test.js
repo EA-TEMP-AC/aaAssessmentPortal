@@ -206,6 +206,7 @@ describe("GET /api/v1/attempts/available (B-19)", () => {
       durationMinutes: 45,
       attempt: null,
       startable: { ok: true },
+      languageChoice: false,
     });
   });
 

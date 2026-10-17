@@ -299,6 +299,21 @@ export function paperUsable(paper, batch) {
   );
 }
 
+/**
+ * X-33: the papers a candidate of this batch may take: the main paper in the assessment
+ * language, and one extra paper per extra language. The candidate takes exactly one of them.
+ */
+export function batchPapers(batch) {
+  const list = [];
+  if (batch.testPaperId) {
+    list.push({ paperId: idStr(batch.testPaperId), language: batch.assessmentLanguage });
+  }
+  for (const entry of batch.languagePapers ?? []) {
+    list.push({ paperId: idStr(entry.testPaperId), language: entry.language });
+  }
+  return list;
+}
+
 export function startBlocker({ batch, paper, absent, deliverable, today }) {
   if (batch.status !== "in_progress") {
     return {
@@ -336,15 +351,16 @@ export function startBlocker({ batch, paper, absent, deliverable, today }) {
   }
   // A paper that is unknown, a draft, for another qualification, or not the paper of this batch
   // looks the same: not found.
+  const entry = paper ? batchPapers(batch).find((p) => p.paperId === idStr(paper._id)) : null;
   if (
     !paper ||
-    idStr(paper._id) !== idStr(batch.testPaperId) ||
+    !entry ||
     !paperUsable(paper, batch) ||
     idStr(paper.qualificationId) !== idStr(batch.qualificationId)
   ) {
     return { status: 404, code: "NOT_FOUND", message: "Unknown id" };
   }
-  if (!sameLanguage(paper.rules?.language, batch.assessmentLanguage)) {
+  if (!sameLanguage(paper.rules?.language, entry.language)) {
     return {
       status: 409,
       code: "ATTEMPT_LANGUAGE_MISMATCH",
@@ -430,20 +446,24 @@ export async function listAvailable(user) {
     ],
   })
     .select(
-      "status qualificationId assessmentStartDate assessmentEndDate assessmentLanguage testPaperId captureLocation settings",
+      "status qualificationId assessmentStartDate assessmentEndDate assessmentLanguage testPaperId languagePapers captureLocation settings",
     )
     .sort({ assessmentStartDate: 1, _id: 1 })
     .lean();
   if (batches.length === 0) return { items: [] };
 
-  const paperIdsOf = (batch) =>
-    [
-      ...new Set([
-        idStr(batch.testPaperId),
-        ...(openByBatch.get(idStr(batch._id)) ?? []),
-        ...(doneByBatch.get(idStr(batch._id)) ?? []),
-      ]),
-    ].filter(Boolean);
+  // X-33: once the candidate has an attempt on one paper of the batch, the other languages are not offered.
+  const paperIdsOf = (batch, roster = null) => {
+    const own = [
+      ...(openByBatch.get(idStr(batch._id)) ?? []),
+      ...(doneByBatch.get(idStr(batch._id)) ?? []),
+    ];
+    const offered = batchPapers(batch).map((p) => p.paperId);
+    const taken = roster
+      ? offered.some((id) => attemptByKey.has(`${idStr(roster._id)}:${id}`))
+      : false;
+    return [...new Set([...(taken ? [] : offered), ...own])].filter(Boolean);
+  };
   const wantedPaperIds = [...new Set(batches.flatMap(paperIdsOf))];
   const qualificationIds = [...new Set(batches.map((b) => idStr(b.qualificationId)))];
   const [papers, qualifications, absences] = await Promise.all([
@@ -477,7 +497,13 @@ export async function listAvailable(user) {
     const batchName = `${qual ? `${qual.code} ${qual.name}` : "Batch"}, ${
       batch.assessmentStartDate
     } to ${batch.assessmentEndDate}`;
-    for (const paperId of paperIdsOf(batch)) {
+    const offeredIds = new Set(batchPapers(batch).map((p) => p.paperId));
+    const listed = paperIdsOf(batch, roster);
+    // X-33: more than one language is still open to this candidate.
+    const languageChoice =
+      listed.filter((id) => offeredIds.has(id) && !attemptByKey.has(`${idStr(roster._id)}:${id}`))
+        .length > 1;
+    for (const paperId of listed) {
       const paper = paperById.get(paperId);
       if (!paper) continue;
       const attempt = attemptByKey.get(`${idStr(roster._id)}:${paperId}`) ?? null;
@@ -520,6 +546,7 @@ export async function listAvailable(user) {
             }
           : null,
         startable: startableFor(attempt, blocker, now),
+        languageChoice: !attempt && languageChoice,
       });
     }
   }
@@ -535,7 +562,14 @@ export async function startAttempt(user, { batchId, testPaperId }) {
     .lean();
   if (!roster || roster.active !== true) throw forbidden("Not on the active roster of this batch");
 
-  const existing = await Attempt.findOne({ testPaperId, candidateId: roster._id }).lean();
+  // X-33: one attempt per candidate across the languages of a batch; a second language gives back the first.
+  const setIds = batchPapers(batch).map((p) => p.paperId);
+  const sameBatch = await Attempt.find({
+    candidateId: roster._id,
+    testPaperId: { $in: [testPaperId, ...setIds] },
+  }).lean();
+  const existing =
+    sameBatch.find((a) => idStr(a.testPaperId) === idStr(testPaperId)) ?? sameBatch[0] ?? null;
   if (existing) {
     const { attempt } = await expireIfDue(existing, new Date(), "start");
     return { attempt, created: false };
@@ -608,7 +642,10 @@ export async function startAttempt(user, { batchId, testPaperId }) {
   } catch (err) {
     if (err?.code !== 11000) throw err;
     // Two starts at once: the second one gets the first one's attempt.
-    const winner = await Attempt.findOne({ testPaperId, candidateId: roster._id }).lean();
+    const winner = await Attempt.findOne({
+      testPaperId: { $in: [testPaperId, ...setIds] },
+      candidateId: roster._id,
+    }).lean();
     return { attempt: winner, created: false };
   }
 }

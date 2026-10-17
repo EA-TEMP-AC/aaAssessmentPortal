@@ -422,6 +422,7 @@ Indexes: `{ code: 1 }` unique; `{ sector: 1 }`.
 | ratioOverride | { byUserId, reason, at } | N | |
 | resultId | ObjectId | N | |
 | captureLocation | boolean | Y | X-07. Default `false`. When `true` the candidate's browser may add its location to proctoring flag photos. Set by `aa_admin` with `PUT /batches/:id/capture-location` (audited). Turning it off does not remove coordinates already saved |
+| languagePapers | array | N | X-33. Extra papers, one per extra language: `[{ language, testPaperId }]`, default `[]`. Set by aa_admin with `PUT /batches/:id/language-papers`; needs `settings.languages.theory`; each paper approved (or mock), complete, same qualification, written in its listed language; the batch's own language is covered by `testPaperId`. Cannot change once any attempt exists. The candidate takes one paper of the set |
 | testPaperId | ObjectId | N | Ref: `testPapers`. B-18a (D5): the one paper candidates of the batch can start. Set by aa_admin with `PUT /batches/:id/test-paper`; the paper must be approved, complete, of the same qualification and in the batch's assessment language. Cannot be set or changed once any attempt exists on the batch. Default null (nothing can be started) |
 | isReassessment | bool | Y | |
 | reassessmentOf | ObjectId | N | immediate parent |
@@ -906,7 +907,7 @@ One candidate's attempt at one approved test paper. Holds the stored question or
 Indexes: unique `{ testPaperId: 1, candidateId: 1 }` (one attempt per paper), `{ batchId, status }`, `{ abId, startedAt }`, `{ status, acceptUntil }`.
 `testPapers` (§3.20) gains optional `durationMinutes` (1 to 600, default null).
 
-Start rules (Q-06, B-18a): a new attempt needs the batch to have a `testPaperId` and the requested paper to be that one (D5), today (IST) within the batch's `assessmentStartDate`..`assessmentEndDate`, no `attendanceRecords` row with `present: false` for the candidate, and `testPapers.rules.language` equal (trimmed, case-insensitive) to the batch `assessmentLanguage`. Manual marks are locked while the batch's `results` row is `submitted`, `validated` or `published` (D6); `return-for-correction` sets it back to `draft`. A timeout sets `closedAt` to the earlier of now and `deadlineAt`. Expired attempts are closed by the attempt sweep job (every 5 minutes, and once at startup).
+Start rules (Q-06, B-18a, X-33): a new attempt needs the batch to have a `testPaperId` and the requested paper to be that one or one of its `languagePapers` (D5); a candidate has one attempt across these papers, and asking for another language returns the attempt already started, today (IST) within the batch's `assessmentStartDate`..`assessmentEndDate`, no `attendanceRecords` row with `present: false` for the candidate, and `testPapers.rules.language` equal (trimmed, case-insensitive) to the batch `assessmentLanguage`. Manual marks are locked while the batch's `results` row is `submitted`, `validated` or `published` (D6); `return-for-correction` sets it back to `draft`. A timeout sets `closedAt` to the earlier of now and `deadlineAt`. Expired attempts are closed by the attempt sweep job (every 5 minutes, and once at startup).
 
 ### 3.25 `sectorConfigs` (phase 2) — Task Q-05
 

@@ -126,6 +126,10 @@ export function presentBatch(doc, { now = new Date(), recompute = true } = {}) {
     proctorId: idOf(doc.proctorId),
     resultId: idOf(doc.resultId),
     testPaperId: idOf(doc.testPaperId),
+    languagePapers: (doc.languagePapers ?? []).map((p) => ({
+      language: p.language,
+      testPaperId: idOf(p.testPaperId),
+    })),
     captureLocation: doc.captureLocation === true,
     mockTest: doc.settings?.skipPaperApproval === true,
     rejectReason: doc.rejectReason ?? null,
