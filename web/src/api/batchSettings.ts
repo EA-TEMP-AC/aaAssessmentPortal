@@ -73,6 +73,7 @@ export type BatchSettings = {
   detectLookingAway: boolean;
   /** X-16: raise the voice-heard flag from the microphone loudness. */
   detectVoice: boolean;
+  requireScreenShare: boolean;
   /** X-12: roles besides aa_admin that may see the coordinates. */
   locationVisibleTo: LocationRole[];
 };
@@ -104,6 +105,7 @@ export const DEFAULT_BATCH_SETTINGS: BatchSettings = {
   skipPaperApproval: false,
   detectLookingAway: true,
   detectVoice: true,
+  requireScreenShare: false,
   locationVisibleTo: ["tp", "proctor"],
 };
 
@@ -178,6 +180,7 @@ export function parseBatchSettings(value: unknown): BatchSettings {
     skipPaperApproval: bool(root.skipPaperApproval, d.skipPaperApproval),
     detectLookingAway: bool(root.detectLookingAway, d.detectLookingAway),
     detectVoice: bool(root.detectVoice, d.detectVoice),
+    requireScreenShare: bool(root.requireScreenShare, d.requireScreenShare),
     locationVisibleTo: Array.isArray(root.locationVisibleTo)
       ? LOCATION_ROLES.filter((r) => (root.locationVisibleTo as unknown[]).includes(r))
       : d.locationVisibleTo,

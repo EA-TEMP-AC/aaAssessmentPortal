@@ -60,7 +60,7 @@ function formatActor(item: AuditLogItem): string {
   if (!item.actorId && !item.actorRole) return "Not recorded";
   const role =
     item.actorRole && isRole(item.actorRole) ? ROLE_LABELS[item.actorRole] : (item.actorRole ?? "Unknown role");
-  return `${role} (${item.actorName ?? item.actorId ?? "Unknown id"})`;
+  return `${role} (${item.actorId ?? "Unknown id"})`;
 }
 
 function entryTarget(item: AuditLogItem): string {

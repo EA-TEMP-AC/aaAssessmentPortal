@@ -22,6 +22,7 @@ export const PROCTOR_FLAG_TYPES = [
   "id_unreadable",
   "looking_away",
   "voice_detected",
+  "screen_share_stopped",
 ] as const;
 
 export type ProctorFlagType =
@@ -40,7 +41,8 @@ export type ProctorFlagType =
   | "id_mismatch"
   | "id_unreadable"
   | "looking_away"
-  | "voice_detected";
+  | "voice_detected"
+  | "screen_share_stopped";
 
 export interface ProctorConfig {
   snapshotIntervalSeconds: number;
@@ -76,6 +78,8 @@ export interface ProctorEngine {
     captureLocation?: boolean;
     /** X-14: a microphone stream, used only to measure loudness. Nothing is recorded or sent. */
     audioStream?: MediaStream;
+    /** X-21: the shared screen. The engine only watches that it keeps sharing; no screen picture is read. */
+    screenStream?: MediaStream;
   }): Promise<void>;
   stop(): void;
 }

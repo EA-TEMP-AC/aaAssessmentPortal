@@ -26,6 +26,7 @@ export type AvailableAssessment = {
   assessmentEndDate: string | null;
   /** X-07: the batch records the candidate location with flag photos. */
   captureLocation: boolean;
+  requireScreenShare: boolean;
   paperId: string;
   paperName: string;
   language: string | null;
@@ -99,6 +100,7 @@ export function parseAvailableAssessment(value: unknown): AvailableAssessment {
     assessmentStartDate: str(value.assessmentStartDate),
     assessmentEndDate: str(value.assessmentEndDate),
     captureLocation: value.captureLocation === true,
+    requireScreenShare: value.requireScreenShare === true,
     paperId,
     paperName: str(value.paperName) ?? str(value.paperCode) ?? paperId,
     language: str(value.language),

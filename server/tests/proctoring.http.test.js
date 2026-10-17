@@ -334,6 +334,7 @@ describe("Proctoring API (server/src/modules/proctoring)", () => {
         id_unreadable: "medium",
         looking_away: "medium",
         voice_detected: "medium",
+        screen_share_stopped: "high",
       };
       // The test table, the model enum and the server table must list the same types.
       expect(Object.keys(expected).sort()).toEqual([...PROCTORING_FLAG_TYPES].sort());

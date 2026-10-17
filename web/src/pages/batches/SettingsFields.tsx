@@ -244,6 +244,12 @@ export function SettingsFields({
           checked={draft.detectVoice}
           onChange={(v) => set("detectVoice", v)}
         />
+        <Toggle
+          label="Require screen sharing"
+          help="The candidate must share the whole screen before the exam starts. A high flag is recorded if sharing stops. The screen is not recorded and no picture of it is sent."
+          checked={draft.requireScreenShare}
+          onChange={(v) => set("requireScreenShare", v)}
+        />
       </Group>
 
       <Group title="Candidate pop-up">

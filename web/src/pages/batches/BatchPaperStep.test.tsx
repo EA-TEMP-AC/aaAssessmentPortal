@@ -7,7 +7,7 @@ import { IDS, batchRecord, emptyMasterList } from "../../test/batchFixtures";
 import { jsonResponse, sessionFor } from "../../test/fixtures";
 import { PAPER_ID, paperDoc, qualificationList } from "../../test/questionFixtures";
 import { renderApp } from "../../test/render";
-import { buildPaperRequest, evenQuotas } from "./paperPlan";
+import { buildPaperRequest, evenQuotas, splitQuotas } from "./paperPlan";
 
 const notFound = () => jsonResponse(404, { error: { code: "NOT_FOUND", message: "x" } });
 
@@ -66,6 +66,32 @@ describe("paper plan helpers (X-18)", () => {
     ]);
     expect(evenQuotas([], 5)).toEqual([]);
     expect(evenQuotas(nos, 0)).toEqual([]);
+  });
+
+  it("splits by theory marks when every NOS has them, else evenly", () => {
+    const marked = [
+      { nosId: "A", maxMarks: { theory: 40 } },
+      { nosId: "B", maxMarks: { theory: 35 } },
+      { nosId: "C", maxMarks: { theory: 25 } },
+    ];
+    expect(splitQuotas(marked, 20)).toEqual([
+      { nosId: "A", count: 8 },
+      { nosId: "B", count: 7 },
+      { nosId: "C", count: 5 },
+    ]);
+    // Always adds up to the total, the leftovers going to the biggest remainders.
+    const odd = splitQuotas(marked, 7);
+    expect(odd.reduce((n, r) => n + r.count, 0)).toBe(7);
+    // One NOS without theory marks: fall back to an even split.
+    expect(splitQuotas([...marked.slice(0, 2), { nosId: "C", maxMarks: { theory: null } }], 6)).toEqual([
+      { nosId: "A", count: 2 },
+      { nosId: "B", count: 2 },
+      { nosId: "C", count: 2 },
+    ]);
+    // A NOS with a tiny share can drop out rather than get zero questions listed.
+    expect(splitQuotas([{ nosId: "A", maxMarks: { theory: 99 } }, { nosId: "B", maxMarks: { theory: 1 } }], 3)).toEqual([
+      { nosId: "A", count: 3 },
+    ]);
   });
 
   it("checks the build plan and makes the generate body", () => {

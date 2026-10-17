@@ -907,6 +907,39 @@ describe("batch settings (B-20)", () => {
     });
   });
 
+  describe("screen sharing (X-21)", () => {
+    it("is off by default, switched per batch, and told to the candidate's list", async () => {
+      const w = await world();
+      expect((await getSettings(w.admin, w)).body.settings.requireScreenShare).toBe(false);
+      const res = await patchSettings(w.admin, w, { requireScreenShare: true });
+      expect(res.status).toBe(200);
+      expect(res.body.settings.requireScreenShare).toBe(true);
+      const list = await request(app)
+        .get("/api/v1/attempts/available")
+        .set(bearer(w.candidate.token));
+      expect(list.status).toBe(200);
+      expect(list.body.items[0].requireScreenShare).toBe(true);
+      expectError(
+        await patchSettings(w.admin, w, { requireScreenShare: "yes" }),
+        400,
+        "VALIDATION_ERROR",
+      );
+      expectError(
+        await patchSettings(w.proctor, w, { requireScreenShare: false }),
+        403,
+        "FORBIDDEN",
+      );
+    });
+
+    it("accepts the screen_share_stopped flag with high severity", async () => {
+      const w = await world();
+      const { sessionId } = await begin(w);
+      const res = await sendFlag(w.candidate, sessionId, "screen_share_stopped");
+      expect(res.status).toBe(201);
+      expect(res.body.severity).toBe("high");
+    });
+  });
+
   describe("location", () => {
     it("lets aa_admin choose which roles see the coordinates (X-12)", async () => {
       const w = await world();

@@ -261,7 +261,7 @@ describe("audit logs", () => {
     expect(ranged.body.items[0].action).toBe("older");
   });
 
-  it("adds readable names next to the ids (X-20)", async () => {
+  it("labels batches but never shows staff names (X-20)", async () => {
     const { user } = await createUser({ email: "admin@aa.example", password, name: "Asha Admin" });
     const target = await createUser({
       email: "mis@aa.example",
@@ -269,30 +269,29 @@ describe("audit logs", () => {
       role: "mis",
       name: "Mohan Mis",
     });
-    const missingBatch = new mongoose.Types.ObjectId();
     await recordAudit({
       actorId: user._id,
       actorRole: "aa_admin",
       action: "user.update",
       entity: "user",
       entityId: target.user._id.toString(),
-      batchId: missingBatch,
+      batchId: new mongoose.Types.ObjectId(),
     });
-    await recordAudit({ action: "system.job", entity: "job", entityId: "nightly" });
     const token = await tokenFor("admin@aa.example");
     const res = await request(app)
       .get("/api/v1/audit-logs")
       .set({ Authorization: `Bearer ${token}` });
     expect(res.status).toBe(200);
     const row = res.body.items.find((item) => item.action === "user.update");
-    expect(row.actorName).toBe("Asha Admin");
-    expect(row.entityLabel).toBe("Mohan Mis");
-    // A batch that cannot be found, and a row with no actor or no named entity, give null, not an error.
+    expect(row.actorId).toBe(String(user._id));
+    expect(row.entityId).toBe(String(target.user._id));
+    // A batch that cannot be found gives null, not an error; users have no label at all.
     expect(row.batchLabel).toBeNull();
-    const system = res.body.items.find((item) => item.action === "system.job");
-    expect(system.actorName).toBeNull();
-    expect(system.entityLabel).toBeNull();
-    // Names only: no email in any row.
-    expect(JSON.stringify(res.body.items)).not.toContain("mis@aa.example");
+    expect(row.entityLabel).toBeNull();
+    expect(row).not.toHaveProperty("actorName");
+    const text = JSON.stringify(res.body.items);
+    expect(text).not.toContain("Asha Admin");
+    expect(text).not.toContain("Mohan Mis");
+    expect(text).not.toContain("mis@aa.example");
   });
 });

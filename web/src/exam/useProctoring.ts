@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { stopScreen, takeHeldScreen } from "./screenShare";
 import {
   createProctoringSession,
   listWarnings,
@@ -76,6 +77,7 @@ export function useProctoring({
   const faceRef = useRef<FaceStart | null>(face ?? null);
   const faceTransport = useRef<ReturnType<typeof createTransport> | null>(null);
   const micStream = useRef<MediaStream | null>(null);
+  const screenStream = useRef<MediaStream | null>(null);
 
   // The engine clears the matcher when it stops. When it never started, this does it.
   const clearMatcher = useCallback(() => {
@@ -99,6 +101,8 @@ export function useProctoring({
     engine.current = null;
     micStream.current?.getTracks().forEach((t) => t.stop());
     micStream.current = null;
+    stopScreen(screenStream.current);
+    screenStream.current = null;
     faceTransport.current?.dispose();
     faceTransport.current = null;
     setStatus({ state: "stopped" });
@@ -189,10 +193,19 @@ export function useProctoring({
           return;
         }
       }
+      // X-21: the screen shared on the check screen (null when the batch does not require it).
+      const screen = takeHeldScreen();
+      screenStream.current = screen;
+      if (screen && !live) {
+        stopScreen(screen);
+        screenStream.current = null;
+        return;
+      }
       try {
         await next.start({
           stream,
           audioStream,
+          screenStream: screen ?? undefined,
           sessionId: session.id,
           attemptId,
           batchId,

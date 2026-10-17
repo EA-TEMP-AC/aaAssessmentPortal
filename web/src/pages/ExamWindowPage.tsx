@@ -383,6 +383,7 @@ export function ExamWindowPage({
     <PrecheckScreen
       heading={item.paperName}
       captureLocation={item.captureLocation}
+      requireScreenShare={item.requireScreenShare}
       starting={starting}
       startError={startError}
       frameCheck={frameCheck}

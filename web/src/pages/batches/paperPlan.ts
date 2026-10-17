@@ -29,12 +29,38 @@ export function evenQuotas(nos: readonly Pick<Nos, "nosId">[], total: number): {
     .filter((row) => row.count > 0);
 }
 
+type NosWeight = Pick<Nos, "nosId"> & { maxMarks?: { theory?: number | null } | null };
+
+/**
+ * The count split by the theory marks of each NOS (a NOS worth 40% of the marks gets about 40% of
+ * the questions), whole numbers by largest remainder. Used only when every NOS has theory marks;
+ * otherwise the split is even. NCVET asks for tests mapped to NOS and PC with the marks "as per
+ * the qualification", so the marks are the better guide when they are recorded.
+ */
+export function splitQuotas(nos: readonly NosWeight[], total: number): { nosId: string; count: number }[] {
+  const weights = nos.map((item) => item.maxMarks?.theory ?? 0);
+  const sum = weights.reduce((a, b) => a + b, 0);
+  if (nos.length === 0 || total < 1 || weights.some((w) => !(w > 0)) || sum <= 0) return evenQuotas(nos, total);
+  const exact = weights.map((w) => (w / sum) * total);
+  const counts = exact.map(Math.floor);
+  let left = total - counts.reduce((a, b) => a + b, 0);
+  const order = exact
+    .map((value, index) => ({ index, rest: value - Math.floor(value) }))
+    .sort((a, b) => b.rest - a.rest || a.index - b.index);
+  for (const { index } of order) {
+    if (left <= 0) break;
+    counts[index] += 1;
+    left -= 1;
+  }
+  return nos.map((item, index) => ({ nosId: item.nosId, count: counts[index] })).filter((row) => row.count > 0);
+}
+
 /** What the wizard asks the server for, or the reason it cannot. */
 export function buildPaperRequest(
   plan: Extract<PaperPlan, { mode: "build" }>,
   qualificationId: string,
   batchLanguage: string,
-  nos: readonly Pick<Nos, "nosId">[],
+  nos: readonly NosWeight[],
 ): { input: GenerateInput } | { problem: string } {
   const total = Number(plan.totalQuestions);
   if (!Number.isInteger(total) || total < 1 || total > MAX_BUILT_QUESTIONS) {
@@ -48,7 +74,7 @@ export function buildPaperRequest(
   const input: GenerateInput = {
     qualificationId,
     language: languageKey(batchLanguage),
-    quotas: evenQuotas(nos, total),
+    quotas: splitQuotas(nos, total),
     allowPartial: false,
   };
   if (plan.weightProfileId) input.weightProfileId = plan.weightProfileId;

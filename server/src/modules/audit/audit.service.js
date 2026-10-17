@@ -1,4 +1,4 @@
-import { batchLabels, userNames } from "../../lib/display-names.js";
+import { batchLabels } from "../../lib/display-names.js";
 import { forbidden } from "../../lib/errors.js";
 import { redactSecrets } from "../../lib/redact.js";
 import { AuditLog } from "../../models/audit-log.model.js";
@@ -43,32 +43,25 @@ export async function auditReadFilter(user) {
 
 const OBJECT_ID = /^[a-f0-9]{24}$/i;
 
-/** X-20. Names for a page of rows: who did it, which batch, and which batch or user the entity is. */
+/**
+ * X-20. Batch names for a page of rows. Staff are shown by id, never by name (human decision
+ * 2026-10-17, for privacy); only batches, which are not personal data, get a readable label.
+ */
 async function readableNames(docs) {
-  const userIds = new Set();
   const batchIds = new Set();
   for (const doc of docs) {
-    if (doc.actorId) userIds.add(String(doc.actorId));
     if (doc.batchId) batchIds.add(String(doc.batchId));
     if (doc.entity === "batch" && OBJECT_ID.test(doc.entityId ?? "")) batchIds.add(doc.entityId);
-    if (doc.entity === "user" && OBJECT_ID.test(doc.entityId ?? "")) userIds.add(doc.entityId);
   }
-  const [users, batches] = await Promise.all([userNames([...userIds]), batchLabels([...batchIds])]);
-  return { users, batches };
+  return { batches: await batchLabels([...batchIds]) };
 }
 
 function toDto(doc, names) {
-  const entityLabel =
-    doc.entity === "batch"
-      ? (names.batches.get(doc.entityId) ?? null)
-      : doc.entity === "user"
-        ? (names.users.get(doc.entityId) ?? null)
-        : null;
+  const entityLabel = doc.entity === "batch" ? (names.batches.get(doc.entityId) ?? null) : null;
   return {
     id: doc._id.toString(),
     actorId: doc.actorId ? doc.actorId.toString() : null,
     actorRole: doc.actorRole ?? null,
-    actorName: doc.actorId ? (names.users.get(String(doc.actorId)) ?? null) : null,
     action: doc.action,
     entity: doc.entity,
     entityId: doc.entityId ?? null,

@@ -195,6 +195,7 @@ describe("GET /api/v1/attempts/available (B-19)", () => {
       assessmentStartDate: day(-1),
       assessmentEndDate: day(1),
       captureLocation: false,
+      requireScreenShare: false,
       paperId: String(w.paper._id),
       paperCode: expect.any(String),
       paperName: "Field Technician (en)",

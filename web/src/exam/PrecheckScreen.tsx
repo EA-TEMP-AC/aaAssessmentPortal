@@ -27,6 +27,7 @@ import {
   type IdFaceMatcher,
 } from "../proctoring/face";
 import type { FaceStart } from "./faceEvidence";
+import { holdScreen, releaseHeldScreen, requestScreen } from "./screenShare";
 
 export type FrameCheckOptions = {
   sample?: (video: HTMLVideoElement) => Uint8ClampedArray | null;
@@ -72,11 +73,14 @@ type IdResult = "pending" | "match" | "mismatch" | "unreadable";
 type FaceModel = "idle" | "loading" | "ready" | "failed";
 
 type MicState = "idle" | "requesting" | "ok" | "denied" | "unavailable";
+type ScreenState = "idle" | "requesting" | "ok" | "denied" | "unavailable" | "not_entire" | "ended";
 
 type Props = {
   heading: string;
   /** X-07: the batch records the location with flag photos. Shows a line in the notice. */
   captureLocation?: boolean;
+  /** X-21: the batch requires the candidate to share the whole screen. */
+  requireScreenShare?: boolean;
   starting: boolean;
   startError: string | null;
   /** Gets the live camera stream. The exam keeps it for proctoring and stops it at the end. */
@@ -121,6 +125,7 @@ function networkText(check: NetworkCheck | null, busy: boolean): string {
 export function PrecheckScreen({
   heading,
   captureLocation,
+  requireScreenShare = false,
   starting,
   startError,
   onStart,
@@ -149,6 +154,7 @@ export function PrecheckScreen({
   const [camera, setCamera] = useState<CameraState>({ state: "idle" });
   const [hasPreview, setHasPreview] = useState(false);
   const [mic, setMic] = useState<MicState>("idle");
+  const [screen, setScreen] = useState<ScreenState>("idle");
   const [network, setNetwork] = useState<NetworkCheck | null>(null);
   const [networkBusy, setNetworkBusy] = useState(true);
   const [consent, setConsent] = useState(false);
@@ -409,6 +415,33 @@ export function PrecheckScreen({
     });
   }
 
+  async function runScreenCheck() {
+    setScreen("requesting");
+    const outcome = await requestScreen();
+    if (outcome.state !== "ok") {
+      holdScreen(null);
+      setScreen(outcome.state);
+      return;
+    }
+    holdScreen(outcome.stream);
+    for (const track of outcome.stream.getVideoTracks()) {
+      track.addEventListener("ended", () => {
+        // Stopped before the exam started: ask again.
+        releaseHeldScreen();
+        setScreen("ended");
+      });
+    }
+    setScreen("ok");
+  }
+
+  // Leaving without starting stops the share. Once the exam has the stream, it is the exam's.
+  useEffect(
+    () => () => {
+      if (!handedOff.current) releaseHeldScreen();
+    },
+    [],
+  );
+
   async function runMicCheck() {
     setMic("requesting");
     try {
@@ -475,6 +508,7 @@ export function PrecheckScreen({
       .map((item) => ({ ok: item.ok, todo: item.label.toLowerCase() })),
     { ok: camera.state === "passed", todo: "camera access" },
     { ok: !networkBusy && networkOk, todo: "network speed" },
+    ...(requireScreenShare ? [{ ok: screen === "ok", todo: "screen sharing" }] : []),
   ];
   const step1Ok = required.every((row) => row.ok);
   const step1Todo = required.filter((row) => !row.ok).map((row) => row.todo);
@@ -640,6 +674,24 @@ export function PrecheckScreen({
             onRetry={() => void runMicCheck()}
             disabled={mic === "requesting" || starting}
           />
+          {requireScreenShare ? (
+            <CheckRow
+              label="Screen sharing"
+              state={
+                screen === "ok"
+                  ? "pass"
+                  : screen === "idle"
+                    ? "idle"
+                    : screen === "requesting"
+                      ? "busy"
+                      : "fail"
+              }
+              reason={screenReason(screen)}
+              buttonLabel={screen === "idle" ? "Share screen" : "Share screen again"}
+              onRetry={() => void runScreenCheck()}
+              disabled={screen === "requesting" || starting}
+            />
+          ) : null}
           <CheckRow
             label="Network speed"
             state={
@@ -896,6 +948,25 @@ function cameraReason(camera: CameraState): string {
       return "Checking the camera picture…";
     default:
       return "Select Check camera and allow the camera when your browser asks.";
+  }
+}
+
+function screenReason(screen: ScreenState): string {
+  switch (screen) {
+    case "ok":
+      return "Your whole screen is being shared. Keep sharing until the exam ends.";
+    case "denied":
+      return "Screen sharing was refused. This exam needs it. Select Share screen and allow it.";
+    case "unavailable":
+      return "This browser cannot share the screen. Use a recent Chrome or Edge on a computer.";
+    case "not_entire":
+      return "You shared a window or a tab. Choose Entire screen, then select Share screen again.";
+    case "ended":
+      return "Sharing was stopped. Select Share screen again.";
+    case "requesting":
+      return "Waiting for you to choose the screen to share…";
+    default:
+      return "This exam needs your whole screen shared. Nothing from the screen is recorded or sent; a flag is recorded if you stop sharing.";
   }
 }
 

@@ -498,6 +498,8 @@ export async function listAvailable(user) {
         assessmentEndDate: batch.assessmentEndDate,
         // X-07: the check screen tells the candidate their location goes with flag photos.
         captureLocation: batch.captureLocation === true,
+        // X-21: the check screen asks the candidate to share the screen.
+        requireScreenShare: resolveBatchSettings(batch.settings).requireScreenShare === true,
         paperId: idStr(paper._id),
         paperCode: shortCode(paper._id),
         paperName: paper.name || defaultPaperName(qual?.name, paper.rules?.language),

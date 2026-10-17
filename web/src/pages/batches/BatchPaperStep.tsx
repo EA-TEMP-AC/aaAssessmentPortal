@@ -3,7 +3,6 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { errorMessage } from "../../api/client";
 import { listApprovedWeightProfiles, listPapers, paperTitle } from "../../api/testPapers";
-import { nosOf, useQualifications } from "../questionBank/qualifications";
 import { sameLanguage } from "./paperLanguage";
 import { LATER_PLAN, MAX_BUILT_QUESTIONS, type PaperPlan } from "./paperPlan";
 
@@ -48,12 +47,10 @@ export function BatchPaperStep({
     enabled: ready && plan.mode === "build",
     queryFn: ({ signal }) => listApprovedWeightProfiles(qualificationId, signal),
   });
-  const qualifications = useQualifications(ready && plan.mode === "build");
 
   const choices = (approved.data?.items ?? []).filter(
     (paper) => paper.complete && sameLanguage(paper.language, assessmentLanguage),
   );
-  const nos = nosOf(qualifications.data, qualificationId);
   const buildPlan = plan.mode === "build" ? plan : null;
 
   return (
@@ -138,8 +135,8 @@ export function BatchPaperStep({
               onChange={(event) => onChange({ ...buildPlan, totalQuestions: event.target.value })}
             />
             <p className="field-hint">
-              Split evenly over the {nos.length > 0 ? nos.length : ""} NOS of the qualification. Only approved questions
-              of the batch language are used.
+              Shared over the NOS of the qualification by their theory marks (evenly when the marks are not recorded). Only
+              approved questions of the batch language are used.
             </p>
           </div>
           <div className="field">

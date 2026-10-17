@@ -14,7 +14,6 @@ function auditItem(overrides: Partial<AuditLogItem> = {}): AuditLogItem {
     id: "row-1",
     actorId: "66f0000000000000000000aa",
     actorRole: "aa_admin",
-    actorName: null,
     action: "batch.update",
     entity: "batch",
     entityId: "batch-1",
@@ -267,7 +266,7 @@ it("opens a keyboard-reachable before and after view", async () => {
   ).not.toBeInTheDocument();
 });
 
-it("shows names next to the ids when the server sends them (X-20)", async () => {
+it("shows batch labels next to the ids, and staff by id (X-20)", async () => {
   vi.stubGlobal(
     "fetch",
     vi.fn(async () =>
@@ -275,18 +274,17 @@ it("shows names next to the ids when the server sends them (X-20)", async () => 
         200,
         auditPage([
           auditItem({
-            actorName: "Asha Admin",
             entityLabel: "ELE/Q0001 Field Technician, 2026-10-15 to 2026-10-17",
             batchLabel: "ELE/Q0001 Field Technician, 2026-10-15 to 2026-10-17",
           }),
-          auditItem({ id: "row-2", actorName: null, entity: "attempt", entityId: "att-9", batchLabel: "Batch label B" }),
+          auditItem({ id: "row-2", entity: "attempt", entityId: "att-9", batchLabel: "Batch label B" }),
         ]),
       ),
     ),
   );
   setSession(sessionFor("aa_admin"));
   renderApp("/audit-logs");
-  expect(await screen.findByText("AA admin (Asha Admin)")).toBeInTheDocument();
+  expect(await screen.findAllByText("AA admin (66f0000000000000000000aa)")).not.toHaveLength(0);
   expect(screen.getByText(/ELE\/Q0001 Field Technician, 2026-10-15 to 2026-10-17/)).toBeInTheDocument();
   // Without a name the id still shows, and the batch label is added for other kinds of entity.
   expect(screen.getByText(/att-9/)).toBeInTheDocument();

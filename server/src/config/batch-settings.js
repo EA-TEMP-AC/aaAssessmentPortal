@@ -54,6 +54,8 @@ export function defaultBatchSettings() {
     // X-16: the two newer camera and microphone checks can be switched off for a batch.
     // X-19: on, a complete paper can be used without the awarding body reviewer approving it (mock tests).
     skipPaperApproval: false,
+    // X-21: the candidate must share the whole screen for the exam; stopping the share raises a flag.
+    requireScreenShare: false,
     detectLookingAway: true,
     detectVoice: true,
     // X-12: aa_admin always sees it; these roles may too (the batch's own people only).
@@ -94,6 +96,7 @@ export function resolveBatchSettings(stored) {
     },
     captureLocation: stored.captureLocation ?? base.captureLocation,
     skipPaperApproval: stored.skipPaperApproval ?? base.skipPaperApproval,
+    requireScreenShare: stored.requireScreenShare ?? base.requireScreenShare,
     detectLookingAway: stored.detectLookingAway ?? base.detectLookingAway,
     detectVoice: stored.detectVoice ?? base.detectVoice,
     locationVisibleTo: stored.locationVisibleTo

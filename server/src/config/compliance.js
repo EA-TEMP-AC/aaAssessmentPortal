@@ -146,5 +146,6 @@ export const compliance = Object.freeze({
     id_unreadable: "medium",
     looking_away: "medium",
     voice_detected: "medium",
+    screen_share_stopped: "high",
   }),
 });

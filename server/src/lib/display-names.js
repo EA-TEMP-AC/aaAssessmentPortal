@@ -5,7 +5,6 @@ import { Centre } from "../models/centre.model.js";
 import { Proctor } from "../models/proctor.model.js";
 import { Qualification } from "../models/qualification.model.js";
 import { TrainingPartner } from "../models/training-partner.model.js";
-import { User } from "../models/user.model.js";
 
 /**
  * X-11. Names to show next to ids, in one place so every screen says the same thing.
@@ -115,10 +114,4 @@ export async function namesForBatches(batches) {
     });
   }
   return out;
-}
-
-/** X-20. User id -> display name only (never the email or any other field). */
-export async function userNames(userIds) {
-  const users = await nameMap(User, userIds);
-  return new Map([...users].map(([id, row]) => [id, row.name ?? null]));
 }

@@ -290,6 +290,25 @@ describe("flags", () => {
     Reflect.deleteProperty(document, "fullscreenElement");
   });
 
+  it("raises screen_share_stopped when the shared screen ends (X-21)", async () => {
+    const screenTrack = new FakeTrack();
+    const screenStream = { getVideoTracks: () => [screenTrack] } as unknown as MediaStream;
+    const s = setup();
+    await s.engine.start({
+      stream: fakeStream().stream,
+      screenStream,
+      sessionId: "sess-1",
+      attemptId: "att-1",
+      batchId: "batch-1",
+      config,
+      onStatus: (status) => s.statuses.push(status),
+    });
+    screenTrack.dispatchEvent(new Event("ended"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(s.flags.map((f) => f.type)).toEqual(["screen_share_stopped"]);
+    s.engine.stop();
+  });
+
   it("raises permission_revoked and goes degraded when the camera track ends", async () => {
     const { stream, track } = fakeStream();
     const s = setup();

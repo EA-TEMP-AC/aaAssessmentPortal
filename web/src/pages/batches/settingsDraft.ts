@@ -34,6 +34,7 @@ export type Draft = {
   skipPaperApproval: boolean;
   detectLookingAway: boolean;
   detectVoice: boolean;
+  requireScreenShare: boolean;
 };
 
 export type Problems = Partial<
@@ -60,6 +61,7 @@ export function toDraft(s: BatchSettings): Draft {
     skipPaperApproval: s.skipPaperApproval,
     detectLookingAway: s.detectLookingAway,
     detectVoice: s.detectVoice,
+    requireScreenShare: s.requireScreenShare,
   };
 }
 
@@ -104,6 +106,7 @@ export function buildPatch(
     "skipPaperApproval",
     "detectLookingAway",
     "detectVoice",
+    "requireScreenShare",
   ] as const) {
     if (draft[key] !== saved[key]) patch[key] = draft[key];
   }
@@ -217,6 +220,7 @@ export function describeChanges(saved: BatchSettings, draft: Draft): string[] {
   flip("Use papers without reviewer approval", saved.skipPaperApproval, draft.skipPaperApproval);
   flip("Detect looking away", saved.detectLookingAway, draft.detectLookingAway);
   flip("Detect voice", saved.detectVoice, draft.detectVoice);
+  flip("Require screen sharing", saved.requireScreenShare, draft.requireScreenShare);
   const viewers = LOCATION_ROLES.filter((r) => draft.locationVisibleTo.includes(r));
   if (viewers.join() !== saved.locationVisibleTo.join()) {
     lines.push(

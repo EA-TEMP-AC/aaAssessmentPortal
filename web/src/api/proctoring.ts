@@ -38,6 +38,7 @@ export const FLAG_TYPE_LABELS: Record<string, string> = {
   id_unreadable: "ID card photo not readable",
   looking_away: "Looking away from the screen",
   voice_detected: "Voice heard",
+  screen_share_stopped: "Screen sharing stopped",
 };
 
 export const DECISION_LABELS: Record<Decision, string> = {

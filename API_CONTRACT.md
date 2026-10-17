@@ -1755,13 +1755,13 @@ Role: `candidate`, own session.
 | Field | Required | Rule |
 |---|---|---|
 | `clientEventId` | yes | 1 to 200 characters; idempotency key within the session |
-| `type` | yes | `tab_hidden`, `fullscreen_exit`, `window_blur`, `permission_revoked`, `object_detected`, `face_not_present`, `multiple_faces`, `person_detected`, `phone_detected`, `camera_blocked`, `camera_frozen`, `face_mismatch`, `id_mismatch`, `id_unreadable`, `looking_away`, `voice_detected` |
+| `type` | yes | `tab_hidden`, `fullscreen_exit`, `window_blur`, `permission_revoked`, `object_detected`, `face_not_present`, `multiple_faces`, `person_detected`, `phone_detected`, `camera_blocked`, `camera_frozen`, `face_mismatch`, `id_mismatch`, `id_unreadable`, `looking_away`, `voice_detected`, `screen_share_stopped` |
 | `capturedAt` | yes | ISO-8601 with `Z` or an offset; device clock, stored as sent |
 | `detail` | no | Only `label` (1 to 60 letters, digits, spaces, `_`, `-`), `count` (integer 0 to 100), `confidence` (0 to 1). Never an image, a name or other personal data; any other key is `400` |
 | `evidenceId` | no | A `proctor_snapshot` evidence row of this session, else `400` |
 | `location` | no | X-07. `{ latitude (-90 to 90), longitude (-180 to 180), accuracy (metres, 0 to 1000000, optional) }`, no other key. Kept only when the batch has `captureLocation` on; otherwise it is dropped and the flag has `locationStatus: "not_shared"`. Not part of the replay check: a resend with a different `location` returns the stored flag |
 
-The **server** sets `severity` (a `severity` key in the body is `400`): low `tab_hidden`, `fullscreen_exit`, `window_blur`, `permission_revoked`, `object_detected`; medium `face_not_present`, `id_unreadable`, `looking_away`, `voice_detected`; high `multiple_faces`, `person_detected`, `phone_detected`, `camera_blocked`, `camera_frozen`, `face_mismatch`, `id_mismatch`.
+The **server** sets `severity` (a `severity` key in the body is `400`): low `tab_hidden`, `fullscreen_exit`, `window_blur`, `permission_revoked`, `object_detected`; medium `face_not_present`, `id_unreadable`, `looking_away`, `voice_detected`; high `multiple_faces`, `person_detected`, `phone_detected`, `camera_blocked`, `camera_frozen`, `face_mismatch`, `id_mismatch`, `screen_share_stopped`.
 
 `201` new, `200` replay: `{ paused, id, sessionId, clientEventId, type, severity, capturedAt, receivedAt, evidenceId, replayed }` (`paused`: B-20, true when this flag made the batch's flag policy pause the attempt, or it already was). The same `clientEventId` with a different `type`, `capturedAt`, `detail` or `evidenceId` is `409 CONFLICT_IDEMPOTENT`. The server does not enforce the cooldown.
 Audit: `proctoring.flag` or `proctoring.flag_replay` (session, type, severity, time, evidence id; no request body).
@@ -1892,7 +1892,7 @@ No body. Any `2xx`. Sent every 15 seconds while the exam is open.
 ### GET /api/v1/proctoring/sessions/:id/warnings
 Returns `{ items: [{ id, message, createdAt }] }`. Polled every 15 seconds; each new `id` is shown once to the candidate, who must acknowledge it (the acknowledgement is not sent yet).
 
-Flag types the engine raises (`web/src/exam/proctorBridge.ts`): `tab_hidden`, `fullscreen_exit`, `window_blur`, `permission_revoked`, `object_detected`, `face_not_present`, `multiple_faces`, `person_detected`, `phone_detected`, `camera_blocked`, `camera_frozen`, `face_mismatch`, `id_mismatch`, `id_unreadable`, `looking_away`, `voice_detected` (P-09). No video is uploaded; only flags and occasional snapshots, plus, at Start, the ID card photo (`id_proof`) and the selfie (`proctor_snapshot`). Face flags only ask a person to look; they never block or fail a candidate. The `detail` of a face flag is `{ label: "distance_<hundredths>", count: <samples> }` (docs/PROCTORING_ENGINE.md); no descriptor or image data is ever sent.
+Flag types the engine raises (`web/src/exam/proctorBridge.ts`): `tab_hidden`, `fullscreen_exit`, `window_blur`, `permission_revoked`, `object_detected`, `face_not_present`, `multiple_faces`, `person_detected`, `phone_detected`, `camera_blocked`, `camera_frozen`, `face_mismatch`, `id_mismatch`, `id_unreadable`, `looking_away`, `voice_detected`, `screen_share_stopped` (P-09, X-21). No video is uploaded; only flags and occasional snapshots, plus, at Start, the ID card photo (`id_proof`) and the selfie (`proctor_snapshot`). Face flags only ask a person to look; they never block or fail a candidate. The `detail` of a face flag is `{ label: "distance_<hundredths>", count: <samples> }` (docs/PROCTORING_ENGINE.md); no descriptor or image data is ever sent.
 
 
 ## Reports (task X-09)
@@ -1922,7 +1922,7 @@ Attempt view for the candidate: `clockHeld` (boolean) is true while the attempt 
 
 ## Looking-away and voice switches (task X-16)
 
-Batch settings (`GET`/`PATCH /batches/:id/settings`, `aa_admin` writes) gain `detectLookingAway` and `detectVoice` (booleans, both default `true`). The proctoring session `config` (from `POST /proctoring/sessions`) gains `disabledFlags`: the flag types the browser must not check for this batch, for example `["voice_detected"]` (empty when both are on). The hold times stay the server constants in `PROCTOR_SUSTAINED_SECONDS`, the same for every batch.
+Batch settings (`GET`/`PATCH /batches/:id/settings`, `aa_admin` writes) gain `detectLookingAway` and `detectVoice` (booleans, both default `true`) and `requireScreenShare` (boolean, default `false`, X-21). Each item of `GET /attempts/available` carries `requireScreenShare`: when `true` the check screen asks the candidate to share the whole screen before Start, and the browser raises `screen_share_stopped` (high) if sharing ends. The server does not enforce sharing; no screen image is read or sent. The proctoring session `config` (from `POST /proctoring/sessions`) gains `disabledFlags`: the flag types the browser must not check for this batch, for example `["voice_detected"]` (empty when both are on). The hold times stay the server constants in `PROCTOR_SUSTAINED_SECONDS`, the same for every batch.
 
 ## Mock-test batches: papers without approval (task X-19)
 
@@ -1934,5 +1934,5 @@ When `false` nothing changes: only an approved, complete paper can be set or sta
 ## Names in the batch list and the audit log (task X-20)
 
 - `GET /batches` (every role that can list): each item now also carries `names`, the same object as in `GET /batches/:id` (`abName`, `qualificationName`, `tpName`, `centreName`, `assessorName`, `proctorName`; a value is `null` when no record is found). Read in one query per collection for the page.
-- `GET /audit-logs`: each item also carries `actorName` (the user's name; `null` for a system row or an unknown user), `batchLabel` (the batch in the same wording as the candidate's list, for rows with a `batchId`) and `entityLabel` (the batch label when `entity` is `batch`, the user's name when it is `user`, else `null`). Names only: no email, phone or other field is read.
+- `GET /audit-logs`: each item also carries `batchLabel` (the batch in the same wording as the candidate's list, for rows with a `batchId`) and `entityLabel` (the batch label when `entity` is `batch`, else `null`). Staff are shown by id only: the audit log carries no user names, emails or other personal fields.
 - Analytics rows already carried `name` and `code` (E-03); nothing changed there.

@@ -410,6 +410,12 @@ export function createEngine(options: EngineOptions = {}): ProctorEngine {
         setStatus(r, "degraded", "The camera stopped sending video.");
       }
     };
+    // X-21: if the candidate stops sharing the screen, one high flag. Nothing from the screen is read.
+    for (const track of o.screenStream?.getVideoTracks() ?? []) {
+      listen(r, track, "ended", () =>
+        raiseEvent(r, "screen_share_stopped", { label: "screen share ended", count: 1, confidence: 1 }),
+      );
+    }
     for (const track of r.tracks) {
       listen(r, track, "ended", () => cameraLost("track ended"));
       listen(r, track, "mute", () => cameraLost("track muted"));
