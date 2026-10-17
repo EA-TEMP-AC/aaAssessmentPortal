@@ -60,11 +60,12 @@ function formatActor(item: AuditLogItem): string {
   if (!item.actorId && !item.actorRole) return "Not recorded";
   const role =
     item.actorRole && isRole(item.actorRole) ? ROLE_LABELS[item.actorRole] : (item.actorRole ?? "Unknown role");
-  return `${role} (${item.actorId ?? "Unknown id"})`;
+  return `${role} (${item.actorName ?? item.actorId ?? "Unknown id"})`;
 }
 
 function entryTarget(item: AuditLogItem): string {
-  return item.entityId ? `${item.entity} ${item.entityId}` : item.entity;
+  const label = item.entityLabel ?? item.entityId;
+  return label ? `${item.entity} ${label}` : item.entity;
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
@@ -151,7 +152,11 @@ function AuditRow({ item }: { item: AuditLogItem }) {
         <td>{formatActor(item)}</td>
         <td>{item.action}</td>
         <td>{item.entity}</td>
-        <td>{item.entityId ?? "None"}</td>
+        <td>
+          {item.entityLabel ?? item.entityId ?? "None"}
+          {item.entityLabel && item.entityId ? <span className="field-hint"> ({item.entityId})</span> : null}
+          {item.batchLabel && item.entity !== "batch" ? <span className="field-hint"> Batch: {item.batchLabel}</span> : null}
+        </td>
         <td>
           <button
             ref={buttonRef}

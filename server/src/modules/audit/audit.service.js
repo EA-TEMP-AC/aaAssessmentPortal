@@ -1,3 +1,4 @@
+import { batchLabels, userNames } from "../../lib/display-names.js";
 import { forbidden } from "../../lib/errors.js";
 import { redactSecrets } from "../../lib/redact.js";
 import { AuditLog } from "../../models/audit-log.model.js";
@@ -40,16 +41,41 @@ export async function auditReadFilter(user) {
   };
 }
 
-function toDto(doc) {
+const OBJECT_ID = /^[a-f0-9]{24}$/i;
+
+/** X-20. Names for a page of rows: who did it, which batch, and which batch or user the entity is. */
+async function readableNames(docs) {
+  const userIds = new Set();
+  const batchIds = new Set();
+  for (const doc of docs) {
+    if (doc.actorId) userIds.add(String(doc.actorId));
+    if (doc.batchId) batchIds.add(String(doc.batchId));
+    if (doc.entity === "batch" && OBJECT_ID.test(doc.entityId ?? "")) batchIds.add(doc.entityId);
+    if (doc.entity === "user" && OBJECT_ID.test(doc.entityId ?? "")) userIds.add(doc.entityId);
+  }
+  const [users, batches] = await Promise.all([userNames([...userIds]), batchLabels([...batchIds])]);
+  return { users, batches };
+}
+
+function toDto(doc, names) {
+  const entityLabel =
+    doc.entity === "batch"
+      ? (names.batches.get(doc.entityId) ?? null)
+      : doc.entity === "user"
+        ? (names.users.get(doc.entityId) ?? null)
+        : null;
   return {
     id: doc._id.toString(),
     actorId: doc.actorId ? doc.actorId.toString() : null,
     actorRole: doc.actorRole ?? null,
+    actorName: doc.actorId ? (names.users.get(String(doc.actorId)) ?? null) : null,
     action: doc.action,
     entity: doc.entity,
     entityId: doc.entityId ?? null,
     abId: doc.abId ? doc.abId.toString() : null,
     batchId: doc.batchId ? doc.batchId.toString() : null,
+    batchLabel: doc.batchId ? (names.batches.get(String(doc.batchId)) ?? null) : null,
+    entityLabel,
     before: redactSecrets(doc.before ?? null),
     after: redactSecrets(doc.after ?? null),
     meta: redactSecrets(doc.meta ?? null),
@@ -77,10 +103,11 @@ export async function listAuditLogs(user, query) {
     AuditLog.find(filter).sort({ createdAt: -1, _id: -1 }).skip(skip).limit(AUDIT_PAGE_SIZE),
   ]);
 
+  const names = await readableNames(docs);
   return {
     page,
     pageSize: AUDIT_PAGE_SIZE,
     total,
-    items: docs.map((doc) => toDto(doc)),
+    items: docs.map((doc) => toDto(doc, names)),
   };
 }

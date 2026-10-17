@@ -290,7 +290,8 @@ export function BatchListPage() {
             {result?.items.map((batch) => (
               <tr key={batch.id}>
                 <td>
-                  <Link to={`/batches/${batch.id}`}>{batch.id}</Link>
+                  <Link to={`/batches/${batch.id}`}>{batch.names?.qualificationName ?? batch.id}</Link>
+                  {batch.names?.qualificationName ? <span className="field-hint"> {batch.id}</span> : null}
                 </td>
                 <td>
                   <StatusBadge status={batch.status} />
@@ -299,7 +300,7 @@ export function BatchListPage() {
                 <td>
                   {batch.assessmentStartDate} to {batch.assessmentEndDate}
                 </td>
-                <td>{batch.tpId}</td>
+                <td>{batch.names?.tpName ?? batch.tpId}</td>
                 <td>
                   <SlaColumn batch={batch} now={now} />
                 </td>

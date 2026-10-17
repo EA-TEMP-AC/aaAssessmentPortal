@@ -12,11 +12,16 @@ export type AuditLogItem = {
   id: string;
   actorId: string | null;
   actorRole: string | null;
+  /** X-20: names the server found. Null when there is no actor, no record, or the server sent none. */
+  actorName: string | null;
   action: string;
   entity: string;
   entityId: string | null;
   abId: string | null;
   batchId: string | null;
+  batchLabel: string | null;
+  /** X-20: the name of the batch or user the row is about; null for other kinds of entity. */
+  entityLabel: string | null;
   before: unknown;
   after: unknown;
   meta: unknown;
@@ -108,17 +113,24 @@ function parseItem(value: unknown): AuditLogItem | null {
     id: value.id,
     actorId,
     actorRole,
+    actorName: nonEmptyText(value.actorName),
     action: value.action,
     entity: value.entity,
     entityId,
     abId,
     batchId,
+    batchLabel: nonEmptyText(value.batchLabel),
+    entityLabel: nonEmptyText(value.entityLabel),
     before: value.before ?? null,
     after: value.after ?? null,
     meta: value.meta ?? null,
     ip,
     createdAt: value.createdAt,
   };
+}
+
+function nonEmptyText(value: unknown): string | null {
+  return typeof value === "string" && value !== "" ? value : null;
 }
 
 function parseAuditLogPage(value: unknown): AuditLogPage {

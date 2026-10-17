@@ -260,4 +260,39 @@ describe("audit logs", () => {
     expect(ranged.body.total).toBe(1);
     expect(ranged.body.items[0].action).toBe("older");
   });
+
+  it("adds readable names next to the ids (X-20)", async () => {
+    const { user } = await createUser({ email: "admin@aa.example", password, name: "Asha Admin" });
+    const target = await createUser({
+      email: "mis@aa.example",
+      password,
+      role: "mis",
+      name: "Mohan Mis",
+    });
+    const missingBatch = new mongoose.Types.ObjectId();
+    await recordAudit({
+      actorId: user._id,
+      actorRole: "aa_admin",
+      action: "user.update",
+      entity: "user",
+      entityId: target.user._id.toString(),
+      batchId: missingBatch,
+    });
+    await recordAudit({ action: "system.job", entity: "job", entityId: "nightly" });
+    const token = await tokenFor("admin@aa.example");
+    const res = await request(app)
+      .get("/api/v1/audit-logs")
+      .set({ Authorization: `Bearer ${token}` });
+    expect(res.status).toBe(200);
+    const row = res.body.items.find((item) => item.action === "user.update");
+    expect(row.actorName).toBe("Asha Admin");
+    expect(row.entityLabel).toBe("Mohan Mis");
+    // A batch that cannot be found, and a row with no actor or no named entity, give null, not an error.
+    expect(row.batchLabel).toBeNull();
+    const system = res.body.items.find((item) => item.action === "system.job");
+    expect(system.actorName).toBeNull();
+    expect(system.entityLabel).toBeNull();
+    // Names only: no email in any row.
+    expect(JSON.stringify(res.body.items)).not.toContain("mis@aa.example");
+  });
 });

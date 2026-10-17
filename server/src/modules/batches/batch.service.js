@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import { namesForBatch } from "../../lib/display-names.js";
+import { namesForBatch, namesForBatches } from "../../lib/display-names.js";
 import {
   forbidden,
   invalidTransition,
@@ -286,11 +286,16 @@ export async function listBatches(user, query, now = new Date()) {
     Batch.countDocuments(filter),
     Batch.find(filter).sort({ createdAt: -1, _id: -1 }).skip(skip).limit(query.pageSize).lean(),
   ]);
+  const names = await namesForBatches(docs);
   return {
     page: query.page,
     pageSize: query.pageSize,
     total,
-    items: docs.map((doc) => presentBatch(doc, { now })),
+    // X-20: names next to the ids, so the list reads without opening each batch.
+    items: docs.map((doc) => ({
+      ...presentBatch(doc, { now }),
+      names: names.get(String(doc._id)),
+    })),
   };
 }
 

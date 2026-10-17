@@ -1930,3 +1930,9 @@ Batch setting `skipPaperApproval` (boolean, default `false`; `GET`/`PATCH /batch
 - `PUT /batches/:id/test-paper` accepts a `draft`, `submitted` or `approved` paper, as long as it is `complete`, for the batch's qualification and in the batch's language. An incomplete paper still gives `409 BATCH_TEST_PAPER_NOT_APPROVED`.
 - `GET /attempts/available` lists that paper and `POST /attempts/start` starts it, with the same rules as for an approved paper.
 When `false` nothing changes: only an approved, complete paper can be set or started. The setting can be turned off again; a draft paper already set then no longer starts (`404`, as any unapproved paper). The change is audited as `batch.settings_update`.
+
+## Names in the batch list and the audit log (task X-20)
+
+- `GET /batches` (every role that can list): each item now also carries `names`, the same object as in `GET /batches/:id` (`abName`, `qualificationName`, `tpName`, `centreName`, `assessorName`, `proctorName`; a value is `null` when no record is found). Read in one query per collection for the page.
+- `GET /audit-logs`: each item also carries `actorName` (the user's name; `null` for a system row or an unknown user), `batchLabel` (the batch in the same wording as the candidate's list, for rows with a `batchId`) and `entityLabel` (the batch label when `entity` is `batch`, the user's name when it is `user`, else `null`). Names only: no email, phone or other field is read.
+- Analytics rows already carried `name` and `code` (E-03); nothing changed there.

@@ -324,7 +324,9 @@ describe("batches", () => {
     const listed = await request(app).get("/api/v1/batches").set(bearer(admin.token));
     expect(listed.status).toBe(200);
     expect(listed.body).toMatchObject({ page: 1, pageSize: 20, total: 1 });
-    expect(listed.body.items).toEqual([created]);
+    // X-20: list rows carry the same names as the single read.
+    expect(listed.body.items.map(({ names: _rowNames, ...row }) => row)).toEqual([created]);
+    expect(Object.keys(listed.body.items[0].names).sort()).toEqual(Object.keys(names).sort());
 
     const audit = await AuditLog.findOne({ action: "batch.create", entityId: created.id }).lean();
     expect(audit).toMatchObject({

@@ -145,3 +145,28 @@ it("does not show action buttons on the list", async () => {
   expect(screen.queryByRole("button", { name: "Accept" })).not.toBeInTheDocument();
   expect(ACTION_CASES.length).toBeGreaterThan(0);
 });
+
+it("shows the qualification and training partner names, with the id kept small (X-20)", async () => {
+  const named = batchRecord({
+    names: {
+      abName: null,
+      qualificationName: "ELE/Q0001 Field Technician",
+      tpName: "Bright Skills Pvt Ltd",
+      centreName: null,
+      assessorName: null,
+      proctorName: null,
+    },
+  });
+  const unnamed = batchRecord({ id: "66f000000000000000000099", tpId: "66f0000000000000000000ab" });
+  installFetch(async () => jsonResponse(200, listBody([named, unnamed])));
+  setSession(sessionFor("aa_admin"));
+  renderApp("/batches");
+  expect(await screen.findByRole("link", { name: "ELE/Q0001 Field Technician" })).toHaveAttribute(
+    "href",
+    `/batches/${named.id}`,
+  );
+  expect(screen.getByText("Bright Skills Pvt Ltd")).toBeInTheDocument();
+  // A batch whose names were not found falls back to the ids, as before.
+  expect(screen.getByRole("link", { name: unnamed.id })).toBeInTheDocument();
+  expect(screen.getByText(unnamed.tpId)).toBeInTheDocument();
+});
