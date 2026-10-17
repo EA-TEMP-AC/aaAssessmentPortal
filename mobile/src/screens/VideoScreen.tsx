@@ -1,4 +1,8 @@
-import { CameraView, useCameraPermissions, useMicrophonePermissions } from "expo-camera";
+import {
+  CameraView,
+  useCameraPermissions,
+  useMicrophonePermissions,
+} from "expo-camera";
 import * as FileSystem from "expo-file-system";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -26,9 +30,17 @@ const MAX_BYTES = 190 * 1024 * 1024;
  * on screen while recording. The video is saved on the phone first and
  * then uploaded; if there is no network it waits in the list below until Upload is pressed.
  */
-export function VideoScreen({ batchId, roster, videoApi, queue, getAccessToken, newId, deviceId }: Props) {
+export function VideoScreen({
+  batchId,
+  roster,
+  videoApi,
+  queue,
+  getAccessToken,
+  newId,
+  deviceId,
+}: Props) {
   const students = roster.filter((c) => c.active);
-  const [studentId, setStudentId] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string[]>([]);
   const [part, setPart] = useState<VideoPart>("practical");
   const [questions, setQuestions] = useState<VivaQuestion[]>([]);
   const [qIndex, setQIndex] = useState(0);
@@ -43,7 +55,10 @@ export function VideoScreen({ batchId, roster, videoApi, queue, getAccessToken, 
   const [camPerm, requestCam] = useCameraPermissions();
   const [micPerm, requestMic] = useMicrophonePermissions();
 
-  const refresh = useCallback(async () => setPending(await queue.list()), [queue]);
+  const refresh = useCallback(
+    async () => setPending(await queue.list()),
+    [queue],
+  );
 
   useEffect(() => {
     void refresh();
@@ -54,23 +69,35 @@ export function VideoScreen({ batchId, roster, videoApi, queue, getAccessToken, 
     videoApi
       .getVivaQuestions(batchId, tokenRef.current())
       .then((items) => live && setQuestions(items))
-      .catch(() => live && setMessage("Could not load the questions. Connect once to load them."));
+      .catch(
+        () =>
+          live &&
+          setMessage(
+            "Could not load the questions. Connect once to load them.",
+          ),
+      );
     return () => {
       live = false;
     };
   }, [batchId, videoApi]);
 
   const shown = questions.filter((q) => q.type === part);
-  const student = students.find((c) => c.id === studentId) ?? null;
-  const question = shown[Math.min(qIndex, Math.max(shown.length - 1, 0))] ?? null;
-  const ready = Boolean(student) && !recording && camPerm?.granted && micPerm?.granted;
+  const chosen = students.filter((c) => selected.includes(c.id));
+  const chosenNames = chosen.map((c) => c.name).join(", ");
+  const question =
+    shown[Math.min(qIndex, Math.max(shown.length - 1, 0))] ?? null;
+  const ready =
+    chosen.length > 0 && !recording && camPerm?.granted && micPerm?.granted;
 
   async function uploadOne(item: PendingVideo): Promise<boolean> {
     const result = await videoApi.uploadVideo(item, tokenRef.current());
     if (result.kind === "success" || result.kind === "rejected") {
-      if (result.kind === "rejected") setMessage(`Not accepted: ${result.message}`);
+      if (result.kind === "rejected")
+        setMessage(`Not accepted: ${result.message}`);
       await queue.remove(item.clientEventId);
-      await FileSystem.deleteAsync(item.uri, { idempotent: true }).catch(() => undefined);
+      await FileSystem.deleteAsync(item.uri, { idempotent: true }).catch(
+        () => undefined,
+      );
       return result.kind === "success";
     }
     await queue.markFailed(item.clientEventId, result.message);
@@ -87,40 +114,55 @@ export function VideoScreen({ batchId, roster, videoApi, queue, getAccessToken, 
     }
     await refresh();
     setUploading(false);
-    setMessage(done === items.length ? "All videos uploaded." : `${done} of ${items.length} uploaded. The rest will wait.`);
+    setMessage(
+      done === items.length
+        ? "All videos uploaded."
+        : `${done} of ${items.length} uploaded. The rest will wait.`,
+    );
   }
 
   async function start() {
-    if (!student || !camera.current) return;
+    if (chosen.length === 0 || !camera.current) return;
     setMessage(null);
     setQIndex(0);
     setRecording(true);
     const capturedAt = new Date().toISOString();
     try {
-      const result = await camera.current.recordAsync({ maxDuration: MAX_SECONDS, maxFileSize: MAX_BYTES });
+      const result = await camera.current.recordAsync({
+        maxDuration: MAX_SECONDS,
+        maxFileSize: MAX_BYTES,
+      });
       setRecording(false);
       if (!result?.uri) throw new Error("No video was saved");
       const dir = `${FileSystem.documentDirectory}videos/`;
-      await FileSystem.makeDirectoryAsync(dir, { intermediates: true }).catch(() => undefined);
+      await FileSystem.makeDirectoryAsync(dir, { intermediates: true }).catch(
+        () => undefined,
+      );
       const id = newId();
       const uri = `${dir}${id}.mp4`;
       await FileSystem.moveAsync({ from: result.uri, to: uri });
       await queue.add({
         clientEventId: id,
         batchId,
-        candidateId: student.id,
+        ...(chosen.length === 1
+          ? { candidateId: chosen[0]?.id }
+          : { candidateIds: chosen.map((c) => c.id) }),
         part,
         capturedAt,
         deviceId,
         uri,
-        candidateName: student.name,
+        candidateName:
+          chosen.length === 1
+            ? chosenNames
+            : `Group of ${chosen.length}: ${chosenNames}`,
         label: part === "viva" ? "Viva" : "Practical",
       });
       await refresh();
       setMessage("Saved. Uploading...");
       const item = (await queue.list()).find((i) => i.clientEventId === id);
       if (item && (await uploadOne(item))) setMessage("Uploaded.");
-      else setMessage("Saved on the phone. It will upload when you press Upload.");
+      else
+        setMessage("Saved on the phone. It will upload when you press Upload.");
       await refresh();
     } catch (err) {
       setRecording(false);
@@ -137,7 +179,9 @@ export function VideoScreen({ batchId, roster, videoApi, queue, getAccessToken, 
     return (
       <View style={styles.screen}>
         <Text style={styles.title}>Video</Text>
-        <Text style={styles.note}>The camera and microphone are needed to record.</Text>
+        <Text style={styles.note}>
+          The camera and microphone are needed to record.
+        </Text>
         <Pressable
           style={styles.primary}
           onPress={() => {
@@ -175,35 +219,56 @@ export function VideoScreen({ batchId, roster, videoApi, queue, getAccessToken, 
         ))}
       </View>
 
-      <Text style={styles.label}>Student</Text>
-      {students.length === 0 ? <Text style={styles.note}>No students on this batch.</Text> : null}
+      <Text style={styles.label}>
+        Student (tap more than one for a group video)
+      </Text>
+      {students.length === 0 ? (
+        <Text style={styles.note}>No students on this batch.</Text>
+      ) : null}
       <View style={styles.wrap}>
         {students.map((c) => (
           <Pressable
             key={c.id}
             disabled={recording}
-            style={[styles.chip, studentId === c.id && styles.chipOn]}
-            onPress={() => setStudentId(c.id)}
+            style={[styles.chip, selected.includes(c.id) && styles.chipOn]}
+            onPress={() =>
+              setSelected((cur) =>
+                cur.includes(c.id)
+                  ? cur.filter((x) => x !== c.id)
+                  : [...cur, c.id],
+              )
+            }
             accessibilityRole="button"
-            accessibilityState={{ selected: studentId === c.id }}
+            accessibilityState={{ selected: selected.includes(c.id) }}
           >
-            <Text style={[styles.chipText, studentId === c.id && styles.chipTextOn]}>{c.name}</Text>
+            <Text
+              style={[
+                styles.chipText,
+                selected.includes(c.id) && styles.chipTextOn,
+              ]}
+            >
+              {c.name}
+            </Text>
           </Pressable>
         ))}
       </View>
 
       {shown.length === 0 ? (
-        <Text style={styles.note}>No {part} questions are set for this batch. You can still record.</Text>
+        <Text style={styles.note}>
+          No {part} questions are set for this batch. You can still record.
+        </Text>
       ) : (
         <Text style={styles.note}>
-          {shown.length} {part === "viva" ? "questions" : "tasks"} to cover. They show here while recording.
+          {shown.length} {part === "viva" ? "questions" : "tasks"} to cover.
+          They show here while recording.
         </Text>
       )}
 
       {recording && question ? (
         <View style={styles.askBox}>
           <Text style={[styles.small, { color: "#ccc" }]}>
-            {qIndex + 1} of {shown.length} ({question.nosId} / {question.pcId}, {question.marks} marks)
+            {qIndex + 1} of {shown.length} ({question.nosId} / {question.pcId},{" "}
+            {question.marks} marks)
           </Text>
           <Text style={styles.askText}>{question.stem}</Text>
           <View style={styles.row}>
@@ -216,9 +281,14 @@ export function VideoScreen({ batchId, roster, videoApi, queue, getAccessToken, 
               <Text style={styles.chipText}>Previous</Text>
             </Pressable>
             <Pressable
-              style={[styles.chip, qIndex >= shown.length - 1 && styles.disabled]}
+              style={[
+                styles.chip,
+                qIndex >= shown.length - 1 && styles.disabled,
+              ]}
               disabled={qIndex >= shown.length - 1}
-              onPress={() => setQIndex((i) => Math.min(shown.length - 1, i + 1))}
+              onPress={() =>
+                setQIndex((i) => Math.min(shown.length - 1, i + 1))
+              }
               accessibilityRole="button"
             >
               <Text style={styles.chipText}>Next</Text>
@@ -228,11 +298,21 @@ export function VideoScreen({ batchId, roster, videoApi, queue, getAccessToken, 
       ) : null}
 
       <View style={styles.cameraBox}>
-        <CameraView ref={camera} style={styles.camera} facing="back" mode="video" videoQuality="480p" />
+        <CameraView
+          ref={camera}
+          style={styles.camera}
+          facing="back"
+          mode="video"
+          videoQuality="480p"
+        />
       </View>
 
       {recording ? (
-        <Pressable style={styles.stop} onPress={stop} accessibilityRole="button">
+        <Pressable
+          style={styles.stop}
+          onPress={stop}
+          accessibilityRole="button"
+        >
           <Text style={styles.primaryText}>Stop recording</Text>
         </Pressable>
       ) : (
@@ -242,7 +322,13 @@ export function VideoScreen({ batchId, roster, videoApi, queue, getAccessToken, 
           onPress={() => void start()}
           accessibilityRole="button"
         >
-          <Text style={styles.primaryText}>{student ? `Record ${student.name}` : "Pick a student first"}</Text>
+          <Text style={styles.primaryText}>
+            {chosen.length === 0
+              ? "Pick a student first"
+              : chosen.length === 1
+                ? `Record ${chosenNames}`
+                : `Record group of ${chosen.length}`}
+          </Text>
         </Pressable>
       )}
       {message ? <Text style={styles.message}>{message}</Text> : null}
@@ -250,13 +336,23 @@ export function VideoScreen({ batchId, roster, videoApi, queue, getAccessToken, 
       <Text style={styles.label}>Waiting to upload ({pending.length})</Text>
       {pending.map((p) => (
         <View key={p.clientEventId} style={styles.q}>
-          <Text style={styles.qText}>{p.candidateName}, {p.label}</Text>
-          {p.lastError ? <Text style={styles.small}>Last try failed: {p.lastError}</Text> : null}
+          <Text style={styles.qText}>
+            {p.candidateName}, {p.label}
+          </Text>
+          {p.lastError ? (
+            <Text style={styles.small}>Last try failed: {p.lastError}</Text>
+          ) : null}
         </View>
       ))}
       {pending.length > 0 ? (
-        <Pressable style={[styles.primary, uploading && styles.disabled]} disabled={uploading} onPress={() => void uploadAll()}>
-          <Text style={styles.primaryText}>{uploading ? "Uploading..." : "Upload"}</Text>
+        <Pressable
+          style={[styles.primary, uploading && styles.disabled]}
+          disabled={uploading}
+          onPress={() => void uploadAll()}
+        >
+          <Text style={styles.primaryText}>
+            {uploading ? "Uploading..." : "Upload"}
+          </Text>
         </Pressable>
       ) : null}
     </ScrollView>
@@ -264,26 +360,74 @@ export function VideoScreen({ batchId, roster, videoApi, queue, getAccessToken, 
 }
 
 const styles = StyleSheet.create({
-  screen: { flexGrow: 1, backgroundColor: "#f7f7f5", padding: 24, paddingTop: 64 },
+  screen: {
+    flexGrow: 1,
+    backgroundColor: "#f7f7f5",
+    padding: 24,
+    paddingTop: 64,
+  },
   title: { fontSize: 24, fontWeight: "600", marginBottom: 8 },
-  label: { fontSize: 14, fontWeight: "600", color: "#444", marginTop: 16, marginBottom: 6 },
+  label: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#444",
+    marginTop: 16,
+    marginBottom: 6,
+  },
   note: { fontSize: 14, color: "#666", marginBottom: 8 },
   small: { fontSize: 12, color: "#666", marginTop: 2 },
   row: { flexDirection: "row", gap: 8 },
   wrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  chip: { backgroundColor: "#fff", borderRadius: 18, borderWidth: 1, borderColor: "#ccc", paddingHorizontal: 14, paddingVertical: 8 },
+  chip: {
+    backgroundColor: "#fff",
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#ccc",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
   chipOn: { backgroundColor: "#1d4ed8", borderColor: "#1d4ed8" },
   chipText: { fontSize: 14, color: "#222" },
   chipTextOn: { color: "#fff" },
-  q: { backgroundColor: "#fff", borderRadius: 8, padding: 12, marginBottom: 6, borderWidth: 1, borderColor: "#e5e5e5" },
+  q: {
+    backgroundColor: "#fff",
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: "#e5e5e5",
+  },
   qOn: { borderColor: "#1d4ed8", borderWidth: 2 },
   qText: { fontSize: 15, color: "#222" },
-  askBox: { backgroundColor: "#111", borderRadius: 8, padding: 16, marginTop: 12 },
+  askBox: {
+    backgroundColor: "#111",
+    borderRadius: 8,
+    padding: 16,
+    marginTop: 12,
+  },
   askText: { color: "#fff", fontSize: 20, lineHeight: 28, marginVertical: 8 },
-  cameraBox: { height: 260, borderRadius: 8, overflow: "hidden", marginTop: 16, backgroundColor: "#000" },
+  cameraBox: {
+    height: 260,
+    borderRadius: 8,
+    overflow: "hidden",
+    marginTop: 16,
+    backgroundColor: "#000",
+  },
   camera: { flex: 1 },
-  primary: { backgroundColor: "#1d4ed8", borderRadius: 8, paddingVertical: 14, alignItems: "center", marginTop: 12 },
-  stop: { backgroundColor: "#b91c1c", borderRadius: 8, paddingVertical: 14, alignItems: "center", marginTop: 12 },
+  primary: {
+    backgroundColor: "#1d4ed8",
+    borderRadius: 8,
+    paddingVertical: 14,
+    alignItems: "center",
+    marginTop: 12,
+  },
+  stop: {
+    backgroundColor: "#b91c1c",
+    borderRadius: 8,
+    paddingVertical: 14,
+    alignItems: "center",
+    marginTop: 12,
+  },
   primaryText: { color: "#fff", fontSize: 16, fontWeight: "600" },
   disabled: { opacity: 0.5 },
   message: { fontSize: 14, color: "#222", marginTop: 10 },

@@ -24,6 +24,24 @@ export const uploadFieldsSchema = z
     capturedAt: z.string().datetime({ offset: true }),
     candidateId: optional(objectIdSchema),
     sessionId: optional(objectIdSchema),
+    /** X-42: comma-separated candidate ids of a group video (2 to 50). */
+    candidateIds: optional(
+      z
+        .string()
+        .transform((v) =>
+          v
+            .split(",")
+            .map((x) => x.trim().toLowerCase())
+            .filter(Boolean),
+        )
+        .pipe(
+          z
+            .array(objectIdSchema)
+            .min(2, "A group has at least two students")
+            .max(50, "A group has at most 50 students")
+            .refine((ids) => new Set(ids).size === ids.length, "Each student once"),
+        ),
+    ),
     part: optional(z.enum(["practical", "viva"])),
     questionId: optional(objectIdSchema),
     deviceId: optional(z.string().trim().min(1).max(200)),
@@ -49,7 +67,14 @@ export const uploadFieldsSchema = z
     }
     if (data.part !== undefined) {
       if (data.kind !== "video") issue("part", "part is only allowed with kind 'video'");
-      if (data.candidateId === undefined) issue("candidateId", "candidateId is required with part");
+      if (data.candidateId === undefined && data.candidateIds === undefined) {
+        issue("candidateId", "candidateId or candidateIds is required with part");
+      }
+      if (data.candidateId !== undefined && data.candidateIds !== undefined) {
+        issue("candidateIds", "Send candidateId or candidateIds, not both");
+      }
+    } else if (data.candidateIds !== undefined) {
+      issue("candidateIds", "candidateIds needs part");
     }
     if (data.questionId !== undefined && data.part === undefined) {
       issue("questionId", "questionId needs part");

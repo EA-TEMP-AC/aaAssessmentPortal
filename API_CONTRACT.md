@@ -1419,6 +1419,8 @@ X-40. Assessor of the batch only. `{ items: [{ id, type: "viva"|"practical", nos
 
 X-40: for `kind=video` the assessor can also send `part` (`practical` or `viva`; needs `candidateId`; `409 BATCH_FEATURE_OFF` when that part's switch is off) and `questionId` (needs `part`; must be an approved question of the batch's qualification). Both are returned on the evidence row.
 
+X-42: a group video sends `candidateIds` (comma-separated, 2 to 50 students of the batch, each once) instead of `candidateId` (not both); `candidateId` is then null. Rows return `candidateIds`; the evidence list filter `candidateId` also finds a student's group videos, and list rows carry `candidateNames`. Downloading a group video is access-logged against each student.
+
 `multipart/form-data`. Roles: `aa_admin`, or the `assessor` or `proctor` assigned to the batch. Any other role, or another assessor or proctor, is `403`. Unknown batch `404`. A batch in `cancelled` or `rejected` is `409 INVALID_TRANSITION`; every other status accepts uploads.
 
 Parts:

@@ -644,7 +644,7 @@ Logged reads: `GET /users`, `/users/:id`, `/learners`, `/learners/:id`, `/assess
 
 ### 3.24 `evidence` (phase 2, V-01) - Guidelines 4.11b; NCVET:TR s9
 
-X-40: video rows may carry `part` (`practical`, `viva`, or null) and `questionId` (the viva question asked, or null).
+X-42: `candidateIds` (array, default empty) holds the students of a group video; `candidateId` is then null. X-40: video rows may carry `part` (`practical`, `viva`, or null) and `questionId` (the viva question asked, or null).
 
 One row per file in the evidence vault. The file is in object storage (section 3.24.1), never in MongoDB. Rows are immutable: the model rejects update, replace and delete, except that `lastVerification` and `verifyCount` may be set by the verify endpoint. Evidence of cancelled and rejected batches is kept.
 

@@ -672,6 +672,44 @@ describe("evidence vault", () => {
       expectError(await send("viva", { questionId: String(oid()) }), 400, "VALIDATION_ERROR");
     });
 
+    it("takes one video of a group of students (X-42)", async () => {
+      const w = await world();
+      const second = await Candidate.create({
+        batchId: w.batch._id,
+        learnerId: oid(),
+        name: "Ravi Kumar",
+        active: true,
+      });
+      const send = (ids, extra = {}) =>
+        upload(w.assessorSession.token, w.batch._id, {
+          file: mp4(),
+          filename: "g.mp4",
+          type: "video/mp4",
+          fields: { kind: "video", part: "practical", candidateIds: ids, ...extra },
+        });
+      const both = `${w.candidate._id},${second._id}`;
+      const ok = await send(both);
+      expect(ok.status, JSON.stringify(ok.body)).toBe(201);
+      expect(ok.body.candidateId).toBeNull();
+      expect([...ok.body.candidateIds].sort()).toEqual(
+        [String(w.candidate._id), String(second._id)].sort(),
+      );
+      // Listing a student's evidence includes the group video.
+      const list = await request(app)
+        .get(`/api/v1/evidence?candidateId=${second._id}`)
+        .set(bearer(w.admin.token));
+      expect(list.body.items.map((i) => i.id)).toContain(ok.body.id);
+      expect(list.body.items[0].candidateNames).toContain("Ravi Kumar");
+      // One student is not a group, a stranger is refused, and id and ids do not mix.
+      expectError(await send(String(w.candidate._id)), 400, "VALIDATION_ERROR");
+      expectError(await send(`${w.candidate._id},${oid()}`), 400, "VALIDATION_ERROR");
+      expectError(
+        await send(both, { candidateId: String(w.candidate._id) }),
+        400,
+        "VALIDATION_ERROR",
+      );
+    });
+
     it("takes OJT pictures only when the batch switch is on, and never from a candidate", async () => {
       const w = await world();
       const send = (token = w.assessorSession.token) =>

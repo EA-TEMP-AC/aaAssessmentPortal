@@ -62,6 +62,7 @@ export function presentEvidence(doc, { replayed } = {}) {
     batchId: String(doc.batchId),
     abId: String(doc.abId),
     candidateId: doc.candidateId ? String(doc.candidateId) : null,
+    candidateIds: (doc.candidateIds ?? []).map(String),
     sessionId: doc.sessionId ? String(doc.sessionId) : null,
     part: doc.part ?? null,
     questionId: doc.questionId ? String(doc.questionId) : null,
@@ -133,6 +134,7 @@ function payloadHash(user, batchId, fields, sha256) {
         // Only present for snapshots, so the hash of older rows is unchanged.
         ...(fields.sessionId ? { sessionId: fields.sessionId.toLowerCase() } : {}),
         ...(fields.part ? { part: fields.part } : {}),
+        ...(fields.candidateIds ? { candidateIds: [...fields.candidateIds].sort() } : {}),
         ...(fields.questionId ? { questionId: fields.questionId.toLowerCase() } : {}),
         sha256,
       }),
@@ -330,6 +332,19 @@ export async function createEvidence(user, batch, fields, file, context = {}) {
     }
   }
 
+  let groupIds = [];
+  if (fields.candidateIds) {
+    const found = await Candidate.find({ _id: { $in: fields.candidateIds }, batchId: batch._id })
+      .select("_id")
+      .lean();
+    if (found.length !== fields.candidateIds.length) {
+      throw validationError("candidateIds are not all on this batch", {
+        candidateIds: ["Not every student is on this batch"],
+      });
+    }
+    groupIds = found.map((c) => c._id);
+  }
+
   const storage = getEvidenceStorage();
   const storageKey = `evidence/${randomUUID()}.${EVIDENCE_EXTENSIONS[contentType]}`;
   await storage.put({
@@ -346,6 +361,7 @@ export async function createEvidence(user, batch, fields, file, context = {}) {
       batchId: batch._id,
       abId: batch.abId,
       candidateId,
+      candidateIds: groupIds,
       sessionId: snapshotSession ? snapshotSession._id : null,
       part: fields.part ?? null,
       questionId: fields.questionId ?? null,
@@ -418,7 +434,11 @@ async function roleScope(user) {
 export async function listEvidence(user, query) {
   const filter = {};
   if (query.batchId) filter.batchId = toObjectIdOrNull(query.batchId);
-  if (query.candidateId) filter.candidateId = toObjectIdOrNull(query.candidateId);
+  if (query.candidateId) {
+    const id = toObjectIdOrNull(query.candidateId);
+    // A group video belongs to each student in the group (X-42).
+    filter.$and = [...(filter.$and ?? []), { $or: [{ candidateId: id }, { candidateIds: id }] }];
+  }
   if (query.kind) filter.kind = query.kind;
   if (query.uploaderId) filter.uploaderUserId = toObjectIdOrNull(query.uploaderId);
   if (query.sessionId) filter.sessionId = toObjectIdOrNull(query.sessionId);
@@ -451,7 +471,9 @@ export async function listEvidence(user, query) {
  * not have to show ids. Names only; a missing record gives null.
  */
 export async function withDisplayNames(rows) {
-  const candidateIds = [...new Set(rows.map((r) => r.candidateId).filter(Boolean))];
+  const candidateIds = [
+    ...new Set(rows.flatMap((r) => [r.candidateId, ...(r.candidateIds ?? [])]).filter(Boolean)),
+  ];
   const [labels, candidates] = await Promise.all([
     batchLabels(rows.map((r) => r.batchId)),
     candidateIds.length > 0
@@ -465,6 +487,7 @@ export async function withDisplayNames(rows) {
     ...r,
     batchLabel: labels.get(r.batchId) ?? null,
     candidateName: r.candidateId ? (names.get(r.candidateId) ?? null) : null,
+    candidateNames: (r.candidateIds ?? []).map((id) => names.get(id)).filter(Boolean),
   }));
 }
 
@@ -488,12 +511,16 @@ export async function recordDownload(req, doc) {
     kind: "detail",
     fields: ["file"],
   });
-  if (doc.candidateId) {
-    const candidate = await Candidate.findById(doc.candidateId).select("learnerId").lean();
-    if (candidate?.learnerId) {
+  const shown = [doc.candidateId, ...(doc.candidateIds ?? [])].filter(Boolean);
+  if (shown.length > 0) {
+    const candidates = await Candidate.find({ _id: { $in: shown } })
+      .select("learnerId")
+      .lean();
+    const learnerIds = candidates.map((c) => c.learnerId).filter(Boolean);
+    if (learnerIds.length > 0) {
       await recordAccess(req, {
         subjectType: "learner",
-        subjectIds: [candidate.learnerId],
+        subjectIds: learnerIds,
         kind: "detail",
         fields: ["evidenceFile"],
       });
