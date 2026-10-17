@@ -293,6 +293,7 @@ Response `201` (STT; assign due is 7 working days after allocation, result due i
   "resultId": null,
   "testPaperId": null,
   "captureLocation": false,
+  "mockTest": false,
   "isReassessment": false,
   "reassessmentOf": null,
   "firstAssessmentBatchId": "66f0000000000000000000b1",
@@ -529,6 +530,8 @@ Checks: the paper must be `approved` and complete (`409 BATCH_TEST_PAPER_NOT_APP
 Audit: `batch.set_test_paper`, entity `batch`, `before: { testPaperId }`, `after: { testPaperId }`.
 
 ### PUT /batches/:id/capture-location
+X-22. Every batch response has `mockTest` (true when the batch setting `skipPaperApproval` is on). `PATCH /batches/:id/settings` refuses turning `skipPaperApproval` on for a batch linked to a scheme: `409 BATCH_MOCK_NOT_ALLOWED`. Turning it off, or changing other keys, is never refused.
+
 X-07. Role: `aa_admin` only; every other role `403`. Body `{ "captureLocation": true|false }` (the only key; a non-boolean or any other key is `400 VALIDATION_ERROR`). Returns the batch (`200`, with `captureLocation`). Unknown batch `404`. Any batch status. `captureLocation` is on every batch response and defaults to `false`. When it is `true` the candidate's browser may add its location to flag photos (see Proctoring, flag photos). Turning it off stops new coordinates being kept; coordinates already saved stay with their flags.
 Audit: `batch.set_capture_location`, entity `batch`, `before: { captureLocation }`, `after: { captureLocation }`.
 

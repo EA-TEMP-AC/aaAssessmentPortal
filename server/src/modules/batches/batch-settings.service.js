@@ -1,5 +1,5 @@
 import { resolveBatchSettings } from "../../config/batch-settings.js";
-import { forbidden, notFound, validationError } from "../../lib/errors.js";
+import { AppError, forbidden, notFound, validationError } from "../../lib/errors.js";
 import { isInBatchScope } from "../../middleware/scope.js";
 import { Batch } from "../../models/batch.model.js";
 
@@ -52,6 +52,14 @@ export async function updateBatchSettings(user, id, patch) {
     throw validationError("Request validation failed", {
       "candidateInfoPopup.fields": ["Choose at least one field when the pop-up is on"],
     });
+  }
+  // X-22: a batch under a scheme is a real assessment; it cannot be switched to a mock test.
+  if (after.skipPaperApproval === true && before.skipPaperApproval !== true && existing.schemeId) {
+    throw new AppError(
+      409,
+      "BATCH_MOCK_NOT_ALLOWED",
+      "A batch linked to a scheme must use an approved paper, so it cannot be set up as a mock test",
+    );
   }
   const normalised = resolveBatchSettings(after);
 

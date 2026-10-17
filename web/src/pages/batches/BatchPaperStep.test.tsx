@@ -94,6 +94,15 @@ describe("paper plan helpers (X-18)", () => {
     ]);
   });
 
+  it("splits evenly when the admin chooses the even rule (X-22)", () => {
+    const plan = { mode: "build", totalQuestions: "10", weightProfileId: "", durationMinutes: "", sendForApproval: true, splitBy: "even" } as const;
+    const nos = [{ nosId: "A", maxMarks: { theory: 90 } }, { nosId: "B", maxMarks: { theory: 10 } }];
+    const even = buildPaperRequest(plan, "Q1", "English", nos);
+    expect("input" in even && even.input.quotas).toEqual([{ nosId: "A", count: 5 }, { nosId: "B", count: 5 }]);
+    const marks = buildPaperRequest({ ...plan, splitBy: "marks" }, "Q1", "English", nos);
+    expect("input" in marks && marks.input.quotas).toEqual([{ nosId: "A", count: 9 }, { nosId: "B", count: 1 }]);
+  });
+
   it("checks the build plan and makes the generate body", () => {
     const plan = { mode: "build", totalQuestions: "4", weightProfileId: "P1", durationMinutes: "45", sendForApproval: true } as const;
     const nos = [{ nosId: "A" }, { nosId: "B" }];

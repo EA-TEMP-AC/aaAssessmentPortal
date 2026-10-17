@@ -907,6 +907,23 @@ describe("batch settings (B-20)", () => {
     });
   });
 
+  describe("mock safeguard (X-22)", () => {
+    it("refuses the mock switch on a batch linked to a scheme, allows it otherwise", async () => {
+      const w = await world();
+      await Batch.updateOne({ _id: w.batch._id }, { $set: { schemeId: oid() } });
+      expectError(
+        await patchSettings(w.admin, w, { skipPaperApproval: true }),
+        409,
+        "BATCH_MOCK_NOT_ALLOWED",
+      );
+      expect((await getSettings(w.admin, w)).body.settings.skipPaperApproval).toBe(false);
+      // Switching it off, or changing something else, is never blocked.
+      expect((await patchSettings(w.admin, w, { skipPaperApproval: false })).status).toBe(200);
+      await Batch.updateOne({ _id: w.batch._id }, { $set: { schemeId: null } });
+      expect((await patchSettings(w.admin, w, { skipPaperApproval: true })).status).toBe(200);
+    });
+  });
+
   describe("screen sharing (X-21)", () => {
     it("is off by default, switched per batch, and told to the candidate's list", async () => {
       const w = await world();

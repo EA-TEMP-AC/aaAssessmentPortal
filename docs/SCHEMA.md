@@ -426,6 +426,7 @@ Indexes: `{ code: 1 }` unique; `{ sector: 1 }`.
 | skipPaperApproval | boolean | `false` | X-19. On (a mock test): a complete paper of the batch's qualification and language can be set on the batch and started without being approved by the reviewer. Off: only an approved, complete paper |
 | detectLookingAway | boolean | `true` | X-16. Off: the browser does not check for the `looking_away` flag in this batch |
 | detectVoice | boolean | `true` | X-16. Off: the browser does not check for the `voice_detected` flag and does not ask for the microphone |
+| skipPaperApproval (X-22) | boolean | `false` | Cannot be turned on while the batch has a `schemeId` (`BATCH_MOCK_NOT_ALLOWED`). Shown as `mockTest` on batch responses |
 | requireScreenShare | boolean | `false` | X-21. On: the candidate must share the whole screen on the check screen; `screen_share_stopped` (high) is raised if sharing ends. No screen image is kept |
 | imageCapture.intervalSeconds | integer 10 to 120 | `PROCTOR_SNAPSHOT_INTERVAL_SECONDS` (30) | Becomes `config.snapshotIntervalSeconds` of a new proctoring session |
 | imageCapture.atStartAndEnd | bool | true | Delivered as `config.snapshotAtStartAndEnd`; the engine does not act on it yet (Q807) |

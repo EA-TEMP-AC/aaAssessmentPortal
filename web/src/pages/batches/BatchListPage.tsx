@@ -295,6 +295,7 @@ export function BatchListPage() {
                 </td>
                 <td>
                   <StatusBadge status={batch.status} />
+                  {batch.mockTest ? <span className="field-hint"> <strong>MOCK</strong></span> : null}
                 </td>
                 <td>{batch.type}</td>
                 <td>

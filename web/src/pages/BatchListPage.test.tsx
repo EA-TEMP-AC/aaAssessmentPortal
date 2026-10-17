@@ -170,3 +170,13 @@ it("shows the qualification and training partner names, with the id kept small (
   expect(screen.getByRole("link", { name: unnamed.id })).toBeInTheDocument();
   expect(screen.getByText(unnamed.tpId)).toBeInTheDocument();
 });
+
+it("tags a mock-test batch with MOCK and no other batch (X-22)", async () => {
+  const mock = batchRecord({ mockTest: true });
+  const real = batchRecord({ id: "66f000000000000000000098" });
+  installFetch(async () => jsonResponse(200, listBody([mock, real])));
+  setSession(sessionFor("aa_admin"));
+  renderApp("/batches");
+  expect(await screen.findByText("MOCK")).toBeInTheDocument();
+  expect(screen.getAllByText("MOCK")).toHaveLength(1);
+});

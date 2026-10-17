@@ -124,6 +124,17 @@ export function BatchPaperStep({
       {buildPlan ? (
         <div className="paper-build">
           <div className="field">
+            <label htmlFor={`${ids}-split`}>How to share the questions over the NOS</label>
+            <select
+              id={`${ids}-split`}
+              value={buildPlan.splitBy ?? "marks"}
+              onChange={(event) => onChange({ ...buildPlan, splitBy: event.target.value === "even" ? "even" : "marks" })}
+            >
+              <option value="marks">By the theory marks of each NOS (recommended)</option>
+              <option value="even">Evenly over all NOS</option>
+            </select>
+          </div>
+          <div className="field">
             <label htmlFor={`${ids}-total`}>Number of questions</label>
             <input
               id={`${ids}-total`}

@@ -13,6 +13,8 @@ export type PaperPlan =
       weightProfileId: string;
       durationMinutes: string;
       sendForApproval: boolean;
+      /** X-22: how the count is shared over the NOS. Missing means by theory marks. */
+      splitBy?: "marks" | "even";
     };
 
 export const LATER_PLAN: PaperPlan = { mode: "later" };
@@ -74,7 +76,7 @@ export function buildPaperRequest(
   const input: GenerateInput = {
     qualificationId,
     language: languageKey(batchLanguage),
-    quotas: splitQuotas(nos, total),
+    quotas: plan.splitBy === "even" ? evenQuotas(nos, total) : splitQuotas(nos, total),
     allowPartial: false,
   };
   if (plan.weightProfileId) input.weightProfileId = plan.weightProfileId;

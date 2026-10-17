@@ -127,6 +127,8 @@ export type BatchRecord = {
   resultId: string | null;
   /** D5: the one test paper candidates of this batch can start. Null until aa_admin sets it. */
   testPaperId: string | null;
+  /** X-22: the batch is set up as a mock test (papers without reviewer approval). */
+  mockTest?: boolean;
   rejectReason: string | null;
   cancelReason: string | null;
   isReassessment: boolean;
@@ -440,6 +442,7 @@ export function parseBatch(value: unknown): BatchRecord {
     ...(parseNames(value.names) ? { names: parseNames(value.names) } : {}),
     resultId,
     testPaperId,
+    mockTest: value.mockTest === true,
     rejectReason,
     cancelReason,
     isReassessment: value.isReassessment,
