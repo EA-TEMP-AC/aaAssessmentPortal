@@ -16,11 +16,14 @@ type Props = {
   deviceId?: string;
 };
 
-const MAX_SECONDS = 600;
+// One complete video per student and part. 30 minutes at 480p stays under the server's 200 MB limit.
+const MAX_SECONDS = 1800;
+const MAX_BYTES = 190 * 1024 * 1024;
 
 /**
- * X-40. Practical and viva recording. The assessor picks the student and the part, sees the viva
- * question to ask, and records with the back camera. The video is saved on the phone first and
+ * X-40, X-41. Practical and viva recording: one complete video per student and part. The assessor
+ * picks the student and the part, records with the back camera, and steps through the questions
+ * on screen while recording. The video is saved on the phone first and
  * then uploaded; if there is no network it waits in the list below until Upload is pressed.
  */
 export function VideoScreen({ batchId, roster, videoApi, queue, getAccessToken, newId, deviceId }: Props) {
@@ -28,7 +31,7 @@ export function VideoScreen({ batchId, roster, videoApi, queue, getAccessToken, 
   const [studentId, setStudentId] = useState<string | null>(null);
   const [part, setPart] = useState<VideoPart>("practical");
   const [questions, setQuestions] = useState<VivaQuestion[]>([]);
-  const [questionId, setQuestionId] = useState<string | null>(null);
+  const [qIndex, setQIndex] = useState(0);
   const [recording, setRecording] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [pending, setPending] = useState<PendingVideo[]>([]);
@@ -59,7 +62,7 @@ export function VideoScreen({ batchId, roster, videoApi, queue, getAccessToken, 
 
   const shown = questions.filter((q) => q.type === part);
   const student = students.find((c) => c.id === studentId) ?? null;
-  const question = shown.find((q) => q.id === questionId) ?? null;
+  const question = shown[Math.min(qIndex, Math.max(shown.length - 1, 0))] ?? null;
   const ready = Boolean(student) && !recording && camPerm?.granted && micPerm?.granted;
 
   async function uploadOne(item: PendingVideo): Promise<boolean> {
@@ -90,10 +93,11 @@ export function VideoScreen({ batchId, roster, videoApi, queue, getAccessToken, 
   async function start() {
     if (!student || !camera.current) return;
     setMessage(null);
+    setQIndex(0);
     setRecording(true);
     const capturedAt = new Date().toISOString();
     try {
-      const result = await camera.current.recordAsync({ maxDuration: MAX_SECONDS });
+      const result = await camera.current.recordAsync({ maxDuration: MAX_SECONDS, maxFileSize: MAX_BYTES });
       setRecording(false);
       if (!result?.uri) throw new Error("No video was saved");
       const dir = `${FileSystem.documentDirectory}videos/`;
@@ -106,7 +110,6 @@ export function VideoScreen({ batchId, roster, videoApi, queue, getAccessToken, 
         batchId,
         candidateId: student.id,
         part,
-        ...(part === "viva" && question ? { questionId: question.id } : {}),
         capturedAt,
         deviceId,
         uri,
@@ -160,7 +163,7 @@ export function VideoScreen({ batchId, roster, videoApi, queue, getAccessToken, 
             style={[styles.chip, part === p && styles.chipOn]}
             onPress={() => {
               setPart(p);
-              setQuestionId(null);
+              setQIndex(0);
             }}
             accessibilityRole="button"
             accessibilityState={{ selected: part === p }}
@@ -189,35 +192,43 @@ export function VideoScreen({ batchId, roster, videoApi, queue, getAccessToken, 
         ))}
       </View>
 
-      {shown.length > 0 ? (
-        <>
-          <Text style={styles.label}>{part === "viva" ? "Question to ask" : "Task"}</Text>
-          {shown.map((q) => (
-            <Pressable
-              key={q.id}
-              disabled={recording}
-              style={[styles.q, questionId === q.id && styles.qOn]}
-              onPress={() => setQuestionId(q.id)}
-              accessibilityRole="button"
-              accessibilityState={{ selected: questionId === q.id }}
-            >
-              <Text style={styles.qText}>{q.stem}</Text>
-              <Text style={styles.small}>{q.nosId} / {q.pcId}, {q.marks} marks</Text>
-            </Pressable>
-          ))}
-        </>
-      ) : (
+      {shown.length === 0 ? (
         <Text style={styles.note}>No {part} questions are set for this batch. You can still record.</Text>
+      ) : (
+        <Text style={styles.note}>
+          {shown.length} {part === "viva" ? "questions" : "tasks"} to cover. They show here while recording.
+        </Text>
       )}
 
-      {question ? (
+      {recording && question ? (
         <View style={styles.askBox}>
+          <Text style={[styles.small, { color: "#ccc" }]}>
+            {qIndex + 1} of {shown.length} ({question.nosId} / {question.pcId}, {question.marks} marks)
+          </Text>
           <Text style={styles.askText}>{question.stem}</Text>
+          <View style={styles.row}>
+            <Pressable
+              style={[styles.chip, qIndex === 0 && styles.disabled]}
+              disabled={qIndex === 0}
+              onPress={() => setQIndex((i) => Math.max(0, i - 1))}
+              accessibilityRole="button"
+            >
+              <Text style={styles.chipText}>Previous</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.chip, qIndex >= shown.length - 1 && styles.disabled]}
+              disabled={qIndex >= shown.length - 1}
+              onPress={() => setQIndex((i) => Math.min(shown.length - 1, i + 1))}
+              accessibilityRole="button"
+            >
+              <Text style={styles.chipText}>Next</Text>
+            </Pressable>
+          </View>
         </View>
       ) : null}
 
       <View style={styles.cameraBox}>
-        <CameraView ref={camera} style={styles.camera} facing="back" mode="video" />
+        <CameraView ref={camera} style={styles.camera} facing="back" mode="video" videoQuality="480p" />
       </View>
 
       {recording ? (
@@ -268,7 +279,7 @@ const styles = StyleSheet.create({
   qOn: { borderColor: "#1d4ed8", borderWidth: 2 },
   qText: { fontSize: 15, color: "#222" },
   askBox: { backgroundColor: "#111", borderRadius: 8, padding: 16, marginTop: 12 },
-  askText: { color: "#fff", fontSize: 20, lineHeight: 28 },
+  askText: { color: "#fff", fontSize: 20, lineHeight: 28, marginVertical: 8 },
   cameraBox: { height: 260, borderRadius: 8, overflow: "hidden", marginTop: 16, backgroundColor: "#000" },
   camera: { flex: 1 },
   primary: { backgroundColor: "#1d4ed8", borderRadius: 8, paddingVertical: 14, alignItems: "center", marginTop: 12 },
