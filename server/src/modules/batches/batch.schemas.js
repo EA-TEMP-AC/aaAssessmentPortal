@@ -268,6 +268,8 @@ export const batchSettingsBodySchema = guard(
       assessorGeolocation: z.boolean(),
       assessorAnnexureM: z.boolean(),
       assessorFeedback: z.boolean(),
+      assessorIdCardCheck: z.boolean(),
+      assessorIdNameCheck: z.boolean(),
       studentAttendance: z.boolean(),
       studentFeedback: z.boolean(),
       languages: z

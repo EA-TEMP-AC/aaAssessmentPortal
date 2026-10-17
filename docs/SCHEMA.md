@@ -463,6 +463,8 @@ Indexes: `{ code: 1 }` unique; `{ sector: 1 }`.
 | allowPracticalVideo, allowVivaVideo | boolean | `true` | X-28. X-30: `evidence` uploads of kind `video` are refused (`409 BATCH_FEATURE_OFF`) when both are off. The two are not told apart |
 | assessorGeolocation | boolean | `true` | X-28. X-30: off drops the location of evidence uploaded by staff (stored as `not_provided`); a candidate's own uploads follow `captureLocation` |
 | assessorFeedback | boolean | `false` | X-28. Stored only (assessor feedback is not built; parked by the human) |
+| assessorIdCardCheck | boolean | `false` | X-31. Stored only. Turns on the assessor's identity card check. The key name has no national-ID word on purpose; no card number is ever accepted or stored |
+| assessorIdNameCheck | boolean | `false` | X-31. Stored only. Turns on the name check on that card. Same rule: switch only, no number |
 | assessorAnnexureM | boolean | `true` | X-28. Stored only: no Annexure M feature exists yet |
 | studentAttendance | boolean | `true` | X-28. X-30: off makes the assessor attendance upload `409 BATCH_FEATURE_OFF` |
 | studentFeedback | boolean | `true` | X-28. X-30: off makes `PUT /batches/:id/learner-feedback` `409 BATCH_FEATURE_OFF` |

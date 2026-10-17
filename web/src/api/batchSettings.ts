@@ -134,6 +134,8 @@ export type BatchSettings = {
   assessorGeolocation: boolean;
   assessorAnnexureM: boolean;
   assessorFeedback: boolean;
+  assessorIdCardCheck: boolean;
+  assessorIdNameCheck: boolean;
   studentAttendance: boolean;
   studentFeedback: boolean;
   languages: Record<LanguagePart, boolean>;
@@ -192,6 +194,8 @@ export const DEFAULT_BATCH_SETTINGS: BatchSettings = {
   assessorGeolocation: true,
   assessorAnnexureM: true,
   assessorFeedback: false,
+  assessorIdCardCheck: false,
+  assessorIdNameCheck: false,
   studentAttendance: true,
   studentFeedback: true,
   languages: { theory: false, practical: false, viva: false },
@@ -309,6 +313,8 @@ export function parseBatchSettings(value: unknown): BatchSettings {
     assessorGeolocation: bool(root.assessorGeolocation, d.assessorGeolocation),
     assessorAnnexureM: bool(root.assessorAnnexureM, d.assessorAnnexureM),
     assessorFeedback: bool(root.assessorFeedback, d.assessorFeedback),
+    assessorIdCardCheck: bool(root.assessorIdCardCheck, d.assessorIdCardCheck),
+    assessorIdNameCheck: bool(root.assessorIdNameCheck, d.assessorIdNameCheck),
     studentAttendance: bool(root.studentAttendance, d.studentAttendance),
     studentFeedback: bool(root.studentFeedback, d.studentFeedback),
     languages: {

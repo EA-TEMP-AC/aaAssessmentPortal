@@ -918,6 +918,21 @@ describe("batch settings (B-20)", () => {
       return res.body;
     };
 
+    it("keeps the two identity-card switches off by default and stores only the switch (X-31)", async () => {
+      const w = await world();
+      const first = (await getSettings(w.admin, w)).body.settings;
+      expect(first).toMatchObject({ assessorIdCardCheck: false, assessorIdNameCheck: false });
+      const res = await patchSettings(w.admin, w, { assessorIdCardCheck: true });
+      expect(res.status).toBe(200);
+      expect(res.body.settings).toMatchObject({
+        assessorIdCardCheck: true,
+        assessorIdNameCheck: false,
+      });
+      // A card number, or any national ID key, is still refused.
+      const bad = await patchSettings(w.admin, w, { aadhaarNumber: "123412341234" });
+      expect(bad.status).toBe(400);
+    });
+
     it("shows today's behaviour as the defaults for every new switch", async () => {
       const w = await world();
       const { settings } = (await getSettings(w.admin, w)).body;

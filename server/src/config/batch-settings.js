@@ -117,6 +117,9 @@ export function defaultBatchSettings() {
     assessorGeolocation: true,
     assessorAnnexureM: true,
     assessorFeedback: false,
+    // X-31: identity-card checks for the assessor. Switches only; the card number is never entered or stored.
+    assessorIdCardCheck: false,
+    assessorIdNameCheck: false,
     studentAttendance: true,
     studentFeedback: true,
     languages: { theory: false, practical: false, viva: false },
@@ -185,6 +188,8 @@ export function resolveBatchSettings(stored) {
     assessorGeolocation: stored.assessorGeolocation ?? base.assessorGeolocation,
     assessorAnnexureM: stored.assessorAnnexureM ?? base.assessorAnnexureM,
     assessorFeedback: stored.assessorFeedback ?? base.assessorFeedback,
+    assessorIdCardCheck: stored.assessorIdCardCheck ?? base.assessorIdCardCheck,
+    assessorIdNameCheck: stored.assessorIdNameCheck ?? base.assessorIdNameCheck,
     studentAttendance: stored.studentAttendance ?? base.studentAttendance,
     studentFeedback: stored.studentFeedback ?? base.studentFeedback,
     languages: Object.fromEntries(

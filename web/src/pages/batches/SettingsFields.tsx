@@ -693,6 +693,20 @@ export function SettingsFields({
           soon
           onChange={(v) => set("assessorFeedback", v)}
         />
+        <Toggle
+          label="Check the assessor's identity card"
+          help="Turns on the Aadhaar card check for the assessor. Only the result is kept; the card number is never entered or stored."
+          checked={draft.assessorIdCardCheck}
+          soon
+          onChange={(v) => set("assessorIdCardCheck", v)}
+        />
+        <Toggle
+          label="Check the name on the assessor's identity card"
+          help="Turns on the name check against the Aadhaar card. Only the result is kept; the card number is never entered or stored."
+          checked={draft.assessorIdNameCheck}
+          soon
+          onChange={(v) => set("assessorIdNameCheck", v)}
+        />
       </Group>
 
       <Group title="Student">

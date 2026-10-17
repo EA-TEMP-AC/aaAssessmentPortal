@@ -424,15 +424,23 @@ it("sends the looking-away and talking switches (X-16)", async () => {
   const user = userEvent.setup();
   renderApp(`/batches/${ID}/settings`);
   await screen.findByRole("group", { name: "Behaviour checks" });
-  expect(screen.getByRole("checkbox", { name: "Check for looking away" })).toBeChecked();
-  expect(screen.getByRole("checkbox", { name: "Check for talking" })).toBeChecked();
+  expect(
+    screen.getByRole("checkbox", { name: "Check for looking away" }),
+  ).toBeChecked();
+  expect(
+    screen.getByRole("checkbox", { name: "Check for talking" }),
+  ).toBeChecked();
 
   await user.click(screen.getByRole("checkbox", { name: "Check for talking" }));
   await user.click(screen.getByRole("button", { name: "Save settings" }));
-  const dialog = await screen.findByRole("dialog", { name: "Save batch settings?" });
-  expect(within(dialog).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
-    "Detect voice: On to Off",
-  ]);
+  const dialog = await screen.findByRole("dialog", {
+    name: "Save batch settings?",
+  });
+  expect(
+    within(dialog)
+      .getAllByRole("listitem")
+      .map((li) => li.textContent),
+  ).toEqual(["Detect voice: On to Off"]);
 });
 
 it("shows the ThinkExam switches with a Yes/No word and saves a change (X-28)", async () => {
@@ -449,7 +457,9 @@ it("shows the ThinkExam switches with a Yes/No word and saves a change (X-28)", 
     "More than one language",
     "On-the-job training",
   ]) {
-    expect(await screen.findByRole("group", { name: group })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("group", { name: group }),
+    ).toBeInTheDocument();
   }
   // Every option of the reference screens is there, none for a national ID.
   for (const name of [
@@ -468,25 +478,39 @@ it("shows the ThinkExam switches with a Yes/No word and saves a change (X-28)", 
     "Design the practical test in more than one language",
     "Design the viva test in more than one language",
     "Allow upload of OJT pictures",
+    "Check the assessor's identity card",
+    "Check the name on the assessor's identity card",
   ]) {
     expect(screen.getByRole("checkbox", { name })).toBeInTheDocument();
   }
-  expect(screen.queryByRole("checkbox", { name: /aadhaar|aadhar|uidai/i })).toBeNull();
+  expect(
+    screen.queryByRole("checkbox", { name: /aadhaar|aadhar|uidai/i }),
+  ).toBeNull();
   expect(screen.getByRole("radio", { name: "Automatic" })).toBeChecked();
-  expect(screen.getByLabelText(/Flags allowed after an unlock/)).toHaveValue("3");
+  expect(screen.getByLabelText(/Flags allowed after an unlock/)).toHaveValue(
+    "3",
+  );
   // The video options wait for the exam video.
-  expect(screen.getByRole("checkbox", { name: "Download session video" })).toBeDisabled();
+  expect(
+    screen.getByRole("checkbox", { name: "Download session video" }),
+  ).toBeDisabled();
   expect(screen.getByRole("radio", { name: "Video" })).toBeDisabled();
 
   await user.click(screen.getByRole("radio", { name: "Manual" }));
-  await user.click(screen.getByRole("checkbox", { name: "Allow student attendance" }));
+  await user.click(
+    screen.getByRole("checkbox", { name: "Allow student attendance" }),
+  );
   await user.click(screen.getByRole("button", { name: "Save settings" }));
   await user.click(
-    within(await screen.findByRole("dialog")).getByRole("button", { name: "Confirm and save" }),
+    within(await screen.findByRole("dialog")).getByRole("button", {
+      name: "Confirm and save",
+    }),
   );
   await waitFor(() => expect(patches(mock)).toHaveLength(1));
-  expect(JSON.parse(String((patches(mock)[0][1] as RequestInit).body))).toEqual({
-    proctoringType: "manual",
-    studentAttendance: false,
-  });
+  expect(JSON.parse(String((patches(mock)[0][1] as RequestInit).body))).toEqual(
+    {
+      proctoringType: "manual",
+      studentAttendance: false,
+    },
+  );
 });

@@ -55,6 +55,8 @@ export type Draft = {
   assessorGeolocation: boolean;
   assessorAnnexureM: boolean;
   assessorFeedback: boolean;
+  assessorIdCardCheck: boolean;
+  assessorIdNameCheck: boolean;
   studentAttendance: boolean;
   studentFeedback: boolean;
   langTheory: boolean;
@@ -116,6 +118,8 @@ export function toDraft(s: BatchSettings): Draft {
     assessorGeolocation: s.assessorGeolocation,
     assessorAnnexureM: s.assessorAnnexureM,
     assessorFeedback: s.assessorFeedback,
+    assessorIdCardCheck: s.assessorIdCardCheck,
+    assessorIdNameCheck: s.assessorIdNameCheck,
     studentAttendance: s.studentAttendance,
     studentFeedback: s.studentFeedback,
     langTheory: s.languages.theory,
@@ -208,6 +212,8 @@ export function buildPatch(
     "assessorGeolocation",
     "assessorAnnexureM",
     "assessorFeedback",
+    "assessorIdCardCheck",
+    "assessorIdNameCheck",
     "studentAttendance",
     "studentFeedback",
     "allowOjtImages",
@@ -453,6 +459,16 @@ export function describeChanges(saved: BatchSettings, draft: Draft): string[] {
   );
   flip("Assessor Annexure M", saved.assessorAnnexureM, draft.assessorAnnexureM);
   flip("Assessor feedback", saved.assessorFeedback, draft.assessorFeedback);
+  flip(
+    "Assessor identity card check",
+    saved.assessorIdCardCheck,
+    draft.assessorIdCardCheck,
+  );
+  flip(
+    "Assessor name check",
+    saved.assessorIdNameCheck,
+    draft.assessorIdNameCheck,
+  );
   flip("Student attendance", saved.studentAttendance, draft.studentAttendance);
   flip("Student feedback", saved.studentFeedback, draft.studentFeedback);
   flip(

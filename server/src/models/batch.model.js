@@ -164,6 +164,8 @@ const batchSettingsSchema = new mongoose.Schema(
     assessorGeolocation: { type: Boolean },
     assessorAnnexureM: { type: Boolean },
     assessorFeedback: { type: Boolean },
+    assessorIdCardCheck: { type: Boolean },
+    assessorIdNameCheck: { type: Boolean },
     studentAttendance: { type: Boolean },
     studentFeedback: { type: Boolean },
     languages: {
