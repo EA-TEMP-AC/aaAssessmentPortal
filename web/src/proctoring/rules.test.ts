@@ -155,8 +155,8 @@ describe("camera_blocked and camera_frozen", () => {
   it("uses default sustained seconds when the server config leaves a type out", () => {
     const cfg = { ...config, sustainedSeconds: {} };
     const dark = frame([face()], { brightness: 1 });
-    // DEFAULT_SUSTAINED_SECONDS.camera_blocked is 3.
-    expect(types(play([dark, dark, dark, dark], 1000, cfg).flags)).toEqual(["camera_blocked@3000"]);
+    // DEFAULT_SUSTAINED_SECONDS.camera_blocked is 2.
+    expect(types(play([dark, dark, dark, dark], 1000, cfg).flags)).toEqual(["camera_blocked@2000"]);
   });
 });
 
@@ -213,7 +213,7 @@ describe("frameStats and toGray", () => {
 describe("looking_away and voice_detected (X-14)", () => {
   const cfg: ProctorConfig = {
     ...config,
-    sustainedSeconds: { ...config.sustainedSeconds, looking_away: 2, voice_detected: 4 },
+    sustainedSeconds: { ...config.sustainedSeconds, looking_away: 2, voice_detected: 2 },
   };
   const turned = (headTurn: number): Detection => ({ kind: "face", label: "face", confidence: 0.9, headTurn });
 
@@ -245,7 +245,7 @@ describe("looking_away and voice_detected (X-14)", () => {
   it("loud talking raises voice_detected after its hold time, even with no model", () => {
     let r = evaluateFrame(createRulesState(), frame(null, { voiceLevel: 0.2 }), 0, cfg);
     expect(r.flags).toEqual([]);
-    r = evaluateFrame(r.state, frame(null, { voiceLevel: 0.2 }), 4000, cfg);
+    r = evaluateFrame(r.state, frame(null, { voiceLevel: 0.2 }), 2000, cfg);
     expect(r.flags.map((f) => f.type)).toEqual(["voice_detected"]);
   });
 

@@ -291,7 +291,7 @@ function SettingsForm({ batchId, saved }: { batchId: string; saved: BatchSetting
         />
         <Toggle
           label="Check for talking"
-          help="Raises a medium flag when the microphone hears talking for 4 seconds. Only the loudness is measured: nothing is recorded or sent. When this is off, the microphone is not asked for."
+          help="Raises a medium flag when the microphone hears talking for 2 seconds. Only the loudness is measured: nothing is recorded or sent. When this is off, the microphone is not asked for."
           checked={draft.detectVoice}
           onChange={(v) => set("detectVoice", v)}
         />

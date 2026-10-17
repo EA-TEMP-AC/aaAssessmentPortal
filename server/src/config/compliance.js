@@ -116,9 +116,9 @@ export const compliance = Object.freeze({
   PROCTOR_SUSTAINED_SECONDS: Object.freeze({
     face_not_present: 2,
     camera_blocked: 2,
-    camera_frozen: 8,
+    camera_frozen: 2,
     looking_away: 2,
-    voice_detected: 4,
+    voice_detected: 2,
   }),
   /**
    * project. P-01. A session with no heartbeat for this many snapshot intervals shows as

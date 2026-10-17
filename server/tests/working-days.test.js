@@ -70,9 +70,9 @@ describe("compliance constants", () => {
       PROCTOR_SUSTAINED_SECONDS: {
         face_not_present: 2,
         camera_blocked: 2,
-        camera_frozen: 8,
+        camera_frozen: 2,
         looking_away: 2,
-        voice_detected: 4,
+        voice_detected: 2,
       },
       PROCTOR_FEED_LOST_INTERVALS: 3,
       PROCTOR_FLAG_SEVERITY: {

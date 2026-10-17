@@ -1734,7 +1734,7 @@ Role: `candidate`, for their own attempt (`attempts.userId`). Body `{ "attemptId
 ```json
 { "id": "66f0...", "attemptId": "66f0...", "batchId": "66f0...", "status": "active",
   "config": { "snapshotIntervalSeconds": 30, "detectionIntervalMs": 1000, "flagCooldownSeconds": 15,
-              "sustainedSeconds": { "face_not_present": 5, "camera_blocked": 5, "camera_frozen": 8 },
+              "sustainedSeconds": { "face_not_present": 2, "camera_blocked": 2, "camera_frozen": 2, "looking_away": 2, "voice_detected": 2 },
               "flagSeverity": { "tab_hidden": "low", "face_not_present": "medium", "phone_detected": "high" } },
   "captureLocation": false }
 ```

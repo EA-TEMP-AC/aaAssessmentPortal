@@ -52,15 +52,15 @@ export type ProctorThresholds = typeof PROCTOR_THRESHOLDS;
 
 /** Used when the server config leaves a flag type out of `sustainedSeconds`. 0 means at once. */
 export const DEFAULT_SUSTAINED_SECONDS: Record<string, number> = {
-  face_not_present: 5,
+  face_not_present: 2,
   multiple_faces: 2,
   person_detected: 2,
   phone_detected: 1,
   object_detected: 2,
-  camera_blocked: 3,
-  camera_frozen: 5,
+  camera_blocked: 2,
+  camera_frozen: 2,
   looking_away: 2,
-  voice_detected: 4,
+  voice_detected: 2,
 };
 
 /** Local config for the demo page and tests. The exam page gets the real one from the server. */
