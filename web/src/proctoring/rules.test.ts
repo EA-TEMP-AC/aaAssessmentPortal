@@ -255,3 +255,16 @@ describe("looking_away and voice_detected (X-14)", () => {
     expect(findConditions(frame([face()], { voiceLevel: 0 })).voice_detected.active).toBe(false);
   });
 });
+
+describe("disabledFlags (X-16)", () => {
+  it("a switched-off flag is never raised", () => {
+    const cfg: ProctorConfig = {
+      ...config,
+      sustainedSeconds: { ...config.sustainedSeconds, looking_away: 0, voice_detected: 0 },
+      disabledFlags: ["voice_detected"],
+    };
+    const turned: Detection = { kind: "face", label: "face", confidence: 0.9, headTurn: 0.8 };
+    const r = evaluateFrame(createRulesState(), frame([turned], { voiceLevel: 0.5 }), 0, cfg);
+    expect(r.flags.map((f) => f.type)).toEqual(["looking_away"]);
+  });
+});

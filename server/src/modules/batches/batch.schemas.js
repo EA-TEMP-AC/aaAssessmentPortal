@@ -222,6 +222,8 @@ export const batchSettingsBodySchema = guard(
         .partial()
         .strict(),
       captureLocation: z.boolean(),
+      detectLookingAway: z.boolean(),
+      detectVoice: z.boolean(),
       locationVisibleTo: z
         .array(z.enum(LOCATION_VIEWER_ROLES))
         .max(LOCATION_VIEWER_ROLES.length)

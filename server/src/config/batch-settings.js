@@ -51,6 +51,9 @@ export function defaultBatchSettings() {
     },
     candidateInfoPopup: { enabled: false, fields: [] },
     captureLocation: false,
+    // X-16: the two newer camera and microphone checks can be switched off for a batch.
+    detectLookingAway: true,
+    detectVoice: true,
     // X-12: aa_admin always sees it; these roles may too (the batch's own people only).
     locationVisibleTo: ["tp", "proctor"],
   };
@@ -88,6 +91,8 @@ export function resolveBatchSettings(stored) {
       fields: CANDIDATE_INFO_FIELDS.filter((f) => (info.fields ?? []).includes(f)),
     },
     captureLocation: stored.captureLocation ?? base.captureLocation,
+    detectLookingAway: stored.detectLookingAway ?? base.detectLookingAway,
+    detectVoice: stored.detectVoice ?? base.detectVoice,
     locationVisibleTo: stored.locationVisibleTo
       ? LOCATION_VIEWER_ROLES.filter((r) => stored.locationVisibleTo.includes(r))
       : base.locationVisibleTo,

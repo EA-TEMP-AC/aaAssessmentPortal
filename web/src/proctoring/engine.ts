@@ -379,7 +379,10 @@ export function createEngine(options: EngineOptions = {}): ProctorEngine {
       faceActive: false,
       identity: INITIAL_IDENTITY_STATE,
       location: o.captureLocation ? (options.locationProvider ?? createLocationProvider()) : null,
-      voice: o.audioStream ? voiceMeterFactory(o.audioStream) : null,
+      voice:
+        o.audioStream && !o.config.disabledFlags?.includes("voice_detected")
+          ? voiceMeterFactory(o.audioStream)
+          : null,
     };
     run = r;
     setStatus(r, "starting");

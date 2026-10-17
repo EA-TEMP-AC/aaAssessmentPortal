@@ -44,6 +44,11 @@ export function proctoringConfig(settings = resolveBatchSettings(null)) {
     sustainedSeconds: { ...compliance.PROCTOR_SUSTAINED_SECONDS },
     // X-07: the browser draws the severity on the flag photo.
     flagSeverity: { ...compliance.PROCTOR_FLAG_SEVERITY },
+    // X-16: flag types the browser must not check for this batch.
+    disabledFlags: [
+      ...(settings.detectLookingAway === false ? ["looking_away"] : []),
+      ...(settings.detectVoice === false ? ["voice_detected"] : []),
+    ],
   };
 }
 

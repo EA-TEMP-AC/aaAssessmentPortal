@@ -1919,3 +1919,7 @@ New batch settings keys (`GET`/`PATCH /batches/:id/settings`, `aa_admin` writes)
 - `locationVisibleTo` (list without repeats from `tp`, `assessor`, `proctor`, `ab_reviewer`, `ncvet_viewer`, default `["tp","proctor"]`). `GET /proctoring/flags/:id/capture` returns coordinates to `aa_admin` and to these roles, each only for a batch in their own scope; others get `location: null` and `locationVisible: false`.
 
 Attempt view for the candidate: `clockHeld` (boolean) is true while the attempt is paused and the batch holds the clock; `remainingSeconds` is then counted to the moment the pause began. `settings.flagPolicy.extendOnUnlock` tells the exam page to hold its countdown.
+
+## Looking-away and voice switches (task X-16)
+
+Batch settings (`GET`/`PATCH /batches/:id/settings`, `aa_admin` writes) gain `detectLookingAway` and `detectVoice` (booleans, both default `true`). The proctoring session `config` (from `POST /proctoring/sessions`) gains `disabledFlags`: the flag types the browser must not check for this batch, for example `["voice_detected"]` (empty when both are on). The hold times stay the server constants in `PROCTOR_SUSTAINED_SECONDS`, the same for every batch.

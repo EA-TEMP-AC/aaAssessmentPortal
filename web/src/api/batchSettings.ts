@@ -67,6 +67,10 @@ export type BatchSettings = {
   imageCapture: { intervalSeconds: number; atStartAndEnd: boolean };
   candidateInfoPopup: { enabled: boolean; fields: InfoField[] };
   captureLocation: boolean;
+  /** X-16: raise the looking-away flag from the camera. */
+  detectLookingAway: boolean;
+  /** X-16: raise the voice-heard flag from the microphone loudness. */
+  detectVoice: boolean;
   /** X-12: roles besides aa_admin that may see the coordinates. */
   locationVisibleTo: LocationRole[];
 };
@@ -95,6 +99,8 @@ export const DEFAULT_BATCH_SETTINGS: BatchSettings = {
   imageCapture: { intervalSeconds: 30, atStartAndEnd: true },
   candidateInfoPopup: { enabled: false, fields: [] },
   captureLocation: false,
+  detectLookingAway: true,
+  detectVoice: true,
   locationVisibleTo: ["tp", "proctor"],
 };
 
@@ -166,6 +172,8 @@ export function parseBatchSettings(value: unknown): BatchSettings {
         : [],
     },
     captureLocation: bool(root.captureLocation, d.captureLocation),
+    detectLookingAway: bool(root.detectLookingAway, d.detectLookingAway),
+    detectVoice: bool(root.detectVoice, d.detectVoice),
     locationVisibleTo: Array.isArray(root.locationVisibleTo)
       ? LOCATION_ROLES.filter((r) => (root.locationVisibleTo as unknown[]).includes(r))
       : d.locationVisibleTo,

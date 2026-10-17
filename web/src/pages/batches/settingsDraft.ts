@@ -31,6 +31,8 @@ export type Draft = {
   popupEnabled: boolean;
   popupFields: InfoField[];
   captureLocation: boolean;
+  detectLookingAway: boolean;
+  detectVoice: boolean;
 };
 
 export type Problems = Partial<
@@ -54,6 +56,8 @@ export function toDraft(s: BatchSettings): Draft {
     popupEnabled: s.candidateInfoPopup.enabled,
     popupFields: [...s.candidateInfoPopup.fields],
     captureLocation: s.captureLocation,
+    detectLookingAway: s.detectLookingAway,
+    detectVoice: s.detectVoice,
   };
 }
 
@@ -95,6 +99,8 @@ export function buildPatch(
     "marksAfterValidation",
     "questionsMandatory",
     "captureLocation",
+    "detectLookingAway",
+    "detectVoice",
   ] as const) {
     if (draft[key] !== saved[key]) patch[key] = draft[key];
   }
@@ -205,6 +211,8 @@ export function describeChanges(saved: BatchSettings, draft: Draft): string[] {
     );
   }
   flip("Capture location", saved.captureLocation, draft.captureLocation);
+  flip("Detect looking away", saved.detectLookingAway, draft.detectLookingAway);
+  flip("Detect voice", saved.detectVoice, draft.detectVoice);
   const viewers = LOCATION_ROLES.filter((r) => draft.locationVisibleTo.includes(r));
   if (viewers.join() !== saved.locationVisibleTo.join()) {
     lines.push(

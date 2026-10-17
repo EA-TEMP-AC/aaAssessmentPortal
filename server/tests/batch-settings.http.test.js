@@ -886,6 +886,27 @@ describe("batch settings (B-20)", () => {
     });
   });
 
+  describe("behaviour checks (X-16)", () => {
+    it("switches looking-away and voice checks per batch and tells the browser", async () => {
+      const w = await world();
+      const before = await getSettings(w.admin, w);
+      expect(before.body.settings.detectLookingAway).toBe(true);
+      expect(before.body.settings.detectVoice).toBe(true);
+      const res = await patchSettings(w.admin, w, { detectVoice: false });
+      expect(res.status).toBe(200);
+      expect(res.body.settings.detectVoice).toBe(false);
+      expect(res.body.settings.detectLookingAway).toBe(true);
+      const a = await start(w.candidate, w);
+      const session = await request(app)
+        .post("/api/v1/proctoring/sessions")
+        .set(bearer(w.candidate.token))
+        .send({ attemptId: a.body.id });
+      expect(session.body.config.disabledFlags).toEqual(["voice_detected"]);
+      expectError(await patchSettings(w.admin, w, { detectVoice: "no" }), 400, "VALIDATION_ERROR");
+      expectError(await patchSettings(w.proctor, w, { detectVoice: true }), 403, "FORBIDDEN");
+    });
+  });
+
   describe("location", () => {
     it("lets aa_admin choose which roles see the coordinates (X-12)", async () => {
       const w = await world();

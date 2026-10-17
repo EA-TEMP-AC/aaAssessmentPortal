@@ -33,6 +33,8 @@ export interface ProctorConfig {
   /** B-20: the batch's start-and-end photo switch. Carried here for the engine; not acted on yet. */
   snapshotAtStartAndEnd?: boolean;
   flagSeverity?: Record<string, string>;
+  /** X-16: flag types switched off for this batch. */
+  disabledFlags?: string[];
 }
 
 export type ProctorStatus = {

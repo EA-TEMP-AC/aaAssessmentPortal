@@ -129,6 +129,8 @@ const batchSettingsSchema = new mongoose.Schema(
       default: undefined,
     },
     captureLocation: { type: Boolean },
+    detectLookingAway: { type: Boolean },
+    detectVoice: { type: Boolean },
     locationVisibleTo: {
       type: [{ type: String, enum: LOCATION_VIEWER_ROLES }],
       default: undefined,

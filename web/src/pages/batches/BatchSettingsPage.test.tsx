@@ -417,3 +417,20 @@ it("sends the pause clock, marks timing and location viewer choices (X-12)", asy
     },
   );
 });
+
+it("sends the looking-away and talking switches (X-16)", async () => {
+  api();
+  setSession(sessionFor("aa_admin"));
+  const user = userEvent.setup();
+  renderApp(`/batches/${ID}/settings`);
+  await screen.findByRole("group", { name: "Behaviour checks" });
+  expect(screen.getByRole("checkbox", { name: "Check for looking away" })).toBeChecked();
+  expect(screen.getByRole("checkbox", { name: "Check for talking" })).toBeChecked();
+
+  await user.click(screen.getByRole("checkbox", { name: "Check for talking" }));
+  await user.click(screen.getByRole("button", { name: "Save settings" }));
+  const dialog = await screen.findByRole("dialog", { name: "Save batch settings?" });
+  expect(within(dialog).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
+    "Detect voice: On to Off",
+  ]);
+});

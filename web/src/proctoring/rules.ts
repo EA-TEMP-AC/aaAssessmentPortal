@@ -187,7 +187,7 @@ export function evaluateFrame(
 
   for (const rule of FRAME_RULES) {
     const { active, detail } = conditions[rule];
-    if (!active) {
+    if (!active || config.disabledFlags?.includes(rule)) {
       since[rule] = null;
       continue;
     }

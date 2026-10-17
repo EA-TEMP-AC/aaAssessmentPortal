@@ -175,6 +175,8 @@ export function useProctoring({
       // X-14: the microphone is only listened to for loudness. If it is not allowed, the exam goes on without it.
       let audioStream: MediaStream | undefined;
       try {
+        // X-16: when voice checking is off for the batch, the microphone is not even asked for.
+        if (session.config.disabledFlags?.includes("voice_detected")) throw new Error("off");
         audioStream = await navigator.mediaDevices?.getUserMedia?.({ audio: true, video: false });
       } catch {
         audioStream = undefined;

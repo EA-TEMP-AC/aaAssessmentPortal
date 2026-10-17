@@ -282,6 +282,21 @@ function SettingsForm({ batchId, saved }: { batchId: string; saved: BatchSetting
         />
       </Group>
 
+      <Group title="Behaviour checks">
+        <Toggle
+          label="Check for looking away"
+          help="Raises a medium flag when the candidate's head stays turned to the side for 2 seconds. The flag is saved for a person to review."
+          checked={draft.detectLookingAway}
+          onChange={(v) => set("detectLookingAway", v)}
+        />
+        <Toggle
+          label="Check for talking"
+          help="Raises a medium flag when the microphone hears talking for 4 seconds. Only the loudness is measured: nothing is recorded or sent. When this is off, the microphone is not asked for."
+          checked={draft.detectVoice}
+          onChange={(v) => set("detectVoice", v)}
+        />
+      </Group>
+
       <Group title="Candidate pop-up">
         <Toggle
           label="Ask the candidate for their details before the exam"

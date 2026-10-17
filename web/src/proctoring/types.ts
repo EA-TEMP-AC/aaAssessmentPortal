@@ -49,6 +49,8 @@ export interface ProctorConfig {
   sustainedSeconds: Record<string, number>;
   /** X-07: severity by flag type, drawn on the flag photo. Missing: the built-in table. */
   flagSeverity?: Record<string, string>;
+  /** X-16: flag types switched off for this batch. The engine does not check for them. */
+  disabledFlags?: string[];
 }
 
 export type ProctorStatus = {
