@@ -152,7 +152,10 @@ it.each(ROLES)("shows master data only to roles the server can serve (%s)", asyn
   }
 
   expect(await screen.findByRole("heading", { name: links[0] ?? "" })).toBeInTheDocument();
-  expect(screen.getByRole("link", { name: "Master data" })).toHaveAttribute("aria-current", "page");
+  // X-38: admin and MIS reach this list through Master entry, so their menu has no Master data link.
+  if (role !== "aa_admin" && role !== "mis") {
+    expect(screen.getByRole("link", { name: "Master data" })).toHaveAttribute("aria-current", "page");
+  }
   expect(
     within(screen.getByRole("navigation", { name: "Master data" }))
       .getAllByRole("link")

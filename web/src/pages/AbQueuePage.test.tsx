@@ -246,12 +246,12 @@ it.each(["aa_admin", "mis"] as const)("opens read only for %s, with training par
   expect(within(nav).queryByRole("link", { name: "AB queue" })).not.toBeInTheDocument();
 });
 
-it("puts the AB queue in the reviewer's navigation only", async () => {
+it("keeps the AB queue out of every menu (X-38)", async () => {
   installFetch();
   setSession(sessionFor("ab_reviewer"));
   renderApp("/home");
   const nav = screen.getByRole("navigation", { name: "Primary" });
-  expect(within(nav).getByRole("link", { name: "AB queue" })).toHaveAttribute("href", "/ab-queue");
+  expect(within(nav).queryByRole("link", { name: "AB queue" })).not.toBeInTheDocument();
 });
 
 it.each(["assessor", "proctor", "candidate", "tp", "sme"] as const)(

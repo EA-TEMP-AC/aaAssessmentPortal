@@ -14,9 +14,8 @@ const VISIBLE: Record<Role, readonly string[]> = {
   aa_admin: [
     "Home",
     "Batches",
+    "Master entry",
     "Users",
-    "Registry",
-    "Master data",
     "Schemes",
     "Projects",
     "Signatories",
@@ -35,9 +34,8 @@ const VISIBLE: Record<Role, readonly string[]> = {
   mis: [
     "Home",
     "Batches",
+    "Master entry",
     "Users",
-    "Registry",
-    "Master data",
     "Schemes",
     "Projects",
     "Signatories",
@@ -57,7 +55,6 @@ const VISIBLE: Record<Role, readonly string[]> = {
   ab_reviewer: [
     "Home",
     "Batches",
-    "AB queue",
     "Registry",
     "Master data",
     "Schemes",
@@ -102,7 +99,7 @@ it.each(Object.entries(VISIBLE) as [Role, readonly string[]][])(
   },
 );
 
-it("includes AB queue in ncvet_viewer navigation on /ab-queue when ncvetViewerCanSeeAbQueue is true", async () => {
+it("never shows the AB queue in the menu, even for ncvet_viewer with the setting on (X-38)", async () => {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (input: RequestInfo | URL) => {
@@ -138,9 +135,7 @@ it("includes AB queue in ncvet_viewer navigation on /ab-queue when ncvetViewerCa
   setSession(sessionFor("ncvet_viewer"));
   renderApp("/ab-queue");
   const nav = await screen.findByRole("navigation", { name: "Primary" });
-  expect(
-    await within(nav).findByRole("link", { name: "AB queue" }),
-  ).toHaveAttribute("href", "/ab-queue");
+  expect(within(nav).queryByRole("link", { name: "AB queue" })).toBeNull();
 });
 
 it("filters nav items correctly via navItemsForRole", () => {
@@ -152,5 +147,5 @@ it("filters nav items correctly via navItemsForRole", () => {
   const withQueue = navItemsForRole("ncvet_viewer", {
     ncvetViewerCanSeeAbQueue: true,
   });
-  expect(withQueue.some((item) => item.id === "ab-queue")).toBe(true);
+  expect(withQueue.some((item) => item.id === "ab-queue")).toBe(false);
 });

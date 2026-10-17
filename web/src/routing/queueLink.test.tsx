@@ -23,12 +23,13 @@ function settingsCalls(fetchMock: ReturnType<typeof stub>) {
   return fetchMock.mock.calls.filter((call) => String(call[0]).includes("/settings/access")).length;
 }
 
-it("shows the AB queue link to ncvet_viewer on Home when the setting is on", async () => {
-  stub(() => jsonResponse(200, settingsBody(true)));
+it("does not show the AB queue link to ncvet_viewer even when the setting is on (X-38)", async () => {
+  const fetchMock = stub(() => jsonResponse(200, settingsBody(true)));
   setSession(sessionFor("ncvet_viewer"));
   renderApp("/home");
+  await waitFor(() => expect(settingsCalls(fetchMock)).toBe(1));
   const nav = screen.getByRole("navigation", { name: "Primary" });
-  expect(await within(nav).findByRole("link", { name: "AB queue" })).toHaveAttribute("href", "/ab-queue");
+  expect(within(nav).queryByRole("link", { name: "AB queue" })).not.toBeInTheDocument();
 });
 
 it("hides the link when the setting is off", async () => {
@@ -63,8 +64,8 @@ it("refreshes the setting when the page regains focus", async () => {
   act(() => {
     window.dispatchEvent(new Event("focus"));
   });
-  expect(await within(nav).findByRole("link", { name: "AB queue" })).toBeInTheDocument();
-  expect(settingsCalls(fetchMock)).toBe(2);
+  await waitFor(() => expect(settingsCalls(fetchMock)).toBe(2));
+  expect(within(nav).queryByRole("link", { name: "AB queue" })).not.toBeInTheDocument();
 });
 
 it("takes the link away again if a refresh fails", async () => {
@@ -75,7 +76,7 @@ it("takes the link away again if a refresh fails", async () => {
   setSession(sessionFor("ncvet_viewer"));
   renderApp("/home");
   const nav = screen.getByRole("navigation", { name: "Primary" });
-  await within(nav).findByRole("link", { name: "AB queue" });
+  await waitFor(() => expect(settingsCalls(fetchMock)).toBe(1));
 
   fail = true;
   act(() => {

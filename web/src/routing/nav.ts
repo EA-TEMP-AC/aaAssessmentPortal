@@ -206,6 +206,8 @@ export const NAV_ITEMS: readonly NavItem[] = [
 
 export function navItemsForRole(
   role: Role,
+  // Kept so callers still compile; the AB queue is no longer in any menu (X-38).
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _options?: { ncvetViewerCanSeeAbQueue?: boolean },
 ): NavItem[] {
   return NAV_ITEMS.filter((item) => {

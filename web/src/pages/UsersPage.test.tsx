@@ -132,7 +132,7 @@ it("lets mis read an AA admin but not edit, activate, or reset that account", as
   const createRoles = within(createDialog).getByLabelText("Role");
   for (const role of ROLES) {
     const option = within(createRoles).queryByRole("option", { name: ROLE_LABELS[role] });
-    if (role === "aa_admin") expect(option).not.toBeInTheDocument();
+    if (role === "aa_admin" || role === "ab_reviewer") expect(option).not.toBeInTheDocument();
     else expect(option).toBeInTheDocument();
   }
 
