@@ -1,5 +1,8 @@
 import { apiRequest } from "./client";
 
+/** X-35: what happened to the student's login when an email was sent with the candidate. */
+export type LoginStatus = "created" | "has_login" | "email_in_use" | "failed";
+
 export type CandidateRecord = {
   id: string;
   batchId: string;
@@ -10,6 +13,8 @@ export type CandidateRecord = {
   active: boolean;
   createdAt: string;
   updatedAt: string;
+  /** Only on the add response, and only when an email was sent. */
+  login?: { status: LoginStatus; emailQueued: boolean };
 };
 
 export type CandidateListResponse = {
@@ -20,6 +25,8 @@ export type AddCandidateInput = {
   name?: string;
   externalRef?: string;
   learnerId?: string;
+  /** X-35: creates the student's login and emails the temporary password. */
+  email?: string;
   accommodations?: string[];
   ratioOverrideReason?: string;
 };
@@ -39,6 +46,8 @@ export type CsvImportResponse = {
   created: number;
   skipped: number;
   errors: CsvImportRowError[];
+  /** X-35: present when the CSV had an email column. */
+  logins?: { created: number; existing: number; failed: number };
 };
 
 export async function listCandidates(

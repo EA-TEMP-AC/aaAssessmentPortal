@@ -34,14 +34,17 @@ function requestJson(init?: RequestInit): unknown {
 function installFetch(
   handler: (url: URL, init?: RequestInit) => Response | Promise<Response>,
 ) {
-  const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) =>
-    handler(requestUrl(input), init),
+  const fetchMock = vi.fn(
+    async (input: RequestInfo | URL, init?: RequestInit) =>
+      handler(requestUrl(input), init),
   );
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
 }
 
-function sampleCandidate(overrides: Partial<CandidateRecord> = {}): CandidateRecord {
+function sampleCandidate(
+  overrides: Partial<CandidateRecord> = {},
+): CandidateRecord {
   return {
     id: "66f0000000000000000000c1",
     batchId: IDS.batch,
@@ -64,12 +67,18 @@ function defaultBatchHandler(
   if (url.pathname.endsWith("/batches") && !url.pathname.includes(IDS.batch)) {
     return jsonResponse(200, listBody([current]));
   }
-  if (url.pathname.endsWith(`/batches/${IDS.batch}`)) return jsonResponse(200, current);
+  if (url.pathname.endsWith(`/batches/${IDS.batch}`))
+    return jsonResponse(200, current);
   if (url.pathname.endsWith("/assessors/available")) {
     return jsonResponse(200, { items: [assessorItem()] });
   }
   if (url.pathname.endsWith("/proctors")) {
-    return jsonResponse(200, { page: 1, pageSize: 100, total: 1, items: [proctorItem()] });
+    return jsonResponse(200, {
+      page: 1,
+      pageSize: 100,
+      total: 1,
+      items: [proctorItem()],
+    });
   }
   if (
     url.pathname.endsWith("/awarding-bodies") ||
@@ -91,7 +100,11 @@ function defaultBatchHandler(
 
 it("lists roster (unpaginated {items}) and filters active/inactive", async () => {
   const user = userEvent.setup();
-  const c1 = sampleCandidate({ id: "66f0000000000000000000c1", name: "Rohan Active", active: true });
+  const c1 = sampleCandidate({
+    id: "66f0000000000000000000c1",
+    name: "Rohan Active",
+    active: true,
+  });
   const c2 = sampleCandidate({
     id: "66f0000000000000000000c2",
     name: "Pooja Inactive",
@@ -109,10 +122,14 @@ it("lists roster (unpaginated {items}) and filters active/inactive", async () =>
   setSession(sessionFor("aa_admin"));
   renderApp(`/batches/${IDS.batch}`);
 
-  expect(await screen.findByRole("heading", { name: "Candidate roster" })).toBeInTheDocument();
+  expect(
+    await screen.findByRole("heading", { name: "Candidate roster" }),
+  ).toBeInTheDocument();
   expect(await screen.findByText("Rohan Active")).toBeInTheDocument();
   expect(screen.getByText("Pooja Inactive")).toBeInTheDocument();
-  expect(screen.getByText(/Showing 2 candidate\(s\) \(1 active, 1 inactive\)/)).toBeInTheDocument();
+  expect(
+    screen.getByText(/Showing 2 candidate\(s\) \(1 active, 1 inactive\)/),
+  ).toBeInTheDocument();
 
   // Filter Active only
   await user.selectOptions(screen.getByLabelText("Filter by status"), "active");
@@ -120,7 +137,10 @@ it("lists roster (unpaginated {items}) and filters active/inactive", async () =>
   expect(screen.queryByText("Pooja Inactive")).not.toBeInTheDocument();
 
   // Filter Inactive only
-  await user.selectOptions(screen.getByLabelText("Filter by status"), "inactive");
+  await user.selectOptions(
+    screen.getByLabelText("Filter by status"),
+    "inactive",
+  );
   expect(await screen.findByText("Pooja Inactive")).toBeInTheDocument();
   expect(screen.queryByText("Rohan Active")).not.toBeInTheDocument();
 
@@ -163,7 +183,9 @@ it("adds a candidate without national-id fields and updates the roster", async (
 
   const dialog = screen.getByRole("dialog", { name: "Add candidate" });
   expect(within(dialog).getByLabelText("Full name")).toBeInTheDocument();
-  expect(within(dialog).getByLabelText("External reference")).toBeInTheDocument();
+  expect(
+    within(dialog).getByLabelText("External reference"),
+  ).toBeInTheDocument();
   expect(within(dialog).getByLabelText("Accommodations")).toBeInTheDocument();
 
   // Verify no national ID fields exist
@@ -174,13 +196,83 @@ it("adds a candidate without national-id fields and updates the roster", async (
   await user.type(within(dialog).getByLabelText("Full name"), "Sunil Kumar");
   await user.type(within(dialog).getByLabelText("External reference"), "SK-99");
   await user.type(within(dialog).getByLabelText("Accommodations"), "Reader");
-  await user.click(within(dialog).getByRole("button", { name: "Add candidate" }));
+  await user.click(
+    within(dialog).getByRole("button", { name: "Add candidate" }),
+  );
 
-  expect(await screen.findByText("Candidate added to roster.")).toBeInTheDocument();
+  expect(
+    await screen.findByText("Candidate added to roster."),
+  ).toBeInTheDocument();
   expect(createdCandidate).toEqual({
     name: "Sunil Kumar",
     externalRef: "SK-99",
     accommodations: ["Reader"],
+  });
+});
+
+it("sends the student's email so a login is created and says so (X-35)", async () => {
+  const user = userEvent.setup();
+  let sent: unknown = null;
+
+  installFetch(async (url, init) => {
+    if (url.pathname.endsWith("/candidates") && methodOf(init) === "POST") {
+      sent = requestJson(init);
+      return jsonResponse(201, {
+        id: "66f0000000000000000000c9",
+        batchId: IDS.batch,
+        learnerId: "66f0000000000000000000a9",
+        name: "Sunil Kumar",
+        externalRef: "SK-99",
+        accommodations: [],
+        active: true,
+        createdAt: "2026-10-12T12:00:00.000Z",
+        updatedAt: "2026-10-12T12:00:00.000Z",
+        login: { status: "created", emailQueued: true },
+      });
+    }
+    return (
+      defaultBatchHandler(url, batchRecord()) ??
+      jsonResponse(404, { error: { code: "NOT_FOUND", message: "Not found" } })
+    );
+  });
+
+  setSession(sessionFor("aa_admin"));
+  renderApp(`/batches/${IDS.batch}`);
+  await screen.findByRole("heading", { name: "Candidate roster" });
+  await user.click(screen.getByRole("button", { name: "Add candidate" }));
+  const dialog = screen.getByRole("dialog", { name: "Add candidate" });
+  await user.type(within(dialog).getByLabelText("Full name"), "Sunil Kumar");
+  await user.type(within(dialog).getByLabelText("External reference"), "SK-99");
+  await user.type(
+    within(dialog).getByLabelText("Email (optional)"),
+    "not-an-email",
+  );
+  await user.click(
+    within(dialog).getByRole("button", { name: "Add candidate" }),
+  );
+  expect(
+    await within(dialog).findByText(/valid email address/),
+  ).toBeInTheDocument();
+  expect(sent).toBeNull();
+
+  await user.clear(within(dialog).getByLabelText("Email (optional)"));
+  await user.type(
+    within(dialog).getByLabelText("Email (optional)"),
+    "sunil@example.com",
+  );
+  await user.click(
+    within(dialog).getByRole("button", { name: "Add candidate" }),
+  );
+  expect(
+    await screen.findByText(
+      /A login was created and the sign-in details were emailed/,
+    ),
+  ).toBeInTheDocument();
+  expect(sent).toEqual({
+    name: "Sunil Kumar",
+    externalRef: "SK-99",
+    email: "sunil@example.com",
+    accommodations: [],
   });
 });
 
@@ -196,15 +288,25 @@ it("shows RULE_RATIO error on add and allows aa_admin to submit ratio override",
           error: {
             code: "RULE_RATIO",
             message: "Candidate count exceeds the assessor ratio",
-            details: { ratioClass: "manufacturing", candidateCount: 26, max: 25 },
+            details: {
+              ratioClass: "manufacturing",
+              candidateCount: 26,
+              max: 25,
+            },
           },
         });
       }
       receivedOverride = body.ratioOverrideReason;
-      return jsonResponse(201, sampleCandidate({ name: "Over Ratio Candidate" }));
+      return jsonResponse(
+        201,
+        sampleCandidate({ name: "Over Ratio Candidate" }),
+      );
     }
     return (
-      defaultBatchHandler(url, batchRecord({ status: "assessor_assigned", assessorId: IDS.assessor })) ??
+      defaultBatchHandler(
+        url,
+        batchRecord({ status: "assessor_assigned", assessorId: IDS.assessor }),
+      ) ??
       jsonResponse(404, { error: { code: "NOT_FOUND", message: "Not found" } })
     );
   });
@@ -216,23 +318,36 @@ it("shows RULE_RATIO error on add and allows aa_admin to submit ratio override",
   await user.click(screen.getByRole("button", { name: "Add candidate" }));
 
   const dialog = screen.getByRole("dialog", { name: "Add candidate" });
-  await user.type(within(dialog).getByLabelText("Full name"), "Over Ratio Candidate");
+  await user.type(
+    within(dialog).getByLabelText("Full name"),
+    "Over Ratio Candidate",
+  );
   await user.type(within(dialog).getByLabelText("External reference"), "OR-1");
-  await user.click(within(dialog).getByRole("button", { name: "Add candidate" }));
+  await user.click(
+    within(dialog).getByRole("button", { name: "Add candidate" }),
+  );
 
   // Alert is shown with ratio rule explanation and details
-  expect(await within(dialog).findByRole("alert")).toHaveTextContent("assessor-to-learner ratio");
-  expect(within(dialog).getByRole("alert")).toHaveTextContent("Ratio class: manufacturing");
+  expect(await within(dialog).findByRole("alert")).toHaveTextContent(
+    "assessor-to-learner ratio",
+  );
+  expect(within(dialog).getByRole("alert")).toHaveTextContent(
+    "Ratio class: manufacturing",
+  );
 
   // Ratio override reason is revealed
-  expect(within(dialog).getByLabelText("Ratio override reason")).toBeInTheDocument();
+  expect(
+    within(dialog).getByLabelText("Ratio override reason"),
+  ).toBeInTheDocument();
   await user.type(
     within(dialog).getByLabelText("Ratio override reason"),
     "Approved batch expansion by AA Admin",
   );
   await user.click(within(dialog).getByRole("button", { name: "Retry" }));
 
-  expect(await screen.findByText("Candidate added to roster.")).toBeInTheDocument();
+  expect(
+    await screen.findByText("Candidate added to roster."),
+  ).toBeInTheDocument();
   expect(receivedOverride).toBe("Approved batch expansion by AA Admin");
 });
 
@@ -242,7 +357,10 @@ it("edits a candidate and updates accommodations and status", async () => {
   const existing = sampleCandidate();
 
   installFetch(async (url, init) => {
-    if (url.pathname.endsWith(`/candidates/${existing.id}`) && methodOf(init) === "PATCH") {
+    if (
+      url.pathname.endsWith(`/candidates/${existing.id}`) &&
+      methodOf(init) === "PATCH"
+    ) {
       patchPayload = requestJson(init);
       return jsonResponse(200, {
         ...existing,
@@ -271,9 +389,13 @@ it("edits a candidate and updates accommodations and status", async () => {
   await user.type(accommInput, "Extra time, Large font");
   await user.click(within(dialog).getByLabelText("Active on roster"));
 
-  await user.click(within(dialog).getByRole("button", { name: "Save changes" }));
+  await user.click(
+    within(dialog).getByRole("button", { name: "Save changes" }),
+  );
 
-  expect(await screen.findByText("Candidate details updated.")).toBeInTheDocument();
+  expect(
+    await screen.findByText("Candidate details updated."),
+  ).toBeInTheDocument();
   expect(patchPayload).toEqual({
     accommodations: ["Extra time", "Large font"],
     active: false,
@@ -286,7 +408,10 @@ it("deactivates and activates a candidate", async () => {
   const candidate = sampleCandidate({ active: true });
 
   installFetch(async (url, init) => {
-    if (url.pathname.endsWith(`/candidates/${candidate.id}`) && methodOf(init) === "PATCH") {
+    if (
+      url.pathname.endsWith(`/candidates/${candidate.id}`) &&
+      methodOf(init) === "PATCH"
+    ) {
       patchCall = requestJson(init);
       return jsonResponse(200, { ...candidate, active: false });
     }
@@ -300,10 +425,14 @@ it("deactivates and activates a candidate", async () => {
   renderApp(`/batches/${IDS.batch}`);
 
   await screen.findByRole("heading", { name: "Candidate roster" });
-  const deactivateBtn = await screen.findByRole("button", { name: "Deactivate" });
+  const deactivateBtn = await screen.findByRole("button", {
+    name: "Deactivate",
+  });
   await user.click(deactivateBtn);
 
-  expect(await screen.findByText(/Candidate Rohan Sharma deactivated\./)).toBeInTheDocument();
+  expect(
+    await screen.findByText(/Candidate Rohan Sharma deactivated\./),
+  ).toBeInTheDocument();
   expect(patchCall).toEqual({ active: false });
 });
 
@@ -312,7 +441,10 @@ it("imports CSV with file picker, shows neutralisation note and success", async 
   let receivedFile: string | null = null;
 
   installFetch(async (url, init) => {
-    if (url.pathname.endsWith("/candidates/import") && methodOf(init) === "POST") {
+    if (
+      url.pathname.endsWith("/candidates/import") &&
+      methodOf(init) === "POST"
+    ) {
       if (init?.body instanceof FormData) {
         const file = init.body.get("file") as File;
         receivedFile = file ? file.name : "unknown";
@@ -335,7 +467,9 @@ it("imports CSV with file picker, shows neutralisation note and success", async 
   await screen.findByRole("heading", { name: "Candidate roster" });
   await user.click(screen.getByRole("button", { name: "Import CSV" }));
 
-  const dialog = screen.getByRole("dialog", { name: "Import candidates from CSV" });
+  const dialog = screen.getByRole("dialog", {
+    name: "Import candidates from CSV",
+  });
 
   // Verify note that cells starting with = + - @ are neutralised
   expect(within(dialog).getByText(/Cells starting with/)).toHaveTextContent(
@@ -343,14 +477,24 @@ it("imports CSV with file picker, shows neutralisation note and success", async 
   );
 
   const fileInput = within(dialog).getByLabelText("CSV file");
-  const testFile = new File(["name,externalRef\nTest User,REF-1\n"], "roster.csv", {
-    type: "text/csv",
-  });
+  const testFile = new File(
+    ["name,externalRef\nTest User,REF-1\n"],
+    "roster.csv",
+    {
+      type: "text/csv",
+    },
+  );
   await user.upload(fileInput, testFile);
 
-  await user.click(within(dialog).getByRole("button", { name: "Upload and import" }));
+  await user.click(
+    within(dialog).getByRole("button", { name: "Upload and import" }),
+  );
 
-  expect(await screen.findByText(/Import complete: 5 created, 1 duplicate\(s\) skipped\./)).toBeInTheDocument();
+  expect(
+    await screen.findByText(
+      /Import complete: 5 created, 1 duplicate\(s\) skipped\./,
+    ),
+  ).toBeInTheDocument();
   expect(receivedFile).toBe("roster.csv");
 });
 
@@ -358,7 +502,10 @@ it("shows per-row error report on CSV import errors from server", async () => {
   const user = userEvent.setup();
 
   installFetch(async (url, init) => {
-    if (url.pathname.endsWith("/candidates/import") && methodOf(init) === "POST") {
+    if (
+      url.pathname.endsWith("/candidates/import") &&
+      methodOf(init) === "POST"
+    ) {
       return jsonResponse(200, {
         created: 2,
         skipped: 1,
@@ -380,20 +527,36 @@ it("shows per-row error report on CSV import errors from server", async () => {
   await screen.findByRole("heading", { name: "Candidate roster" });
   await user.click(screen.getByRole("button", { name: "Import CSV" }));
 
-  const dialog = screen.getByRole("dialog", { name: "Import candidates from CSV" });
-  const fileInput = within(dialog).getByLabelText("CSV file");
-  const testFile = new File(["name,externalRef\nRow 1,R1\n"], "candidates.csv", {
-    type: "text/csv",
+  const dialog = screen.getByRole("dialog", {
+    name: "Import candidates from CSV",
   });
+  const fileInput = within(dialog).getByLabelText("CSV file");
+  const testFile = new File(
+    ["name,externalRef\nRow 1,R1\n"],
+    "candidates.csv",
+    {
+      type: "text/csv",
+    },
+  );
   await user.upload(fileInput, testFile);
 
-  await user.click(within(dialog).getByRole("button", { name: "Upload and import" }));
+  await user.click(
+    within(dialog).getByRole("button", { name: "Upload and import" }),
+  );
 
   // Check per-row error report rendered
   expect(await within(dialog).findByRole("alert")).toBeInTheDocument();
-  expect(within(dialog).getByText("Row 4: name and externalRef are required")).toBeInTheDocument();
-  expect(within(dialog).getByText("Row 6: Learner is already on this batch")).toBeInTheDocument();
-  expect(within(dialog).getByText(/Import processed: 2 candidate\(s\) added, 1 duplicate\(s\) skipped\./)).toBeInTheDocument();
+  expect(
+    within(dialog).getByText("Row 4: name and externalRef are required"),
+  ).toBeInTheDocument();
+  expect(
+    within(dialog).getByText("Row 6: Learner is already on this batch"),
+  ).toBeInTheDocument();
+  expect(
+    within(dialog).getByText(
+      /Import processed: 2 candidate\(s\) added, 1 duplicate\(s\) skipped\./,
+    ),
+  ).toBeInTheDocument();
 });
 
 it("disables write controls when batch status is not allocated, accepted, or assessor_assigned", async () => {
@@ -409,7 +572,9 @@ it("disables write controls when batch status is not allocated, accepted, or ass
 
   await screen.findByRole("heading", { name: "Candidate roster" });
   expect(
-    screen.getByText(/Candidate roster is locked\. Roster writes are allowed only while the batch is allocated/),
+    screen.getByText(
+      /Candidate roster is locked\. Roster writes are allowed only while the batch is allocated/,
+    ),
   ).toBeInTheDocument();
 
   // Add and import buttons are disabled
@@ -446,7 +611,9 @@ it("shows server error if a 409 INVALID_TRANSITION comes back", async () => {
   const dialog = screen.getByRole("dialog", { name: "Add candidate" });
   await user.type(within(dialog).getByLabelText("Full name"), "Late Candidate");
   await user.type(within(dialog).getByLabelText("External reference"), "LC-1");
-  await user.click(within(dialog).getByRole("button", { name: "Add candidate" }));
+  await user.click(
+    within(dialog).getByRole("button", { name: "Add candidate" }),
+  );
 
   expect(await within(dialog).findByRole("alert")).toHaveTextContent(
     "Candidates can only be changed before assessment starts",
@@ -465,18 +632,30 @@ it("enforces role guards: proctor and sme are denied, assessor is read-only", as
   setSession(sessionFor("proctor"));
   const viewProctor = renderApp(`/batches/${IDS.batch}`);
   expect(
-    await screen.findByText("Candidate roster is not accessible for this role."),
+    await screen.findByText(
+      "Candidate roster is not accessible for this role.",
+    ),
   ).toBeInTheDocument();
   viewProctor.unmount();
 
   // Assessor role - can read, but no write controls
   setSession(sessionFor("assessor"));
   const viewAssessor = renderApp(`/batches/${IDS.batch}`);
-  expect(await screen.findByRole("heading", { name: "Candidate roster" })).toBeInTheDocument();
+  expect(
+    await screen.findByRole("heading", { name: "Candidate roster" }),
+  ).toBeInTheDocument();
   expect(await screen.findByText("Rohan Sharma")).toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: "Add candidate" })).not.toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: "Import CSV" })).not.toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: "Deactivate" })).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Add candidate" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Import CSV" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Edit" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Deactivate" }),
+  ).not.toBeInTheDocument();
   viewAssessor.unmount();
 });

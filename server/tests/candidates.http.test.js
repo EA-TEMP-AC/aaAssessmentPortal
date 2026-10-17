@@ -10,6 +10,8 @@ import { Batch } from "../src/models/batch.model.js";
 import { Candidate, ensureCandidateIndexes } from "../src/models/candidate.model.js";
 import { Centre } from "../src/models/centre.model.js";
 import { Learner } from "../src/models/learner.model.js";
+import { EmailQueue } from "../src/models/email-queue.model.js";
+import { User } from "../src/models/user.model.js";
 import { Qualification } from "../src/models/qualification.model.js";
 import { TrainingPartner } from "../src/models/training-partner.model.js";
 import { resetLoginRateLimit } from "../src/modules/auth/login-rate-limit.js";
@@ -665,5 +667,86 @@ describe("batch candidates", () => {
       403,
       "FORBIDDEN",
     );
+  });
+
+  it("creates the student's login from an email and emails the temporary password (X-35)", async () => {
+    const m = await masters();
+    const admin = await sessionFor("aa_admin");
+    const batch = await createBatch(admin.token, m);
+
+    const res = await request(app)
+      .post(`/api/v1/batches/${batch.id}/candidates`)
+      .set(bearer(admin.token))
+      .send({ name: "Asha Devi", externalRef: "TP-REG-1", email: "Asha@Example.com" });
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+    expect(res.body.login).toEqual({ status: "created", emailQueued: true });
+    expect(JSON.stringify(res.body)).not.toMatch(/Tmp-/);
+
+    const user = await User.findOne({ role: "candidate" }).lean();
+    expect(String(user.linkedProfileId)).toBe(res.body.learnerId);
+    expect(user.mustChangePassword).toBe(true);
+
+    // The mail carries the sign-in email and the password; the password signs in.
+    const [mail] = await EmailQueue.find({ kind: "candidate_login" }).lean();
+    expect(mail.to).toEqual(["asha@example.com"]);
+    const password = /Temporary password: (\S+)/.exec(mail.text)[1];
+    const signIn = await request(app)
+      .post("/api/v1/auth/login")
+      .send({ email: "asha@example.com", password, device: webDevice });
+    expect(signIn.status, JSON.stringify(signIn.body)).toBe(200);
+
+    // Nothing personal reaches the audit row.
+    const audit = JSON.stringify(await AuditLog.find({ action: "candidate.create" }).lean());
+    expect(audit).not.toMatch(/asha@example|Tmp-/i);
+  });
+
+  it("keeps the student on the roster when the learner already has a login or the email is taken (X-35)", async () => {
+    const m = await masters();
+    const admin = await sessionFor("aa_admin");
+    const batch = await createBatch(admin.token, m);
+    const learner = await createLearnerDoc({ name: "Ravi Kumar", externalRef: "TP-REG-2" });
+    await createUser({
+      role: "candidate",
+      email: "ravi@example.com",
+      name: "Ravi",
+      linkedProfileId: learner._id,
+    });
+    const has = await request(app)
+      .post(`/api/v1/batches/${batch.id}/candidates`)
+      .set(bearer(admin.token))
+      .send({ learnerId: String(learner._id), email: "other@example.com" });
+    expect(has.status).toBe(201);
+    expect(has.body.login.status).toBe("has_login");
+
+    const taken = await request(app)
+      .post(`/api/v1/batches/${batch.id}/candidates`)
+      .set(bearer(admin.token))
+      .send({ name: "Meera", externalRef: "TP-REG-3", email: "ravi@example.com" });
+    expect(taken.status).toBe(201);
+    expect(taken.body.login.status).toBe("email_in_use");
+    expect(await Candidate.countDocuments({ batchId: batch.id })).toBe(2);
+    expect(await EmailQueue.countDocuments({ kind: "candidate_login" })).toBe(0);
+  });
+
+  it("makes logins from an email column in the CSV and rejects a bad email (X-35)", async () => {
+    const m = await masters();
+    const admin = await sessionFor("aa_admin");
+    const batch = await createBatch(admin.token, m);
+    const csv = [
+      "name,externalRef,email",
+      "Asha Devi,R-1,asha@example.com",
+      "Ravi Kumar,R-2,not-an-email",
+      "Meera Das,R-3,",
+    ].join("\n");
+    const res = await request(app)
+      .post(`/api/v1/batches/${batch.id}/candidates/import`)
+      .set(bearer(admin.token))
+      .set("Content-Type", "text/csv")
+      .send(csv);
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.created).toBe(2);
+    expect(res.body.errors).toEqual([{ row: 3, reason: "email is not valid" }]);
+    expect(res.body.logins).toEqual({ created: 1, existing: 0, failed: 0 });
+    expect(await User.countDocuments({ role: "candidate" })).toBe(1);
   });
 });

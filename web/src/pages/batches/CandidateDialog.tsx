@@ -32,6 +32,7 @@ export function CandidateDialog({
 }: Props) {
   const [name, setName] = useState(candidate?.name ?? "");
   const [externalRef, setExternalRef] = useState(candidate?.externalRef ?? "");
+  const [email, setEmail] = useState("");
   const [accommodationsText, setAccommodationsText] = useState(
     candidate?.accommodations?.join(", ") ?? "",
   );
@@ -47,6 +48,7 @@ export function CandidateDialog({
   const errorId = useId();
   const nameId = useId();
   const refId = useId();
+  const emailId = useId();
   const accommId = useId();
   const activeId = useId();
   const ratioId = useId();
@@ -68,7 +70,11 @@ export function CandidateDialog({
       return;
     }
     const override = overrideFieldForRule(error.code);
-    if (override === "ratioOverrideReason" && canOverride && isBlockableRuleCode(error.code)) {
+    if (
+      override === "ratioOverrideReason" &&
+      canOverride &&
+      isBlockableRuleCode(error.code)
+    ) {
       setShowRatioOverride(true);
       showError(errorMessage(error), ["ratioOverrideReason"]);
       return;
@@ -96,6 +102,10 @@ export function CandidateDialog({
         messages.push("External reference is required.");
         fields.push("externalRef");
       }
+      if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+        messages.push("Enter a valid email address, or leave it blank.");
+        fields.push("email");
+      }
     }
 
     if (showRatioOverride) {
@@ -121,14 +131,25 @@ export function CandidateDialog({
 
     try {
       if (mode === "add") {
-        await addCandidate(batchId, {
+        const saved = await addCandidate(batchId, {
           name: name.trim(),
           externalRef: externalRef.trim(),
+          ...(email.trim() ? { email: email.trim() } : {}),
           accommodations,
           ratioOverrideReason: ratioReason,
         });
         if (!mounted.current) return;
-        onSaved("Candidate added to roster.");
+        onSaved(
+          saved.login?.status === "created"
+            ? "Candidate added. A login was created and the sign-in details were emailed."
+            : saved.login?.status === "has_login"
+              ? "Candidate added. This student already has a login."
+              : saved.login?.status === "email_in_use"
+                ? "Candidate added, but that email already belongs to another login, so no login was created."
+                : saved.login?.status === "failed"
+                  ? "Candidate added, but the login could not be created."
+                  : "Candidate added to roster.",
+        );
       } else if (candidate) {
         await patchCandidate(batchId, candidate.id, {
           active,
@@ -189,9 +210,34 @@ export function CandidateDialog({
                   required
                   maxLength={64}
                   value={externalRef}
-                  aria-invalid={formError?.fields.includes("externalRef") || undefined}
+                  aria-invalid={
+                    formError?.fields.includes("externalRef") || undefined
+                  }
                   onChange={(event) => {
                     setExternalRef(event.target.value);
+                    setFormError(null);
+                  }}
+                />
+              </div>
+
+              <div className="field">
+                <label htmlFor={emailId}>Email (optional)</label>
+                <p className="field-hint">
+                  With an email the student gets a login, and the sign-in
+                  details are emailed to them.
+                </p>
+                <input
+                  id={emailId}
+                  name="email"
+                  type="email"
+                  maxLength={254}
+                  autoComplete="off"
+                  value={email}
+                  aria-invalid={
+                    formError?.fields.includes("email") || undefined
+                  }
+                  onChange={(event) => {
+                    setEmail(event.target.value);
                     setFormError(null);
                   }}
                 />
@@ -200,14 +246,18 @@ export function CandidateDialog({
           ) : (
             <div className="field">
               <p>
-                <strong>Candidate:</strong> {candidate?.name} ({candidate?.externalRef || "No external ref"})
+                <strong>Candidate:</strong> {candidate?.name} (
+                {candidate?.externalRef || "No external ref"})
               </p>
             </div>
           )}
 
           <div className="field">
             <label htmlFor={accommId}>Accommodations</label>
-            <p className="field-hint">Comma-separated list (e.g. Reader, Extra time). Leave blank if none.</p>
+            <p className="field-hint">
+              Comma-separated list (e.g. Reader, Extra time). Leave blank if
+              none.
+            </p>
             <input
               id={accommId}
               name="accommodations"
@@ -235,21 +285,28 @@ export function CandidateDialog({
                 />
                 Active on roster
               </label>
-              <p className="field-hint">Inactive candidates are not counted toward the batch candidate count.</p>
+              <p className="field-hint">
+                Inactive candidates are not counted toward the batch candidate
+                count.
+              </p>
             </div>
           ) : null}
 
           {showRatioOverride ? (
             <div className="field">
               <label htmlFor={ratioId}>Ratio override reason</label>
-              <p className="field-hint">Only an AA admin can send this. It is stored and audit-logged.</p>
+              <p className="field-hint">
+                Only an AA admin can send this. It is stored and audit-logged.
+              </p>
               <textarea
                 id={ratioId}
                 name="ratioOverrideReason"
                 required
                 maxLength={2000}
                 value={ratioOverrideReason}
-                aria-invalid={formError?.fields.includes("ratioOverrideReason") || undefined}
+                aria-invalid={
+                  formError?.fields.includes("ratioOverrideReason") || undefined
+                }
                 onChange={(event) => {
                   setRatioOverrideReason(event.target.value);
                   setFormError(null);
@@ -263,7 +320,11 @@ export function CandidateDialog({
               Cancel
             </button>
             <button type="submit">
-              {showRatioOverride ? "Retry" : mode === "add" ? "Add candidate" : "Save changes"}
+              {showRatioOverride
+                ? "Retry"
+                : mode === "add"
+                  ? "Add candidate"
+                  : "Save changes"}
             </button>
           </div>
         </fieldset>

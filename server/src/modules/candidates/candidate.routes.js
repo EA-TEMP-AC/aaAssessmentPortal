@@ -110,6 +110,7 @@ export function mountCandidateRoutes(router) {
           created: result.created,
           skipped: result.skipped,
           errorCount: result.errors.length,
+          ...(result.logins ? { loginsCreated: result.logins.created } : {}),
         },
       });
       await writeRatioOverrideAudit(req.user, id, result.ratioOverride, clientIp(req));
@@ -117,6 +118,7 @@ export function mountCandidateRoutes(router) {
         created: result.created,
         skipped: result.skipped,
         errors: result.errors,
+        ...(result.logins ? { logins: result.logins } : {}),
       });
     }),
   );
@@ -131,13 +133,16 @@ export function mountCandidateRoutes(router) {
       setAudit(req, {
         action: "candidate.create",
         entity: "candidate",
+        omitRequestBody: true,
         entityId: saved.candidate.id,
         abId: saved.abId,
         batchId: id,
         after: saved.stored,
       });
       await writeRatioOverrideAudit(req.user, id, saved.ratioOverride, clientIp(req));
-      await res.status(201).json(saved.candidate);
+      await res
+        .status(201)
+        .json(saved.login ? { ...saved.candidate, login: saved.login } : saved.candidate);
     }),
   );
 

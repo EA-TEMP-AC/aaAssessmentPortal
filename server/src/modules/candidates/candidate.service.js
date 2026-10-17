@@ -13,6 +13,7 @@ import { Batch } from "../../models/batch.model.js";
 import { Candidate } from "../../models/candidate.model.js";
 import { Learner } from "../../models/learner.model.js";
 import { assertRatioOrOverride } from "../batches/assign-rules.js";
+import { createCandidateLogin } from "./candidate-login.service.js";
 import { learnerIsOnBatch } from "./candidate-scope.js";
 import { rosterFromCsv } from "./candidate-csv.js";
 
@@ -22,6 +23,8 @@ export const CANDIDATE_ROSTER_OPEN_STATUSES = Object.freeze([
   "accepted",
   "assessor_assigned",
 ]);
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function iso(value) {
   return new Date(value).toISOString();
@@ -135,7 +138,7 @@ export async function addCandidate(user, batchId, body, context = {}) {
   assertRosterOpen(batch);
 
   try {
-    return await withTransaction(async (session) => {
+    const saved = await withTransaction(async (session) => {
       const learner = await resolveLearner(body, session);
       const already = await Candidate.findOne({
         batchId: batch._id,
@@ -182,8 +185,13 @@ export async function addCandidate(user, batchId, body, context = {}) {
         stored: presented,
         ratioOverride,
         abId: idOf(batch.abId),
+        learner,
       };
     });
+    // X-35: the login is made after the roster row is saved; a problem there never undoes the row.
+    const { learner, ...result } = saved;
+    if (body.email) result.login = await createCandidateLogin({ learner, email: body.email });
+    return result;
   } catch (err) {
     if (err?.code === 11000) throw duplicateResource("Learner is already on this batch");
     throw err;
@@ -264,12 +272,17 @@ export async function importCandidates(user, batchId, csvText, extras = {}, cont
 
   let created = 0;
   let skipped = 0;
+  const logins = { created: 0, existing: 0, failed: 0 };
   const errors = [];
   let ratioOverride = null;
 
   for (const row of rows) {
     if (!row.name || !row.externalRef) {
       errors.push({ row: row.rowNumber, reason: "name and externalRef are required" });
+      continue;
+    }
+    if (row.email && !EMAIL_PATTERN.test(row.email)) {
+      errors.push({ row: row.rowNumber, reason: "email is not valid" });
       continue;
     }
     try {
@@ -279,11 +292,17 @@ export async function importCandidates(user, batchId, csvText, extras = {}, cont
         {
           name: row.name,
           externalRef: row.externalRef,
+          ...(row.email ? { email: row.email.toLowerCase() } : {}),
           ratioOverrideReason: extras.ratioOverrideReason,
         },
         context,
       );
       created += 1;
+      if (saved.login) {
+        if (saved.login.status === "created") logins.created += 1;
+        else if (saved.login.status === "failed") logins.failed += 1;
+        else logins.existing += 1;
+      }
       if (saved.ratioOverride) ratioOverride = saved.ratioOverride;
     } catch (err) {
       if (err instanceof AppError && err.code === "DUPLICATE_RESOURCE") {
@@ -298,7 +317,14 @@ export async function importCandidates(user, batchId, csvText, extras = {}, cont
     }
   }
 
-  return { created, skipped, errors, ratioOverride, abId: idOf(batch.abId) };
+  return {
+    created,
+    skipped,
+    errors,
+    ratioOverride,
+    abId: idOf(batch.abId),
+    ...(rows.some((r) => r.email) ? { logins } : {}),
+  };
 }
 
 export async function writeRatioOverrideAudit(user, batchId, ratioOverride, ip) {

@@ -629,6 +629,8 @@ Owned by **B-06c**. Roles: the batch read roles (`aa_admin`, `mis`, `assessor`, 
 
 ## Batch candidates
 
+> **X-35, student logins.** `POST /batches/:id/candidates` also takes an optional `email`. With it, a login is created for the learner (role `candidate`, linked to the learner, a generated temporary password, `mustChangePassword` true) and the sign-in details are emailed (queue kind `candidate_login`). The password is never returned, logged or audited, and the request body is kept out of the audit row. The `201` body then carries `login: { status, emailQueued }` where `status` is `created`, `has_login` (the learner already has a candidate login), `email_in_use` (another user has that email) or `failed`; the roster row is saved in every case. The CSV import takes an optional `email` column; a row with a bad email is a row error (`email is not valid`) and is not added. When the file has an email column the import result also carries `logins: { created, existing, failed }`.
+
 ### POST /batches/:id/candidates
 
 ```json

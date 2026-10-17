@@ -21,6 +21,8 @@ export const addCandidateBodySchema = z
     learnerId: objectIdSchema.optional(),
     name: z.string().trim().min(1).max(200).optional(),
     externalRef: z.string().trim().min(1).max(64).optional(),
+    /** X-35: with an email the student gets a login, and the details are emailed. */
+    email: z.string().trim().toLowerCase().email().max(254).optional(),
     accommodations: accommodationSchema.optional(),
     ratioOverrideReason: reasonSchema.optional(),
   })

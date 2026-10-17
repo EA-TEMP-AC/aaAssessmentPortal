@@ -85,7 +85,7 @@ export function assertLooksLikeCsv(text) {
 }
 
 /**
- * Header must include name and externalRef. Extra columns are ignored.
+ * Header must include name and externalRef; an optional email column creates the student's login (X-35). Extra columns are ignored.
  * @param {string} text
  * @returns {{ rowNumber: number, name: string, externalRef: string }[]}
  */
@@ -106,6 +106,7 @@ export function rosterFromCsv(text) {
   );
   const nameIdx = header.indexOf("name");
   const refIdx = header.indexOf("externalref");
+  const emailIdx = header.indexOf("email");
   if (nameIdx < 0 || refIdx < 0) {
     throw validationError("CSV header is required", {
       csv: ["Expected header name,externalRef"],
@@ -120,6 +121,7 @@ export function rosterFromCsv(text) {
       rowNumber: i + 1,
       name: sanitizeCsvCell(cols[nameIdx] ?? ""),
       externalRef: sanitizeCsvCell(cols[refIdx] ?? ""),
+      email: emailIdx >= 0 ? sanitizeCsvCell(cols[emailIdx] ?? "") : "",
     });
   }
 

@@ -30,7 +30,9 @@ export function CandidateImportDialog({
   const [showRatioOverride, setShowRatioOverride] = useState(false);
   const [pending, setPending] = useState(false);
   const [formError, setFormError] = useState<FormError | null>(null);
-  const [importResult, setImportResult] = useState<CsvImportResponse | null>(null);
+  const [importResult, setImportResult] = useState<CsvImportResponse | null>(
+    null,
+  );
 
   const errorSeq = useRef(0);
   const mounted = useRef(true);
@@ -56,7 +58,11 @@ export function CandidateImportDialog({
       return;
     }
     const override = overrideFieldForRule(error.code);
-    if (override === "ratioOverrideReason" && canOverride && isBlockableRuleCode(error.code)) {
+    if (
+      override === "ratioOverrideReason" &&
+      canOverride &&
+      isBlockableRuleCode(error.code)
+    ) {
       setShowRatioOverride(true);
       showError(errorMessage(error), ["ratioOverrideReason"]);
       return;
@@ -72,10 +78,14 @@ export function CandidateImportDialog({
 
     if (showRatioOverride) {
       if (!ratioOverrideReason.trim()) {
-        showError("Enter a ratio override reason to continue.", ["ratioOverrideReason"]);
+        showError("Enter a ratio override reason to continue.", [
+          "ratioOverrideReason",
+        ]);
         return;
       } else if (ratioOverrideReason.trim().length > 2000) {
-        showError("Override reason must be 2000 characters or fewer.", ["ratioOverrideReason"]);
+        showError("Override reason must be 2000 characters or fewer.", [
+          "ratioOverrideReason",
+        ]);
         return;
       }
     }
@@ -103,7 +113,11 @@ export function CandidateImportDialog({
   }
 
   return (
-    <Dialog title="Import candidates from CSV" busy={pending} onCancel={onCancel}>
+    <Dialog
+      title="Import candidates from CSV"
+      busy={pending}
+      onCancel={onCancel}
+    >
       <form
         noValidate
         onSubmit={(event) => {
@@ -115,10 +129,17 @@ export function CandidateImportDialog({
           <FormAlert error={formError} id={errorId} />
 
           <p className="field-hint">
-            Upload a CSV file with columns <code>name,externalRef</code> in the header row.
+            Upload a CSV file with columns <code>name,externalRef</code> in the
+            header row.
           </p>
           <p className="field-hint">
-            Note: Cells starting with <code>=</code>, <code>+</code>, <code>-</code>, or <code>@</code> are neutralised with a leading quote to prevent formula execution.
+            Add an <code>email</code> column to give each student a login; the
+            sign-in details are emailed to them.
+          </p>
+          <p className="field-hint">
+            Note: Cells starting with <code>=</code>, <code>+</code>,{" "}
+            <code>-</code>, or <code>@</code> are neutralised with a leading
+            quote to prevent formula execution.
           </p>
 
           <div className="field">
@@ -142,14 +163,18 @@ export function CandidateImportDialog({
           {showRatioOverride ? (
             <div className="field">
               <label htmlFor={ratioId}>Ratio override reason</label>
-              <p className="field-hint">Only an AA admin can send this. It is stored and audit-logged.</p>
+              <p className="field-hint">
+                Only an AA admin can send this. It is stored and audit-logged.
+              </p>
               <textarea
                 id={ratioId}
                 name="ratioOverrideReason"
                 required
                 maxLength={2000}
                 value={ratioOverrideReason}
-                aria-invalid={formError?.fields.includes("ratioOverrideReason") || undefined}
+                aria-invalid={
+                  formError?.fields.includes("ratioOverrideReason") || undefined
+                }
                 onChange={(event) => {
                   setRatioOverrideReason(event.target.value);
                   setFormError(null);
@@ -161,11 +186,25 @@ export function CandidateImportDialog({
           {importResult ? (
             <div className="import-results">
               <p className="form-notice" role="status">
-                Import processed: {importResult.created} candidate(s) added, {importResult.skipped} duplicate(s) skipped.
+                Import processed: {importResult.created} candidate(s) added,{" "}
+                {importResult.skipped} duplicate(s) skipped.
+                {importResult.logins
+                  ? ` ${importResult.logins.created} login(s) created and emailed${
+                      importResult.logins.existing +
+                        importResult.logins.failed >
+                      0
+                        ? `, ${importResult.logins.existing + importResult.logins.failed} not created`
+                        : ""
+                    }.`
+                  : ""}
               </p>
               {importResult.errors.length > 0 ? (
                 <div className="form-error" role="alert">
-                  <p><strong>Errors in {importResult.errors.length} row(s):</strong></p>
+                  <p>
+                    <strong>
+                      Errors in {importResult.errors.length} row(s):
+                    </strong>
+                  </p>
                   <ul>
                     {importResult.errors.map((err, idx) => (
                       <li key={`${err.row}-${idx}`}>
