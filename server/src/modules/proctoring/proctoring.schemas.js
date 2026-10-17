@@ -57,6 +57,7 @@ export const flagSchema = guard(
       detail: detailSchema.optional(),
       evidenceId: objectId("evidence ID").optional(),
       location: locationSchema.optional(),
+      questionId: objectId("question ID").optional(),
     })
     .strict(),
 );

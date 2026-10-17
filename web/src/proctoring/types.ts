@@ -76,6 +76,8 @@ export interface ProctorEngine {
     watchFullscreen?: boolean;
     /** X-07: the batch has location capture on, so flag photos and flags may carry the location. */
     captureLocation?: boolean;
+    /** X-23: the id of the question on screen now, or null. */
+    getQuestionId?: () => string | null;
     /** X-14: a microphone stream, used only to measure loudness. Nothing is recorded or sent. */
     audioStream?: MediaStream;
     /** X-21: the shared screen. The engine only watches that it keeps sharing; no screen picture is read. */
@@ -122,6 +124,8 @@ export type FlagBody = {
   evidenceId?: string;
   /** X-07: only when the batch has location capture on and the candidate allowed it. */
   location?: { latitude: number; longitude: number; accuracy?: number };
+  /** X-23: the question on screen when the flag was raised. The server adds its place and the saved answer. */
+  questionId?: string;
 };
 
 export type SnapshotUpload = {

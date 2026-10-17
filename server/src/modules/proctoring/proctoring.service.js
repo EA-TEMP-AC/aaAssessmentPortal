@@ -17,6 +17,7 @@ import { AuditLog } from "../../models/audit-log.model.js";
 import { Batch } from "../../models/batch.model.js";
 import { Candidate } from "../../models/candidate.model.js";
 import { Evidence } from "../../models/evidence.model.js";
+import { Question } from "../../models/question.model.js";
 import { ProctoringFlag, PROCTORING_SEVERITIES } from "../../models/proctoring-flag.model.js";
 import { ProctoringSession } from "../../models/proctoring-session.model.js";
 import { PROCTORING_INVALIDATE_ROLES } from "../../models/roles.js";
@@ -460,6 +461,21 @@ export async function recordFlag(user, id, body, now = new Date()) {
     location: keepLocation ? JSON.stringify(body.location) : null,
     payloadHash: hashValue,
   };
+  // X-23: which question was on screen. The place and the answer come from the saved attempt.
+  if (body.questionId) {
+    const attempt = await Attempt.findById(session.attemptId).select("questions").lean();
+    const index = (attempt?.questions ?? []).findIndex(
+      (q) => String(q.questionId) === body.questionId.toLowerCase(),
+    );
+    if (index < 0) {
+      throw validationError("questionId is not a question of this attempt", {
+        questionId: ["Not a question of this attempt"],
+      });
+    }
+    flagDoc.questionId = attempt.questions[index].questionId;
+    flagDoc.questionNumber = index + 1;
+    flagDoc.answerAtFlag = attempt.questions[index].answer?.slice(0, 2000) ?? null;
+  }
   const settings = await batchSettingsOf(session.batchId);
   const counts = settings.flagPolicy.countSeverities.includes(severity);
   const bump = {
@@ -923,6 +939,23 @@ export async function getFlagCapture(user, flagId) {
       location = null;
     }
   }
+  // X-23: the question text and the chosen option text only for people who review flags live.
+  let question = null;
+  if (flag.questionNumber) {
+    question = {
+      number: flag.questionNumber,
+      text: null,
+      options: null,
+      answer: flag.answerAtFlag ?? null,
+    };
+    if (user.role === "aa_admin" || user.role === "proctor") {
+      const q = await Question.findById(flag.questionId).select("stem options type").lean();
+      if (q) {
+        question.text = q.stem;
+        question.options = (q.options ?? []).map((o) => ({ key: o.key, text: o.text }));
+      }
+    }
+  }
   const session = location
     ? await ProctoringSession.findById(flag.sessionId).select("learnerId").lean()
     : null;
@@ -941,6 +974,7 @@ export async function getFlagCapture(user, flagId) {
       locationStatus: flag.locationStatus ?? "not_shared",
       locationVisible,
       location,
+      question,
     },
   };
 }

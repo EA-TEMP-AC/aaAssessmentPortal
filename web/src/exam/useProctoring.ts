@@ -36,6 +36,8 @@ type Input = {
   face?: FaceStart | null;
   /** X-08: when false the engine does not watch full screen (no fullscreen_exit flag). Default false. */
   requireFullscreen?: boolean;
+  /** X-23: the id of the question on screen, read when a flag is raised. */
+  getQuestionId?: () => string | null;
 };
 
 export type ProctoringView = {
@@ -63,6 +65,7 @@ export function useProctoring({
   stream,
   face,
   requireFullscreen = false,
+  getQuestionId,
 }: Input): ProctoringView {
   const [unavailable, setUnavailable] = useState<string | null>(null);
   const [status, setStatus] = useState<ProctorStatus>({ state: "starting" });
@@ -78,6 +81,8 @@ export function useProctoring({
   const faceTransport = useRef<ReturnType<typeof createTransport> | null>(null);
   const micStream = useRef<MediaStream | null>(null);
   const screenStream = useRef<MediaStream | null>(null);
+  const questionIdRef = useRef(getQuestionId);
+  questionIdRef.current = getQuestionId;
 
   // The engine clears the matcher when it stops. When it never started, this does it.
   const clearMatcher = useCallback(() => {
@@ -213,6 +218,7 @@ export function useProctoring({
           faceMatcher: faceStart?.matcher ?? undefined,
           watchFullscreen: requireFullscreen,
           captureLocation: session.captureLocation,
+          getQuestionId: () => questionIdRef.current?.() ?? null,
           onFlag: (flag) => {
             if (live && !stopped.current) {
               const at = Date.now();

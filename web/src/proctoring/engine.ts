@@ -107,6 +107,7 @@ type Run = {
   identity: IdentityState;
   /** X-07: null when the batch does not capture location. */
   location: LocationProvider | null;
+  getQuestionId: (() => string | null) | null;
   /** X-14: null when there is no microphone. Loudness only; no sound is kept. */
   voice: VoiceMeter | null;
 };
@@ -206,6 +207,8 @@ export function createEngine(options: EngineOptions = {}): ProctorEngine {
     const body: FlagBody = { clientEventId, type: flag.type, capturedAt };
     if (flag.detail) body.detail = flag.detail;
     if (evidenceId) body.evidenceId = evidenceId;
+    const questionId = r.getQuestionId?.();
+    if (questionId) body.questionId = questionId;
     if (location) {
       body.location = {
         latitude: location.latitude,
@@ -378,6 +381,7 @@ export function createEngine(options: EngineOptions = {}): ProctorEngine {
       faceMatcher: o.faceMatcher ?? null,
       faceActive: false,
       identity: INITIAL_IDENTITY_STATE,
+      getQuestionId: o.getQuestionId ?? null,
       location: o.captureLocation ? (options.locationProvider ?? createLocationProvider()) : null,
       voice:
         o.audioStream && !o.config.disabledFlags?.includes("voice_detected")

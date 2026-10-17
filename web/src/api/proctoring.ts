@@ -392,7 +392,31 @@ export type FlagCapture = {
     longitude: number;
     accuracy: number | null;
   } | null;
+  /** X-23: the question on screen when the flag was raised. Text and options only for the AA admin and the proctor. */
+  question: {
+    number: number;
+    text: string | null;
+    options: { key: string; text: string }[] | null;
+    answer: string | null;
+  } | null;
 };
+
+function parseFlagQuestion(value: unknown): FlagCapture["question"] {
+  if (!isRecord(value) || typeof value.number !== "number") return null;
+  const options = Array.isArray(value.options)
+    ? value.options.flatMap((o) =>
+        isRecord(o) && typeof o.key === "string" && typeof o.text === "string"
+          ? [{ key: o.key, text: o.text }]
+          : [],
+      )
+    : null;
+  return {
+    number: value.number,
+    text: str(value.text) ?? null,
+    options,
+    answer: typeof value.answer === "string" ? value.answer : null,
+  };
+}
 
 export async function getFlagCapture(
   flagId: string,
@@ -432,5 +456,6 @@ export async function getFlagCapture(
       body.locationStatus === "captured" ? "captured" : "not_shared",
     locationVisible: body.locationVisible === true,
     location,
+    question: parseFlagQuestion(body.question),
   };
 }

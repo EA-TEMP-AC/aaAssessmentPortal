@@ -1031,6 +1031,9 @@ Indexes: `{ attemptId: 1 }` unique; `{ batchId: 1, createdAt: -1 }`; `{ abId: 1,
 | severity | enum | Y | `low`, `medium`, `high`; set by the server from `PROCTOR_FLAG_SEVERITY` (§2) |
 | capturedAt | Date | Y | Device clock, as sent |
 | receivedAt | Date | Y | Server clock |
+| questionId | ObjectId | N | X-23. The question on screen when the flag was raised (a question of the attempt) |
+| questionNumber | integer | N | X-23. Its 1-based place in the attempt's question order |
+| answerAtFlag | string max 2000 | N | X-23. The answer saved at that moment; the question text is read from the question when a person looks, never copied |
 | detail | {label, count, confidence} | N | Label max 60, count 0 to 100, confidence 0 to 1. No images or personal data |
 | evidenceId | ObjectId | N | A `proctor_snapshot` evidence row of the same session |
 | locationStatus | enum | Y | X-07. `captured` or `not_shared` (default). `captured` only when the batch had `captureLocation` on and the browser sent coordinates |

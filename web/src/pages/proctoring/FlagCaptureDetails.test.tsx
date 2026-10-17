@@ -18,6 +18,7 @@ function capture(overrides: Partial<FlagCapture> = {}): FlagCapture {
     locationStatus: "captured",
     locationVisible: true,
     location: { latitude: 19.076123, longitude: 72.877456, accuracy: 12 },
+    question: null,
     ...overrides,
   };
 }
@@ -32,6 +33,32 @@ function show(load: (id: string) => Promise<FlagCapture>) {
 }
 
 describe("FlagCaptureDetails", () => {
+  it("shows the question on screen and the answer saved at that moment (X-23)", async () => {
+    show(async () =>
+      capture({
+        question: {
+          number: 2,
+          text: "Which tool measures current?",
+          options: [
+            { key: "A", text: "Ammeter" },
+            { key: "B", text: "Voltmeter" },
+          ],
+          answer: "B",
+        },
+      }),
+    );
+    expect(await screen.findByText("Question 2")).toBeInTheDocument();
+    expect(screen.getByText(/Which tool measures current/)).toBeInTheDocument();
+    expect(screen.getByText("Answer saved at that moment")).toBeInTheDocument();
+    expect(screen.getAllByText("B. Voltmeter").length).toBeGreaterThan(0);
+  });
+
+  it("says when nothing was answered, and hides the text from roles that may not read it", async () => {
+    show(async () => capture({ question: { number: 3, text: null, options: null, answer: null } }));
+    expect(await screen.findByText("Question 3")).toBeInTheDocument();
+    expect(screen.getByText("Not answered yet")).toBeInTheDocument();
+  });
+
   it("shows the server's reason, severity, both times and the location", async () => {
     show(async () => capture());
     expect(await screen.findByText("Face not visible for 2 seconds")).toBeInTheDocument();

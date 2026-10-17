@@ -15,6 +15,12 @@ function locationText(capture: FlagCapture): string {
   return `${latitude.toFixed(6)}, ${longitude.toFixed(6)} (${spread})`;
 }
 
+function answerText(question: NonNullable<FlagCapture["question"]>): string {
+  const answer = question.answer ?? "";
+  const option = question.options?.find((o) => o.key === answer);
+  return option ? `${option.key}. ${option.text}` : answer;
+}
+
 /**
  * What the server saved about one flag photo (X-07), shown beside the picture. The words and
  * times drawn on the photo come from the candidate's browser and could be changed; these come
@@ -79,6 +85,30 @@ export function FlagCaptureDetails({
           <dt>Location</dt>
           <dd>{locationText(capture)}</dd>
         </div>
+        {capture.question ? (
+          <div>
+            <dt>Question on screen</dt>
+            <dd>
+              <strong>Question {capture.question.number}</strong>
+              {capture.question.text ? <span>: {capture.question.text}</span> : null}
+              {capture.question.options ? (
+                <ul>
+                  {capture.question.options.map((option) => (
+                    <li key={option.key}>
+                      {option.key}. {option.text}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </dd>
+          </div>
+        ) : null}
+        {capture.question ? (
+          <div>
+            <dt>Answer saved at that moment</dt>
+            <dd>{capture.question.answer ? answerText(capture.question) : "Not answered yet"}</dd>
+          </div>
+        ) : null}
       </dl>
       {gap > CLOCK_GAP_WARNING_SECONDS ? (
         <p role="alert" className="form-error">

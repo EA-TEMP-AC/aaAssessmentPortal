@@ -71,6 +71,14 @@ const proctoringFlagSchema = new mongoose.Schema(
      * data). Only the photo-details read returns it, and only to aa_admin, tp and proctor.
      */
     location: { type: String, default: null },
+    /**
+     * X-23: the question on screen when the flag was raised, as the 1-based place in the
+     * attempt's own question order, and the answer saved at that moment. The question text is
+     * read from the question by id when a person looks; it is not copied here.
+     */
+    questionId: { type: mongoose.Schema.Types.ObjectId, default: null, ref: "Question" },
+    questionNumber: { type: Number, default: null, min: 1 },
+    answerAtFlag: { type: String, default: null, maxlength: 2000 },
     locationStatus: {
       type: String,
       required: true,

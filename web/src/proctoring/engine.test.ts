@@ -290,6 +290,29 @@ describe("flags", () => {
     Reflect.deleteProperty(document, "fullscreenElement");
   });
 
+  it("sends the question on screen with a flag, and nothing when there is none (X-23)", async () => {
+    let current: string | null = "q-7";
+    const s = setup();
+    await s.engine.start({
+      stream: fakeStream().stream,
+      getQuestionId: () => current,
+      sessionId: "sess-1",
+      attemptId: "att-1",
+      batchId: "batch-1",
+      config,
+      onStatus: (status) => s.statuses.push(status),
+    });
+    window.dispatchEvent(new Event("blur"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(s.flags[0].questionId).toBe("q-7");
+    current = null;
+    await vi.advanceTimersByTimeAsync(20_000);
+    window.dispatchEvent(new Event("blur"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(s.flags.at(-1)?.questionId).toBeUndefined();
+    s.engine.stop();
+  });
+
   it("raises screen_share_stopped when the shared screen ends (X-21)", async () => {
     const screenTrack = new FakeTrack();
     const screenStream = { getVideoTracks: () => [screenTrack] } as unknown as MediaStream;

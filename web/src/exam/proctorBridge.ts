@@ -59,6 +59,7 @@ export interface ProctorEngine {
     watchFullscreen?: boolean;
     /** X-07: flag photos and flags may carry the location. */
     captureLocation?: boolean;
+    getQuestionId?: () => string | null;
     /** X-14: a microphone stream, used only to measure loudness. Nothing is recorded or sent. */
     audioStream?: MediaStream;
     /** X-21: the shared screen, watched only to see that it keeps sharing. */

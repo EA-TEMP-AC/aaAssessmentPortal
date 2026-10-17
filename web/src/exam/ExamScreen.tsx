@@ -132,7 +132,15 @@ export function ExamScreen({ attempt, stream, face, onFinished, autosaveDebounce
   const [deadlineAt, setDeadlineAt] = useState(attempt.deadlineAt);
   const clockHeld = paused && attempt.settings.flagPolicy.extendOnUnlock;
   const remaining = useExamClock(deadlineAt, attempt.serverTime, clockHeld);
-  const proctoring = useProctoring({ attemptId: attempt.id, batchId: attempt.batchId, stream, face, requireFullscreen });
+  const indexRef = useRef(0);
+  const proctoring = useProctoring({
+    attemptId: attempt.id,
+    batchId: attempt.batchId,
+    stream,
+    face,
+    requireFullscreen,
+    getQuestionId: () => attempt.questions[indexRef.current]?.questionId ?? null,
+  });
   const { stop: stopProctoring } = proctoring;
 
   const finish = useCallback(
@@ -243,6 +251,7 @@ export function ExamScreen({ attempt, stream, face, onFinished, autosaveDebounce
     if (currentWarning) warningButton.current?.focus();
   }, [currentWarning]);
 
+  indexRef.current = index;
   const question = questions[index];
   const timeUp = remaining <= 0;
   const answeredCount = questions.filter((q) => isAnswered(answers[q.questionId])).length;

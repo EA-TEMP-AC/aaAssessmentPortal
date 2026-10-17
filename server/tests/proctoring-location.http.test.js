@@ -7,6 +7,7 @@ import { Attempt } from "../src/models/attempt.model.js";
 import { AuditLog } from "../src/models/audit-log.model.js";
 import { Batch } from "../src/models/batch.model.js";
 import { Candidate } from "../src/models/candidate.model.js";
+import { Question } from "../src/models/question.model.js";
 import { resetLoginRateLimit } from "../src/modules/auth/login-rate-limit.js";
 import { clearCollections, startMongo, stopMongo } from "./helpers/db.js";
 import { createUser, webDevice } from "./helpers/fixtures.js";
@@ -332,5 +333,97 @@ describe("Location on flag photos (X-07)", () => {
     expect(res.status).toBe(200);
     expect(res.body.flags[0].locationStatus).toBe("captured");
     expect(JSON.stringify(res.body)).not.toContain("19.076");
+  });
+});
+
+describe("Question and answer on a flag (X-23)", () => {
+  let batch;
+  let asha;
+  let admin;
+  let proctor;
+  let assessor;
+  let question;
+
+  beforeAll(async () => {
+    await startMongo();
+    await mongoose.syncIndexes();
+  });
+  afterAll(stopMongo);
+  beforeEach(async () => {
+    await clearCollections();
+    resetLoginRateLimit();
+    batch = await makeBatch();
+    asha = await candidateWithAttempt(batch);
+    admin = await sessionFor("aa_admin");
+    proctor = await sessionFor("proctor", { linkedProfileId: batch.proctorId });
+    assessor = await sessionFor("assessor", { linkedProfileId: batch.assessorId });
+    question = await Question.create({
+      qualificationId: batch.qualificationId,
+      nosId: "NOS-01",
+      pcId: "PC-1",
+      type: "mcq",
+      language: "English",
+      stem: "Which tool measures current?",
+      options: [
+        { key: "A", text: "Ammeter" },
+        { key: "B", text: "Voltmeter" },
+      ],
+      correctAnswer: "A",
+      marks: 1,
+    });
+    await Attempt.updateOne(
+      { _id: asha.attempt._id },
+      {
+        $set: {
+          questions: [
+            { questionId: oid(), version: 1, nosId: "N", pcId: "P", type: "mcq", marks: 1 },
+            {
+              questionId: question._id,
+              version: 1,
+              nosId: "NOS-01",
+              pcId: "PC-1",
+              type: "mcq",
+              marks: 1,
+              answer: "B",
+            },
+          ],
+        },
+      },
+    );
+  });
+
+  it("keeps the place of the question and the answer saved at that moment", async () => {
+    const session = (await startSession(asha)).body;
+    const res = await sendFlag(asha, session.id, { questionId: String(question._id) });
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+    const row = await rawFlag(res.body.id);
+    expect(row.questionNumber).toBe(2);
+    expect(row.answerAtFlag).toBe("B");
+  });
+
+  it("shows the question text to aa_admin and the proctor, not to others", async () => {
+    const session = (await startSession(asha)).body;
+    const res = await sendFlag(asha, session.id, { questionId: String(question._id) });
+    for (const who of [admin, proctor]) {
+      const out = await capture(who, res.body.id);
+      expect(out.status).toBe(200);
+      expect(out.body.question).toMatchObject({
+        number: 2,
+        text: "Which tool measures current?",
+        answer: "B",
+      });
+      expect(out.body.question.options).toHaveLength(2);
+    }
+    const other = await capture(assessor, res.body.id);
+    expect(other.body.question).toEqual({ number: 2, text: null, options: null, answer: "B" });
+  });
+
+  it("refuses a question that is not in the attempt, and a flag with none has no question", async () => {
+    const session = (await startSession(asha)).body;
+    const bad = await sendFlag(asha, session.id, { questionId: String(oid()) });
+    expect(bad.status).toBe(400);
+    const none = await sendFlag(asha, session.id, {});
+    expect(none.status).toBe(201);
+    expect((await capture(admin, none.body.id)).body.question).toBeNull();
   });
 });
