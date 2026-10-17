@@ -15,7 +15,12 @@ import { useSession } from "../../api/session";
 import { FormAlert } from "../masterData/dialog";
 import { useProjectOptions, useSchemeOptions } from "../schemes/schemeData";
 import { serverFieldErrors } from "../schemes/schemeWrite";
+import { canAssignBatchPaper } from "../../routing/access";
+import { generatePaper, setBatchTestPaper, submitPaper } from "../../api/testPapers";
+import { nosOf, useQualifications } from "../questionBank/qualifications";
 import { canCreateBatch } from "./access";
+import { BatchPaperStep } from "./BatchPaperStep";
+import { LATER_PLAN, buildPaperRequest, type PaperPlan } from "./paperPlan";
 
 const OBJECT_ID = /^[a-fA-F0-9]{24}$/;
 const CALENDAR_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -58,6 +63,8 @@ export function BatchCreatePage() {
     assessmentLanguage: "",
     recognitionOverrideReason: "",
   });
+  const [paperPlan, setPaperPlan] = useState<PaperPlan>(LATER_PLAN);
+  const [afterNote, setAfterNote] = useState<{ batchId: string; message: string } | null>(null);
   const [needRecognitionOverride, setNeedRecognitionOverride] = useState(false);
   const [pending, setPending] = useState(false);
   const [formError, setFormError] = useState<FormError | null>(null);
@@ -87,6 +94,7 @@ export function BatchCreatePage() {
     queryFn: ({ signal }) => listCentres({ page: 1, pageSize: 100, active: true, tpId: draft.tpId }, signal),
   });
 
+  const allQualifications = useQualifications(Boolean(session) && paperPlan.mode === "build");
   const schemeOptions = useSchemeOptions(Boolean(session));
   const projectOptions = useProjectOptions(draft.schemeId || null, Boolean(session));
 
@@ -108,6 +116,7 @@ export function BatchCreatePage() {
   if (!canCreateBatch(session.user.role)) return <Navigate to="/batches" replace />;
 
   const canOverride = session.user.role === "aa_admin";
+  const canChoosePaper = canAssignBatchPaper(session.user.role);
 
   function bind(key: string) {
     return (node: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | null) => {
@@ -130,7 +139,13 @@ export function BatchCreatePage() {
         <Link to="/batches">Back to batches</Link>
       </p>
       <h1>Create batch</h1>
+      {canChoosePaper ? <p className="field-hint">Step 1: batch details. Step 2 (optional): the question paper.</p> : null}
       <p>Sector, ratio class, and state are copied by the server from the qualification and centre.</p>
+      {afterNote ? (
+        <p role="status" className="form-notice">
+          {afterNote.message} <Link to={`/batches/${afterNote.batchId}`}>Open the batch</Link>
+        </p>
+      ) : null}
       <form
         noValidate
         onSubmit={(event) => {
@@ -184,6 +199,19 @@ export function BatchCreatePage() {
               fields.push("recognitionOverrideReason");
             }
           }
+          let paperRequest: ReturnType<typeof buildPaperRequest> | null = null;
+          if (canChoosePaper && paperPlan.mode === "existing" && !paperPlan.paperId) {
+            messages.push("Choose the approved paper, or pick Decide later.");
+          }
+          if (canChoosePaper && paperPlan.mode === "build") {
+            paperRequest = buildPaperRequest(
+              paperPlan,
+              draft.qualificationId.trim(),
+              draft.assessmentLanguage,
+              nosOf(allQualifications.data, draft.qualificationId.trim()),
+            );
+            if ("problem" in paperRequest) messages.push(paperRequest.problem);
+          }
           if (messages.length > 0) {
             showError(messages.join(" "), fields);
             return;
@@ -212,6 +240,29 @@ export function BatchCreatePage() {
             try {
               const saved = await createBatch(input);
               if (!mounted.current) return;
+              // X-18: the paper step runs after the batch exists. A failure here never undoes the batch.
+              let note: string | null = null;
+              if (canChoosePaper && paperPlan.mode === "existing") {
+                try {
+                  await setBatchTestPaper(saved.id, paperPlan.paperId);
+                } catch (failure) {
+                  note = `The batch was created, but the paper could not be set. ${errorMessage(failure)}`;
+                }
+              } else if (canChoosePaper && paperPlan.mode === "build" && paperRequest && "input" in paperRequest) {
+                try {
+                  const built = await generatePaper(paperRequest.input);
+                  if (paperPlan.sendForApproval) await submitPaper(built.id);
+                  note = `The batch was created. A draft paper${paperPlan.sendForApproval ? " was sent for approval" : " was saved"}. Set it on the batch page once it is approved.`;
+                } catch (failure) {
+                  note = `The batch was created, but the paper could not be built. ${errorMessage(failure)}`;
+                }
+              }
+              if (!mounted.current) return;
+              if (note) {
+                // The form stays locked so a second click cannot make a second batch.
+                setAfterNote({ batchId: saved.id, message: note });
+                return;
+              }
               navigate(`/batches/${saved.id}`, { replace: true });
             } catch (error) {
               if (!mounted.current) return;
@@ -495,6 +546,17 @@ export function BatchCreatePage() {
                 onChange={(event) => update("recognitionOverrideReason", event.target.value)}
               />
             </div>
+          ) : null}
+          {canChoosePaper ? (
+            <BatchPaperStep
+              qualificationId={draft.qualificationId.trim()}
+              assessmentLanguage={draft.assessmentLanguage}
+              plan={paperPlan}
+              onChange={(next) => {
+                setPaperPlan(next);
+                setFormError(null);
+              }}
+            />
           ) : null}
           <div className="dialog-actions">
             <button type="submit">{needRecognitionOverride ? "Create with override" : "Create batch"}</button>
