@@ -44,6 +44,20 @@ const questionSchema = new mongoose.Schema(
     options: { type: [optionSchema], default: [] },
     correctAnswer: { type: String, trim: true, default: null },
     marks: { type: Number, required: true, min: 0.5 },
+    /** X-25: pictures shown under the stem, at most 3, each with a text description. */
+    images: {
+      type: [
+        new mongoose.Schema(
+          {
+            imageId: { type: mongoose.Schema.Types.ObjectId, required: true, ref: "QuestionImage" },
+            alt: { type: String, required: true, trim: true, minlength: 1, maxlength: 300 },
+          },
+          { _id: false },
+        ),
+      ],
+      default: [],
+      validate: [(v) => v.length <= 3, "A question can have at most 3 images"],
+    },
     status: {
       type: String,
       required: true,

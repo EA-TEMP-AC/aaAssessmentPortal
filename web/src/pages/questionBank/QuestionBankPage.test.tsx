@@ -194,6 +194,7 @@ it("checks the form, then creates a question", async () => {
     ],
     correctAnswer: "A",
     marks: 1,
+    images: [],
   });
 });
 

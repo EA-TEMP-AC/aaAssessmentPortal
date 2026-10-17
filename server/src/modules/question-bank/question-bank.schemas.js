@@ -38,6 +38,14 @@ function queryNumber({ min, max, fallback }) {
   }, z.coerce.number().int().min(min).max(max));
 }
 
+const imageItemSchema = z
+  .object({
+    imageId: z.string().regex(/^[a-fA-F0-9]{24}$/, "Invalid image ID"),
+    alt: z.string().trim().min(1).max(300),
+  })
+  .strict();
+const imagesSchema = z.array(imageItemSchema).max(3);
+
 const optionItemSchema = z.union([
   z
     .object({
@@ -129,6 +137,7 @@ export const createQuestionSchema = nationalIdGuard(
       options: z.array(optionItemSchema).optional(),
       correctAnswer: z.string().trim().max(2000).nullable().optional(),
       marks: z.coerce.number().positive().min(0.5),
+      images: imagesSchema.optional(),
     })
     .strict()
     .refine((data) => data.qualificationId || data.qualification, {
@@ -199,6 +208,7 @@ export const updateQuestionSchema = nationalIdGuard(
       options: z.array(optionItemSchema).optional(),
       correctAnswer: z.string().trim().max(2000).nullable().optional(),
       marks: z.coerce.number().positive().min(0.5).optional(),
+      images: imagesSchema.optional(),
     })
     .strict(),
 );

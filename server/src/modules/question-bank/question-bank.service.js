@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import ExcelJS from "exceljs";
 import { AppError } from "../../lib/errors.js";
 import { Qualification } from "../../models/qualification.model.js";
+import { QuestionImage } from "../../models/question-image.model.js";
 import { Question, QUESTION_DIFFICULTIES, QUESTION_TYPES } from "../../models/question.model.js";
 import { compliance } from "../../config/compliance.js";
 import {
@@ -100,6 +101,25 @@ function mcqKeyOrThrow(options, answer) {
   return key;
 }
 
+/** X-25: every image must exist, and none may repeat. Returns the list to store. */
+async function checkedImages(images) {
+  const list = (images ?? []).map((i) => ({ imageId: i.imageId.toLowerCase(), alt: i.alt.trim() }));
+  if (new Set(list.map((i) => i.imageId)).size !== list.length) {
+    throw new AppError(400, "VALIDATION_ERROR", "The same image is used twice", {
+      images: ["The same image is used twice"],
+    });
+  }
+  if (list.length > 0) {
+    const found = await QuestionImage.countDocuments({ _id: { $in: list.map((i) => i.imageId) } });
+    if (found !== list.length) {
+      throw new AppError(400, "VALIDATION_ERROR", "An image was not found", {
+        images: ["An image was not found; upload it again"],
+      });
+    }
+  }
+  return list;
+}
+
 /**
  * Creates a new question in draft status (version 1).
  */
@@ -128,6 +148,7 @@ export async function createQuestion(user, data) {
     options: normalizedOptions,
     correctAnswer,
     marks: Number(data.marks),
+    images: await checkedImages(data.images),
     status: "draft",
     version: 1,
     isLatest: true,
@@ -286,6 +307,10 @@ export async function updateQuestion(user, id, data) {
     options: nextOptions,
     correctAnswer: nextCorrectAnswer,
     marks: data.marks !== undefined ? Number(data.marks) : existing.marks,
+    images:
+      data.images !== undefined
+        ? await checkedImages(data.images)
+        : (existing.images ?? []).map((i) => ({ imageId: i.imageId, alt: i.alt })),
     status: "draft",
     version: existing.version + 1,
     rootQuestionId: existing.rootQuestionId || existing._id,

@@ -1172,6 +1172,14 @@ Request body:
 ```
 Response `201 Created`: created question object.
 
+### Pictures in questions (X-25)
+
+`POST /api/v1/question-bank/images`: roles `aa_admin`, `sme`. The body is the picture itself (`Content-Type: image/png` or `image/jpeg`, 1 MB at most). The type is read from the first bytes: anything else is `400`, over 1 MB is `413 FILE_TOO_LARGE`, an empty body `400`. Returns `201 { id, contentType, size }`. The audit row (`question_image.upload`) holds the id, type and size only.
+
+`GET /api/v1/question-bank/images/:id/file`: returns the picture bytes (`Cache-Control: private`). Allowed: `aa_admin`, `sme`, `ab_reviewer`, `assessor`, `proctor`, `tp`, and a `candidate` who has an `in_progress` attempt holding a question that uses the picture. Others `403`; unknown id `404`.
+
+A question carries `images`: up to 3 of `{ imageId, alt }` (`alt` 1 to 300 characters, required: the text read to people who cannot see the picture). Send `images` in `POST` and `PUT /question-bank/questions`. An unknown picture, the same picture twice, a missing `alt` or more than 3 is `400`. A new version keeps the pictures unless `images` is sent. In an attempt (`GET /attempts/:id`) each question has `images: [{ id, alt }]`; the candidate fetches each with the call above.
+
 ### GET /api/v1/question-bank/questions
 Roles: `aa_admin`, `sme`, `ab_reviewer`.
 Query parameters: `qualification`, `nos`, `pc`, `type`, `language`, `status`, `difficulty`, `latestOnly` (default true), `page` (default 1), `pageSize` (default 20, max 100).

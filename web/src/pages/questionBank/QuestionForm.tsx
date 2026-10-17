@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
+import { QuestionImagesField } from "./QuestionImagesField";
 import type { Qualification } from "../../api/masterData";
 import { errorMessage } from "../../api/client";
 import {
@@ -256,6 +257,7 @@ export function QuestionForm({
           />
           {fieldError("stem")}
         </div>
+        <QuestionImagesField images={draft.images} onChange={(images) => patch({ images })} error={errors.images} />
         {mcq ? (
           <fieldset className="bare-fieldset" aria-describedby={errors.options ? id("options-error") : undefined}>
             <legend>Options</legend>

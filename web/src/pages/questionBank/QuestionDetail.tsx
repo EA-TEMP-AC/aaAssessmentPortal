@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { QuestionImage } from "../../components/QuestionImage";
 import { errorMessage } from "../../api/client";
 import {
   QUESTION_STATUS_LABELS,
@@ -105,6 +106,9 @@ export function QuestionDetail({
       </dl>
       <h3>Question text</h3>
       <p style={{ whiteSpace: "pre-wrap" }}>{question.stem}</p>
+      {question.images.map((image) => (
+        <QuestionImage key={image.imageId} imageId={image.imageId} alt={image.alt} />
+      ))}
       {question.type === "mcq" ? (
         <>
           <h3>Options</h3>

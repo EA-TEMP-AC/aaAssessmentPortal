@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { QuestionImage } from "../components/QuestionImage";
 import { ApiError, errorMessage } from "../api/client";
 import { getAttempt, submitAttempt, type Attempt, type AttemptQuestion } from "../api/attempts";
 import { useAutosave, type ClosedReason } from "./useAutosave";
@@ -400,6 +401,9 @@ export function ExamScreen({ attempt, stream, face, onFinished, autosaveDebounce
           Question {index + 1} of {questions.length}
         </h2>
         <p className="exam-stem">{question.stem}</p>
+        {(question.images ?? []).map((image) => (
+          <QuestionImage key={image.id} imageId={image.id} alt={image.alt} />
+        ))}
         <QuestionBody
           question={question}
           value={answers[question.questionId] ?? ""}

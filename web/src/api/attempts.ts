@@ -16,6 +16,8 @@ export type AttemptQuestion = {
   type: string;
   stem: string;
   options: AttemptOption[];
+  /** X-25: pictures under the question text, each with a description. */
+  images?: { id: string; alt: string }[];
   answer: string | null;
 };
 
@@ -132,6 +134,13 @@ function parseQuestion(value: unknown, index: number): AttemptQuestion {
     type,
     stem: typeof value.stem === "string" ? value.stem : "",
     options,
+    images: Array.isArray(value.images)
+      ? value.images.flatMap((image) => {
+          if (!isRecord(image)) return [];
+          const id = str(image.id);
+          return id ? [{ id, alt: typeof image.alt === "string" ? image.alt : "" }] : [];
+        })
+      : [],
     answer: typeof value.answer === "string" ? value.answer : null,
   };
 }

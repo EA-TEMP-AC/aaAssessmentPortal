@@ -1,3 +1,4 @@
+import type { QuestionImageRef } from "../../api/questionImages";
 import type { Qualification } from "../../api/masterData";
 import type {
   Difficulty,
@@ -21,6 +22,7 @@ export type Draft = {
   options: QuestionOption[];
   correctAnswer: string;
   marks: string;
+  images: QuestionImageRef[];
 };
 
 export type Errors = Partial<Record<keyof Draft, string>>;
@@ -39,6 +41,7 @@ export function initialDraft(question: Question | null, qualifications: readonly
       options: question.options.map((option) => ({ ...option })),
       correctAnswer: question.correctAnswer ?? "",
       marks: String(question.marks),
+      images: question.images.map((image) => ({ ...image })),
     };
   }
   return {
@@ -56,6 +59,7 @@ export function initialDraft(question: Question | null, qualifications: readonly
     ],
     correctAnswer: "",
     marks: "1",
+    images: [],
   };
 }
 
@@ -69,6 +73,9 @@ export function validateDraft(draft: Draft): Errors {
   const marks = Number(draft.marks);
   if (draft.marks.trim() === "" || !Number.isFinite(marks) || marks < 0.5) {
     errors.marks = "Marks must be 0.5 or more.";
+  }
+  if (draft.images.some((image) => !image.alt.trim())) {
+    errors.images = "Describe every picture in words, for people who cannot see it.";
   }
   if (draft.type === "mcq") {
     const filled = draft.options.filter((option) => option.text.trim());
@@ -95,6 +102,7 @@ export function buildWrite(draft: Draft): QuestionWrite {
     options: mcq ? draft.options.map((option) => ({ key: option.key, text: option.text.trim() })) : [],
     correctAnswer: mcq ? draft.correctAnswer : draft.correctAnswer.trim() || null,
     marks: Number(draft.marks),
+    images: draft.images.map((image) => ({ imageId: image.imageId, alt: image.alt.trim() })),
   };
 }
 
@@ -107,5 +115,6 @@ export const ORDER: Array<keyof Draft> = [
   "options",
   "correctAnswer",
   "marks",
+  "images",
 ];
 

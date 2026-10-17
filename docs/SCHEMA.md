@@ -322,6 +322,17 @@ Stable person across batches.
 
 Indexes: `{ externalRef: 1 }` sparse unique; `{ name: 1 }`.
 
+### 3.4a `questionImages` (X-25)
+
+| Field | Type | Req | Notes |
+|---|---|---|---|
+| contentType | string | Y | `image/png` or `image/jpeg`, read from the bytes |
+| size | number | Y | bytes, at most 1048576 |
+| sha256 | string | Y | hash of the bytes |
+| data | Buffer | Y | the picture; never in a response list or audit row |
+| uploadedBy | ObjectId | Y | ref User |
+| createdAt | date | Y | never edited or deleted |
+
 ### 3.4 `awardingBodies` (phase 1)
 
 | Field | Type | Req | Notes |
@@ -756,6 +767,7 @@ Supports versioning: updates create a new version document (`version: n + 1`) an
 | options | Option[] | N | Array of `{ key, text }`. Required for MCQ (≥ 2 options). Keys must be unique when compared without case (Q-06) |
 | correctAnswer | string | N | MCQ: required, stored as the **option key** (a submitted key or option text is matched case-insensitively and the key is saved; Q-06). Old rows may hold the option text; scoring maps it to the key. Rubric for others |
 | marks | number | Y | Positive number (≥ 0.5) |
+| images | [{ imageId, alt }] | N | X-25. At most 3 pictures shown under the stem. `imageId` refs `questionImages`; `alt` 1 to 300 characters, required |
 | status | QuestionStatus | Y | `draft`, `in_review`, `approved`, `retired`. Default `draft` |
 | version | number | Y | Integer ≥ 1. Incremented on update |
 | rootQuestionId | ObjectId | Y | Group identifier across versions (`_id` of version 1) |

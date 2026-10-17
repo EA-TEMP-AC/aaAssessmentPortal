@@ -126,7 +126,7 @@ function candidateMarksView(attempt, settings) {
 
 async function loadQuestionMap(ids) {
   const docs = await Question.find({ _id: { $in: ids } })
-    .select("stem options correctAnswer type marks")
+    .select("stem options correctAnswer type marks images")
     .lean();
   return new Map(docs.map((d) => [String(d._id), d]));
 }
@@ -660,6 +660,7 @@ async function presentForCandidate(
         type: q.type,
         marks: q.marks,
         stem: doc?.stem ?? "",
+        images: (doc?.images ?? []).map((i) => ({ id: idStr(i.imageId), alt: i.alt })),
         options: orderedOptions(attempt, q.questionId, doc?.options ?? []).map((o) => ({
           key: o.key,
           text: o.text,

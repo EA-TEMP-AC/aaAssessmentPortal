@@ -30,6 +30,8 @@ import {
 import { reviewCycleRouter } from "./review-cycle.routes.js";
 import { guardContentRead } from "../content-controls/content-guard.js";
 import { sectorCoverageRouter } from "./sector-coverage.routes.js";
+import { loadReadableQuestionImage, uploadQuestionImage } from "./question-image.service.js";
+import { QUESTION_IMAGE_MAX_BYTES } from "../../models/question-image.model.js";
 
 export const questionBankRouter = Router();
 
@@ -46,6 +48,49 @@ const rawBufferParser = express.raw({
   ],
   limit: "10mb",
 });
+
+const imageParser = express.raw({
+  type: ["image/png", "image/jpeg"],
+  limit: QUESTION_IMAGE_MAX_BYTES,
+});
+
+/**
+ * POST /api/v1/question-bank/images (X-25). The body is the picture itself (Content-Type
+ * image/png or image/jpeg, at most 1 MB). The picture is attached to a question afterwards,
+ * with its text description, through `images` on the question.
+ */
+questionBankRouter.post(
+  "/images",
+  requireRoles(...QUESTION_WRITE_ROLES),
+  imageParser,
+  asyncHandler(async (req, res) => {
+    const saved = await uploadQuestionImage(req.user, req.body);
+    req.audit = {
+      action: "question_image.upload",
+      entity: "question_image",
+      entityId: saved.id,
+      omitRequestBody: true,
+      after: saved,
+    };
+    res.status(201).json(saved);
+  }),
+);
+
+/** GET /api/v1/question-bank/images/:id/file (X-25). The picture bytes. */
+questionBankRouter.get(
+  "/images/:id/file",
+  asyncHandler(async (req, res) => {
+    const { id } = idParamSchema.parse(req.params);
+    const image = await loadReadableQuestionImage(req.user, id);
+    res.set({
+      "Content-Type": image.contentType,
+      "Content-Length": String(image.size),
+      "Cache-Control": "private, max-age=300",
+      "X-Content-Type-Options": "nosniff",
+    });
+    res.status(200).end(Buffer.from(image.data.buffer ?? image.data));
+  }),
+);
 
 /**
  * POST /api/v1/question-bank/questions

@@ -1,4 +1,6 @@
+
 import { ApiError, apiRequest } from "./client";
+import type { QuestionImageRef } from "./questionImages";
 
 /**
  * Question bank (Q-01, X-10). Paths and errors follow API_CONTRACT.md "Question bank".
@@ -67,6 +69,8 @@ export type Question = {
   options: QuestionOption[];
   correctAnswer: string | null;
   marks: number;
+  /** X-25: pictures under the question text, each with a description. */
+  images: QuestionImageRef[];
   status: QuestionStatus;
   version: number;
   isLatest: boolean;
@@ -110,6 +114,7 @@ export type QuestionWrite = {
   options: QuestionOption[];
   correctAnswer: string | null;
   marks: number;
+  images: QuestionImageRef[];
 };
 
 export type ImportRowError = { row: number; errors: string[] };
@@ -187,6 +192,13 @@ export function parseQuestion(value: unknown): Question {
     correctAnswer:
       typeof value.correctAnswer === "string" ? value.correctAnswer : null,
     marks: value.marks,
+    images: Array.isArray(value.images)
+      ? value.images.flatMap((item): QuestionImageRef[] =>
+          isRecord(item) && typeof item.imageId === "string" && typeof item.alt === "string"
+            ? [{ imageId: item.imageId, alt: item.alt }]
+            : [],
+        )
+      : [],
     status,
     version: value.version,
     isLatest: value.isLatest !== false,
