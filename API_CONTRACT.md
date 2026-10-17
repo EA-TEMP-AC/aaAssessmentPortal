@@ -660,6 +660,20 @@ CSV: `name,externalRef` (creates/links learners). Response `{ created, skipped, 
 
 ---
 
+## Master records by Excel (X-43)
+
+Roles: `aa_admin`, `mis`. Types: `awarding-bodies`, `training-partners`, `centres`, `assessors`, `proctors`, `learners` (students).
+
+### GET /master-import/:type/template
+
+An empty `.xlsx`: a `Data` sheet with the header row and a `Notes` sheet listing each column, whether it is required, and an example.
+
+### POST /master-import/:type
+
+Body: the `.xlsx` file (`Content-Type` `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` or `application/octet-stream`), at most 5 MB and 2000 data rows. Reads the `Data` sheet (or the first sheet). Every row goes through the same rules and service as the single-record form. Response `200 { type, totalRows, created, skipped, errors: [{ row, reason }] }`. A record that already exists (same code, email or reference) counts as `skipped`; a bad row is listed and the others are still created. `400` for a file that is not Excel or lacks the required columns. Centres use `tpCode` (the code of an existing training partner). A national ID column is never read. One audit row `master.bulk_import` with counts only.
+
+---
+
 ## Assessors / Proctors
 
 CRUD includes `languages: string[]` on assessors (trimmed; may be empty). `GET /assessors/available?from=&to=&languages=&batchId=` is unchanged aside from that field.

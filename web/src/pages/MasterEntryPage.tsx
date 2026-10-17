@@ -1,4 +1,12 @@
-import { Navigate, NavLink, Route, Routes } from "react-router-dom";
+import {
+  Navigate,
+  NavLink,
+  Route,
+  Routes,
+  useLocation,
+} from "react-router-dom";
+import type { BulkType } from "../api/masterImport";
+import { BulkImportPanel } from "./BulkImportPanel";
 import { AssessorsScreen } from "./registry/AssessorsScreen";
 import { ProctorsScreen } from "./registry/ProctorsScreen";
 import { QualificationsScreen } from "./masterData/QualificationsScreen";
@@ -6,16 +14,32 @@ import { SimpleResourceScreen } from "./masterData/SimpleResourceScreen";
 
 /** One place to add and edit every kind of master record. Reuses the existing list and add screens. */
 export const MASTER_ENTRY_TABS = [
-  { path: "awarding-bodies", label: "Awarding bodies" },
-  { path: "training-partners", label: "Training partners" },
-  { path: "centres", label: "Training centres" },
-  { path: "assessors", label: "Assessors" },
-  { path: "proctors", label: "Proctors" },
-  { path: "learners", label: "Students" },
-  { path: "qualifications", label: "Qualifications" },
-] as const;
+  {
+    path: "awarding-bodies",
+    label: "Awarding bodies",
+    bulk: "awarding-bodies",
+  },
+  {
+    path: "training-partners",
+    label: "Training partners",
+    bulk: "training-partners",
+  },
+  { path: "centres", label: "Training centres", bulk: "centres" },
+  { path: "assessors", label: "Assessors", bulk: "assessors" },
+  { path: "proctors", label: "Proctors", bulk: "proctors" },
+  { path: "learners", label: "Students", bulk: "learners" },
+  { path: "qualifications", label: "Qualifications", bulk: null },
+] as const satisfies readonly {
+  path: string;
+  label: string;
+  bulk: BulkType | null;
+}[];
 
 export function MasterEntryPage() {
+  const location = useLocation();
+  const current = MASTER_ENTRY_TABS.find((tab) =>
+    location.pathname.endsWith(`/${tab.path}`),
+  );
   return (
     <>
       <h1>Master entry</h1>
@@ -30,6 +54,13 @@ export function MasterEntryPage() {
           ))}
         </ul>
       </nav>
+      {current?.bulk ? (
+        <BulkImportPanel
+          key={current.bulk}
+          type={current.bulk}
+          label={current.label.toLowerCase()}
+        />
+      ) : null}
       <Routes>
         <Route
           index

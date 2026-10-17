@@ -11,6 +11,7 @@ import { assessorFieldRouter } from "./modules/attendance/attendance.routes.js";
 import { batchesRouter } from "./modules/batches/batch.routes.js";
 import { complianceRouter } from "./modules/compliance/compliance.routes.js";
 import { proctorsRouter } from "./modules/proctors/proctor.routes.js";
+import { masterImportRouter } from "./modules/master-data/bulk-import.js";
 import {
   assessorLoginEventRouter,
   proctorLoginEventRouter,
@@ -73,6 +74,7 @@ export function createApp() {
   app.use("/api/v1/learners", learnersRouter);
   app.use("/api/v1/assessors", assessorsRouter);
   app.use("/api/v1/proctors", proctorsRouter);
+  app.use("/api/v1/master-import", masterImportRouter);
   app.use("/api/v1/audit-logs", auditRouter);
   app.use("/api/v1/audit/access-log", accessLogRouter);
   app.use("/api/v1/admin/working-day-config", workingDayConfigRouter);
