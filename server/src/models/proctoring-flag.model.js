@@ -22,6 +22,8 @@ export const PROCTORING_FLAG_TYPES = Object.freeze([
   "face_mismatch",
   "id_mismatch",
   "id_unreadable",
+  "looking_away",
+  "voice_detected",
 ]);
 export const PROCTORING_SEVERITIES = Object.freeze(["low", "medium", "high"]);
 /** X-07: whether the flag photo carries coordinates. `captured` means `location` is set. */

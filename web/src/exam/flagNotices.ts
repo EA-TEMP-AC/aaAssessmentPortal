@@ -19,6 +19,8 @@ export const FLAG_NOTICE_TEXT: Record<ProctorFlagType, string> = {
   face_mismatch: "Please face the camera in good light.",
   id_mismatch: "Your ID card photo could not be checked. You can carry on with the exam.",
   id_unreadable: "Your ID card photo could not be read. You can carry on with the exam.",
+  looking_away: "Please keep your face towards the screen while you work.",
+  voice_detected: "Please stay quiet during the exam.",
 };
 
 export type NoticeState = {

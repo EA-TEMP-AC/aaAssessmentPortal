@@ -117,6 +117,8 @@ export const compliance = Object.freeze({
     face_not_present: 2,
     camera_blocked: 2,
     camera_frozen: 8,
+    looking_away: 6,
+    voice_detected: 4,
   }),
   /**
    * project. P-01. A session with no heartbeat for this many snapshot intervals shows as
@@ -142,5 +144,7 @@ export const compliance = Object.freeze({
     face_mismatch: "high",
     id_mismatch: "high",
     id_unreadable: "medium",
+    looking_away: "medium",
+    voice_detected: "medium",
   }),
 });

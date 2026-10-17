@@ -36,6 +36,8 @@ export const FLAG_TYPE_LABELS: Record<string, string> = {
   face_mismatch: "Face differs from the selfie",
   id_mismatch: "ID card photo differs from the selfie",
   id_unreadable: "ID card photo not readable",
+  looking_away: "Looking away from the screen",
+  voice_detected: "Voice heard",
 };
 
 export const DECISION_LABELS: Record<Decision, string> = {

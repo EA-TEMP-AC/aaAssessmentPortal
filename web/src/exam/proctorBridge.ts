@@ -21,7 +21,9 @@ export type ProctorFlagType =
   | "camera_frozen"
   | "face_mismatch"
   | "id_mismatch"
-  | "id_unreadable";
+  | "id_unreadable"
+  | "looking_away"
+  | "voice_detected";
 
 export interface ProctorConfig {
   snapshotIntervalSeconds: number;
@@ -54,6 +56,8 @@ export interface ProctorEngine {
     watchFullscreen?: boolean;
     /** X-07: flag photos and flags may carry the location. */
     captureLocation?: boolean;
+    /** X-14: a microphone stream, used only to measure loudness. Nothing is recorded or sent. */
+    audioStream?: MediaStream;
   }): Promise<void>;
   stop(): void;
 }

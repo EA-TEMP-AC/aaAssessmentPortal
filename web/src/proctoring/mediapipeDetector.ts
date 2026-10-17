@@ -18,7 +18,20 @@ export const MEDIAPIPE_PATHS = {
   objectModel: `${BASE}/models/efficientdet_lite0.tflite`,
 };
 
-type Box = { categories: { categoryName?: string; score: number }[] };
+type Box = {
+  categories: { categoryName?: string; score: number }[];
+  /** BlazeFace order: eye, eye, nose tip, mouth, ear, ear. Normalised 0 to 1. */
+  keypoints?: { x: number; y: number }[];
+};
+
+/** X-14. Sideways head turn from the eyes and the nose tip: see Detection.headTurn. */
+export function headTurnOf(keypoints: { x: number; y: number }[] | undefined): number | undefined {
+  const [eyeA, eyeB, nose] = keypoints ?? [];
+  if (!eyeA || !eyeB || !nose) return undefined;
+  const span = Math.abs(eyeB.x - eyeA.x);
+  if (span < 0.01) return undefined;
+  return (nose.x - (eyeA.x + eyeB.x) / 2) / span;
+}
 
 /** Map the object detector's COCO label to our kinds. */
 export function kindForLabel(label: string): Detection["kind"] {
@@ -68,6 +81,7 @@ export async function createMediaPipeDetector(): Promise<Detector> {
       kind: "face",
       label: "face",
       confidence: box.categories[0]?.score ?? 0,
+      ...(headTurnOf(box.keypoints) === undefined ? {} : { headTurn: headTurnOf(box.keypoints) }),
     }));
 
   const detectObjects = async (frame: Parameters<Detector["detect"]>[0]): Promise<Detection[]> => {

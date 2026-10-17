@@ -20,6 +20,8 @@ export const PROCTOR_FLAG_TYPES = [
   "face_mismatch",
   "id_mismatch",
   "id_unreadable",
+  "looking_away",
+  "voice_detected",
 ] as const;
 
 export type ProctorFlagType =
@@ -36,7 +38,9 @@ export type ProctorFlagType =
   | "camera_frozen"
   | "face_mismatch"
   | "id_mismatch"
-  | "id_unreadable";
+  | "id_unreadable"
+  | "looking_away"
+  | "voice_detected";
 
 export interface ProctorConfig {
   snapshotIntervalSeconds: number;
@@ -68,6 +72,8 @@ export interface ProctorEngine {
     watchFullscreen?: boolean;
     /** X-07: the batch has location capture on, so flag photos and flags may carry the location. */
     captureLocation?: boolean;
+    /** X-14: a microphone stream, used only to measure loudness. Nothing is recorded or sent. */
+    audioStream?: MediaStream;
   }): Promise<void>;
   stop(): void;
 }
@@ -77,6 +83,12 @@ export interface Detection {
   kind: "face" | "person" | "phone" | "object";
   label: string;
   confidence: number;
+  /**
+   * X-14, faces only. How far the head is turned sideways: the nose's offset from the middle of
+   * the eyes, as a fraction of the distance between the eyes. About 0 facing the camera,
+   * negative and positive for the two directions. Absent when the model gave no landmarks.
+   */
+  headTurn?: number;
 }
 
 /** A replaceable model (MediaPipe today; YOLO or a vendor later). */

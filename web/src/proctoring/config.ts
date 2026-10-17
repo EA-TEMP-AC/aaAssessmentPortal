@@ -16,6 +16,15 @@ export const PROCTOR_THRESHOLDS = {
   phoneLabels: ["cell phone"] as readonly string[],
   /** Object-detector labels treated as a forbidden object or an extra screen. */
   objectLabels: ["book", "laptop", "tv"] as readonly string[],
+  /**
+   * X-14. Head turn (see Detection.headTurn) beyond which the candidate counts as looking away.
+   * A starting value to tune in real tests, not a tuned figure.
+   */
+  lookAwayTurn: 0.45,
+  /** X-14. Microphone loudness (RMS, 0 to 1) at or above which talking is suspected. */
+  voiceLevel: 0.06,
+  /** X-14. Loudness must also be this many times the room's quiet level, so a noisy room does not flag. */
+  voiceFloorFactor: 3,
   /** Mean brightness (0 to 255) below which the frame counts as blocked or covered. */
   darkBrightness: 18,
   /** Mean per-pixel difference (0 to 255) below which two frames count as identical. */
@@ -50,6 +59,8 @@ export const DEFAULT_SUSTAINED_SECONDS: Record<string, number> = {
   object_detected: 2,
   camera_blocked: 3,
   camera_frozen: 5,
+  looking_away: 6,
+  voice_detected: 4,
 };
 
 /** Local config for the demo page and tests. The exam page gets the real one from the server. */

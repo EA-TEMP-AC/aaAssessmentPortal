@@ -20,6 +20,7 @@ import {
 } from "./face";
 import { describeError, proctorDebug } from "./debug";
 import { createLocationProvider, type LocationProvider, type PhotoLocation } from "./location";
+import { createVoiceMeter, type VoiceMeter } from "./audio";
 import { createMediaPipeDetector } from "./mediapipeDetector";
 import { createRulesState, evaluateEvent, evaluateFrame, frameStats, type RulesState } from "./rules";
 import { createTransport } from "./transport";
@@ -62,6 +63,8 @@ export type EngineOptions = {
   onTick?: (ms: number) => void;
   /** Whether the video has a frame the model can read. Default: readyState >= 2. */
   isFrameReady?: (video: HTMLVideoElement) => boolean;
+  /** X-14: builds the loudness meter for a microphone stream. Default: Web Audio. */
+  voiceMeterFactory?: (stream: MediaStream) => VoiceMeter | null;
   /** Face check numbers (mismatch samples, hold time, cooldown). Default: face/config.ts. */
   faceConfig?: FaceConfig;
   /** For the demo page: what the model saw this cycle (null when degraded). */
@@ -104,6 +107,8 @@ type Run = {
   identity: IdentityState;
   /** X-07: null when the batch does not capture location. */
   location: LocationProvider | null;
+  /** X-14: null when there is no microphone. Loudness only; no sound is kept. */
+  voice: VoiceMeter | null;
 };
 
 export const FACE_MODEL_MESSAGE = "The face check could not load; the other browser checks still run.";
@@ -135,6 +140,7 @@ export function createEngine(options: EngineOptions = {}): ProctorEngine {
   const takeSnapshot = options.takeSnapshot ?? createSnapshotTaker(thresholds);
   const isFrameReady = options.isFrameReady ?? ((video: HTMLVideoElement) => video.readyState >= 2);
   const faceCfg = options.faceConfig ?? faceConfig();
+  const voiceMeterFactory = options.voiceMeterFactory ?? ((stream: MediaStream) => createVoiceMeter(stream, thresholds));
 
   let run: Run | null = null;
 
@@ -273,7 +279,13 @@ export function createEngine(options: EngineOptions = {}): ProctorEngine {
       }
       if (run !== r) return;
       options.onDetections?.(detections, stats);
-      const result = evaluateFrame(r.rules, { detections, ...stats }, now(), r.config, thresholds);
+      let voiceLevel: number | null = null;
+      try {
+        voiceLevel = r.voice ? r.voice.read() : null;
+      } catch {
+        voiceLevel = null;
+      }
+      const result = evaluateFrame(r.rules, { detections, ...stats, voiceLevel }, now(), r.config, thresholds);
       r.rules = result.state;
       for (const flag of result.flags) void send(r, flag);
       await checkIdentity(r);
@@ -302,6 +314,11 @@ export function createEngine(options: EngineOptions = {}): ProctorEngine {
     }
     r.sampler.release();
     r.framer.release();
+    try {
+      r.voice?.release();
+    } catch {
+      // A meter that fails to release has nothing more to free.
+    }
     try {
       r.video.pause();
     } catch {
@@ -362,6 +379,7 @@ export function createEngine(options: EngineOptions = {}): ProctorEngine {
       faceActive: false,
       identity: INITIAL_IDENTITY_STATE,
       location: o.captureLocation ? (options.locationProvider ?? createLocationProvider()) : null,
+      voice: o.audioStream ? voiceMeterFactory(o.audioStream) : null,
     };
     run = r;
     setStatus(r, "starting");

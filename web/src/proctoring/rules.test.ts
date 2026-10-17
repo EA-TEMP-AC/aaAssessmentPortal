@@ -209,3 +209,49 @@ describe("frameStats and toGray", () => {
     expect(Array.from(toGray(rgba))).toEqual([255, 0]);
   });
 });
+
+describe("looking_away and voice_detected (X-14)", () => {
+  const cfg: ProctorConfig = {
+    ...config,
+    sustainedSeconds: { ...config.sustainedSeconds, looking_away: 6, voice_detected: 4 },
+  };
+  const turned = (headTurn: number): Detection => ({ kind: "face", label: "face", confidence: 0.9, headTurn });
+
+  it("a face turned away raises looking_away only after the hold time", () => {
+    let state = createRulesState();
+    let r = evaluateFrame(state, frame([turned(0.7)]), 0, cfg);
+    expect(r.flags).toEqual([]);
+    state = r.state;
+    r = evaluateFrame(state, frame([turned(-0.7)]), 5999, cfg);
+    expect(r.flags).toEqual([]);
+    r = evaluateFrame(r.state, frame([turned(0.7)]), 6000, cfg);
+    expect(r.flags.map((f) => f.type)).toEqual(["looking_away"]);
+  });
+
+  it("turning back resets the timer", () => {
+    let r = evaluateFrame(createRulesState(), frame([turned(0.7)]), 0, cfg);
+    r = evaluateFrame(r.state, frame([turned(0.1)]), 4000, cfg);
+    r = evaluateFrame(r.state, frame([turned(0.7)]), 5000, cfg);
+    r = evaluateFrame(r.state, frame([turned(0.7)]), 9000, cfg);
+    expect(r.flags).toEqual([]);
+  });
+
+  it("a face with no landmarks, two faces, or no model never counts as looking away", () => {
+    expect(findConditions(frame([face()])).looking_away.active).toBe(false);
+    expect(findConditions(frame([turned(0.9), turned(0.9)])).looking_away.active).toBe(false);
+    expect(findConditions(frame(null)).looking_away.active).toBe(false);
+  });
+
+  it("loud talking raises voice_detected after its hold time, even with no model", () => {
+    let r = evaluateFrame(createRulesState(), frame(null, { voiceLevel: 0.2 }), 0, cfg);
+    expect(r.flags).toEqual([]);
+    r = evaluateFrame(r.state, frame(null, { voiceLevel: 0.2 }), 4000, cfg);
+    expect(r.flags.map((f) => f.type)).toEqual(["voice_detected"]);
+  });
+
+  it("no microphone, or a quiet room, never raises voice_detected", () => {
+    expect(findConditions(frame([face()])).voice_detected.active).toBe(false);
+    expect(findConditions(frame([face()], { voiceLevel: null })).voice_detected.active).toBe(false);
+    expect(findConditions(frame([face()], { voiceLevel: 0 })).voice_detected.active).toBe(false);
+  });
+});

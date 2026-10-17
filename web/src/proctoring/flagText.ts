@@ -20,6 +20,8 @@ export const FLAG_NAMES: Record<string, string> = {
   face_mismatch: "Face differs from the selfie",
   id_mismatch: "ID card photo differs from the selfie",
   id_unreadable: "ID card photo not readable",
+  looking_away: "Looking away from the screen",
+  voice_detected: "Voice heard",
 };
 
 /** Used when the server config has no severity for a type. Same values as compliance.js. */
@@ -38,6 +40,8 @@ export const DEFAULT_SEVERITY: Record<string, string> = {
   face_mismatch: "high",
   id_mismatch: "high",
   id_unreadable: "medium",
+  looking_away: "medium",
+  voice_detected: "medium",
 };
 
 export function flagName(type: string): string {
@@ -81,6 +85,10 @@ export function flagReason(type: string, sustained?: Record<string, number>): st
       return "ID card photo did not match the selfie";
     case "id_unreadable":
       return "ID card photo could not be read";
+    case "looking_away":
+      return `Head turned away from the screen${forSeconds(n)}`;
+    case "voice_detected":
+      return `Talking heard${forSeconds(n)}`;
     default:
       return type;
   }

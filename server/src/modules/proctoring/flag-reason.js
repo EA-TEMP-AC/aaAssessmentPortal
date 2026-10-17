@@ -20,6 +20,8 @@ const REASONS = {
   face_mismatch: () => "Face did not match the selfie",
   id_mismatch: () => "ID card photo did not match the selfie",
   id_unreadable: () => "ID card photo could not be read",
+  looking_away: (n) => `Head turned away from the screen${forSeconds(n)}`,
+  voice_detected: (n) => `Talking heard${forSeconds(n)}`,
 };
 
 function forSeconds(n) {

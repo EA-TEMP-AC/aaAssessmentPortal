@@ -43,6 +43,8 @@ be swapped for another model (for example YOLO) without touching the rules. Test
 | `face_not_present` | No face above the confidence cut-off for `sustainedSeconds.face_not_present` |
 | `multiple_faces` | Two or more faces |
 | `person_detected` | Two or more people (the candidate is one) |
+| `looking_away` | X-14. Exactly one face whose head is turned sideways: the nose is off the middle of the eyes by at least `lookAwayTurn` (0.45) of the eye distance, for `sustainedSeconds.looking_away` (6). Sideways only; looking down or up is not measured |
+| `voice_detected` | X-14. The microphone is louder than `voiceLevel` (0.06) and at least 3 times the room's quiet level, for `sustainedSeconds.voice_detected` (4). Only a loudness number is read: no recording, no words, and it cannot tell whose voice it is. Needs the microphone to be allowed in the exam window |
 | `phone_detected` | A "cell phone" |
 | `object_detected` | A book, laptop or tv (extra screen) |
 | `camera_blocked` | Mean brightness stays below the dark threshold for `sustainedSeconds.camera_blocked` |

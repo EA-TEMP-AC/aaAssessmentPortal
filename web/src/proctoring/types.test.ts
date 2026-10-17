@@ -20,6 +20,8 @@ describe("engine contract", () => {
         "face_mismatch",
         "id_mismatch",
         "id_unreadable",
+        "looking_away",
+        "voice_detected",
       ].sort(),
     );
     expectTypeOf<(typeof PROCTOR_FLAG_TYPES)[number]>().toEqualTypeOf<ProctorFlagType>();
@@ -29,5 +31,16 @@ describe("engine contract", () => {
     expect(kindForLabel("person")).toBe("person");
     expect(kindForLabel("cell phone")).toBe("phone");
     expect(kindForLabel("book")).toBe("object");
+  });
+});
+
+describe("head turn (X-14)", () => {
+  it("is about zero facing the camera and grows as the nose moves off the eye line", async () => {
+    const { headTurnOf } = await import("./mediapipeDetector");
+    const eyes = [{ x: 0.4, y: 0.4 }, { x: 0.6, y: 0.4 }];
+    expect(headTurnOf([...eyes, { x: 0.5, y: 0.5 }])).toBeCloseTo(0);
+    expect(Math.abs(headTurnOf([...eyes, { x: 0.6, y: 0.5 }])!)).toBeCloseTo(0.5);
+    expect(headTurnOf(undefined)).toBeUndefined();
+    expect(headTurnOf([{ x: 0.5, y: 0.4 }, { x: 0.5, y: 0.4 }, { x: 0.5, y: 0.5 }])).toBeUndefined();
   });
 });

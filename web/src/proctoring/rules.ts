@@ -16,6 +16,8 @@ type FrameRule = Extract<
   | "object_detected"
   | "camera_blocked"
   | "camera_frozen"
+  | "looking_away"
+  | "voice_detected"
 >;
 
 const FRAME_RULES: readonly FrameRule[] = [
@@ -26,6 +28,8 @@ const FRAME_RULES: readonly FrameRule[] = [
   "object_detected",
   "camera_blocked",
   "camera_frozen",
+  "looking_away",
+  "voice_detected",
 ];
 
 const MODEL_RULES: ReadonlySet<FrameRule> = new Set([
@@ -34,6 +38,7 @@ const MODEL_RULES: ReadonlySet<FrameRule> = new Set([
   "person_detected",
   "phone_detected",
   "object_detected",
+  "looking_away",
 ]);
 
 export type RulesState = {
@@ -50,6 +55,8 @@ export type FrameInput = {
   brightness: number | null;
   /** True when this frame matches the previous one; null when unknown. */
   identical: boolean | null;
+  /** X-14: microphone loudness 0 to 1 with the room's quiet level taken out; null when there is no microphone. */
+  voiceLevel?: number | null;
 };
 
 export function createRulesState(): RulesState {
@@ -119,6 +126,13 @@ export function findConditions(
       ? { active: true, detail: { label: "unchanged frame", count: 1, confidence: 1 } }
       : { active: false };
 
+  // X-14: talking is read from the microphone, so it works even when no model is loaded.
+  const heard = input.voiceLevel ?? null;
+  result.voice_detected =
+    heard !== null && heard >= thresholds.voiceLevel
+      ? { active: true, detail: { label: "voice", count: 1, confidence: round(Math.min(1, heard)) } }
+      : { active: false };
+
   const all = input.detections;
   if (all === null) {
     for (const rule of MODEL_RULES) result[rule] = { active: false };
@@ -141,6 +155,12 @@ export function findConditions(
       ? { active: true, detail: { label: "no face", count: 0, confidence: 0 } }
       : { active: false };
   result.multiple_faces = faces.length >= 2 ? finding(faces, "face") : { active: false };
+  // X-14: exactly one face, turned well to the side. Two faces is multiple_faces, none is face_not_present.
+  const turn = faces.length === 1 ? faces[0].headTurn : undefined;
+  result.looking_away =
+    turn !== undefined && Math.abs(turn) >= thresholds.lookAwayTurn
+      ? { active: true, detail: { label: "head turned", count: 1, confidence: round(Math.min(1, Math.abs(turn))) } }
+      : { active: false };
   // The candidate is one person; a second one is the flag.
   result.person_detected = persons.length >= 2 ? finding(persons, "person") : { active: false };
   result.phone_detected = finding(phones, "cell phone");

@@ -75,6 +75,7 @@ export function useProctoring({
   const stopped = useRef(false);
   const faceRef = useRef<FaceStart | null>(face ?? null);
   const faceTransport = useRef<ReturnType<typeof createTransport> | null>(null);
+  const micStream = useRef<MediaStream | null>(null);
 
   // The engine clears the matcher when it stops. When it never started, this does it.
   const clearMatcher = useCallback(() => {
@@ -96,6 +97,8 @@ export function useProctoring({
       // A failing engine must not block the end of the exam.
     }
     engine.current = null;
+    micStream.current?.getTracks().forEach((t) => t.stop());
+    micStream.current = null;
     faceTransport.current?.dispose();
     faceTransport.current = null;
     setStatus({ state: "stopped" });
@@ -169,9 +172,25 @@ export function useProctoring({
         Math.max(0, session.config.flagCooldownSeconds) * 1000;
       const next = getProctorEngine();
       engine.current = next;
+      // X-14: the microphone is only listened to for loudness. If it is not allowed, the exam goes on without it.
+      let audioStream: MediaStream | undefined;
+      try {
+        audioStream = await navigator.mediaDevices?.getUserMedia?.({ audio: true, video: false });
+      } catch {
+        audioStream = undefined;
+      }
+      if (audioStream) {
+        const mic = audioStream;
+        micStream.current = mic;
+        if (!live) {
+          mic.getTracks().forEach((t) => t.stop());
+          return;
+        }
+      }
       try {
         await next.start({
           stream,
+          audioStream,
           sessionId: session.id,
           attemptId,
           batchId,

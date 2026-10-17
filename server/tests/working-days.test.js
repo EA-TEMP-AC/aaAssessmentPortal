@@ -84,6 +84,8 @@ describe("compliance constants", () => {
         face_mismatch: "high",
         id_mismatch: "high",
         id_unreadable: "medium",
+        looking_away: "medium",
+        voice_detected: "medium",
       },
     });
     expect(Object.isFrozen(compliance)).toBe(true);
