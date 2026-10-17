@@ -681,11 +681,13 @@ describe("batch settings (B-20)", () => {
       expect(row.before).toEqual({ paused: true, countedFlags: 2 });
       expect(row.after).toMatchObject({ paused: false, countedFlags: 0 });
 
-      // Saving works again, and the count starts from zero: one flag is not enough.
+      // Saving works again, and the count starts from zero. After an unlock the batch waits for
+      // pauseAfterUnlock flags (default 3, X-28), so two are not enough.
       const q0 = attempt.questions[0].questionId;
       expect(
         (await putAnswers(w.candidate, attempt.id, [{ questionId: q0, answer: "A" }])).status,
       ).toBe(200);
+      expect((await sendFlag(w.candidate, sessionId, "multiple_faces")).body.paused).toBe(false);
       expect((await sendFlag(w.candidate, sessionId, "multiple_faces")).body.paused).toBe(false);
       expect((await sendFlag(w.candidate, sessionId, "multiple_faces")).body.paused).toBe(true);
       expect((await Attempt.findById(attempt.id).lean()).pause.timesPaused).toBe(2);

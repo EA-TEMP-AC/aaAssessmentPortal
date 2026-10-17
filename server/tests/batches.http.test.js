@@ -42,6 +42,7 @@ const batchKeys = [
   "firstAssessmentBatchId",
   "id",
   "isReassessment",
+  "languagePapers",
   "learnerFeedback",
   "mockTest",
   "mode",

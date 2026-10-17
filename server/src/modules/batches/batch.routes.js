@@ -200,6 +200,8 @@ batchesRouter.put(
     const saved = await saveTpSpoc(req.user, id, body);
     setAudit(req, {
       action: "batch.set_tp_spoc",
+      // The name and phone number must not reach the audit row through the request body.
+      omitRequestBody: true,
       entity: "batch",
       entityId: saved.batch.id,
       abId: saved.abId,
