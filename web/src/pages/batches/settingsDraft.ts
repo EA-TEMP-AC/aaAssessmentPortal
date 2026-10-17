@@ -11,6 +11,8 @@ import {
   type BatchSettingsPatch,
   type InfoField,
   type LocationRole,
+  type ProctoringType,
+  type UfmEvidence,
   type VideoFailureAction,
 } from "../../api/batchSettings";
 
@@ -39,10 +41,36 @@ export type Draft = {
   detectLookingAway: boolean;
   detectVoice: boolean;
   requireScreenShare: boolean;
+  proctoringType: ProctoringType;
+  aiEnabled: boolean;
+  ufmEvidence: UfmEvidence;
+  downloadSessionVideo: boolean;
+  downloadFlagVideo: boolean;
+  allowPracticalVideo: boolean;
+  allowVivaVideo: boolean;
+  assessorGeolocation: boolean;
+  assessorAnnexureM: boolean;
+  assessorFeedback: boolean;
+  studentAttendance: boolean;
+  studentFeedback: boolean;
+  langTheory: boolean;
+  langPractical: boolean;
+  langViva: boolean;
+  allowOjtImages: boolean;
+  pauseAfterUnlock: string;
+  imageEnabled: boolean;
 };
 
 export type Problems = Partial<
-  Record<"pauseAfterFlags" | "intervalSeconds" | "popupFields" | "recordVideo", string>
+  Record<
+    | "pauseAfterFlags"
+    | "pauseAfterUnlock"
+    | "intervalSeconds"
+    | "popupFields"
+    | "recordVideo"
+    | "videoOptions",
+    string
+  >
 >;
 
 export function toDraft(s: BatchSettings): Draft {
@@ -69,6 +97,24 @@ export function toDraft(s: BatchSettings): Draft {
     detectLookingAway: s.detectLookingAway,
     detectVoice: s.detectVoice,
     requireScreenShare: s.requireScreenShare,
+    proctoringType: s.proctoringType,
+    aiEnabled: s.aiEnabled,
+    ufmEvidence: s.ufmEvidence,
+    downloadSessionVideo: s.downloadSessionVideo,
+    downloadFlagVideo: s.downloadFlagVideo,
+    allowPracticalVideo: s.allowPracticalVideo,
+    allowVivaVideo: s.allowVivaVideo,
+    assessorGeolocation: s.assessorGeolocation,
+    assessorAnnexureM: s.assessorAnnexureM,
+    assessorFeedback: s.assessorFeedback,
+    studentAttendance: s.studentAttendance,
+    studentFeedback: s.studentFeedback,
+    langTheory: s.languages.theory,
+    langPractical: s.languages.practical,
+    langViva: s.languages.viva,
+    allowOjtImages: s.allowOjtImages,
+    pauseAfterUnlock: String(s.flagPolicy.pauseAfterUnlock),
+    imageEnabled: s.imageCapture.enabled,
   };
 }
 
@@ -94,8 +140,21 @@ export function validateDraft(draft: Draft): Problems {
   if (draft.popupEnabled && draft.popupFields.length === 0) {
     problems.popupFields = "Choose at least one field, or turn the pop-up off.";
   }
+  const unlock = wholeNumber(draft.pauseAfterUnlock);
+  if (unlock === null || unlock < PAUSE_AFTER_MIN || unlock > PAUSE_AFTER_MAX) {
+    problems.pauseAfterUnlock = `Enter a whole number from ${PAUSE_AFTER_MIN} to ${PAUSE_AFTER_MAX}.`;
+  }
   if (draft.recordVideo && !draft.requireScreenShare) {
     problems.recordVideo = "Turn on screen sharing to record the exam video.";
+  }
+  if (
+    !draft.recordVideo &&
+    (draft.ufmEvidence === "video" ||
+      draft.downloadSessionVideo ||
+      draft.downloadFlagVideo)
+  ) {
+    problems.videoOptions =
+      "Video evidence and video downloads need the exam video. Turn on Record exam video, or switch them off.";
   }
   return problems;
 }
@@ -118,14 +177,43 @@ export function buildPatch(
     "detectVoice",
     "requireScreenShare",
     "recordVideo",
+    "aiEnabled",
+    "downloadSessionVideo",
+    "downloadFlagVideo",
+    "allowPracticalVideo",
+    "allowVivaVideo",
+    "assessorGeolocation",
+    "assessorAnnexureM",
+    "assessorFeedback",
+    "studentAttendance",
+    "studentFeedback",
+    "allowOjtImages",
   ] as const) {
     if (draft[key] !== saved[key]) patch[key] = draft[key];
   }
-  const viewers = LOCATION_ROLES.filter((r) => draft.locationVisibleTo.includes(r));
-  if (viewers.join() !== saved.locationVisibleTo.join()) patch.locationVisibleTo = viewers;
-  if (draft.videoFailureAction !== saved.videoFailureAction) patch.videoFailureAction = draft.videoFailureAction;
-  const watchers = LOCATION_ROLES.filter((r) => draft.videoVisibleTo.includes(r));
-  if (watchers.join() !== saved.videoVisibleTo.join()) patch.videoVisibleTo = watchers;
+  if (draft.proctoringType !== saved.proctoringType)
+    patch.proctoringType = draft.proctoringType;
+  if (draft.ufmEvidence !== saved.ufmEvidence)
+    patch.ufmEvidence = draft.ufmEvidence;
+  const languages: NonNullable<BatchSettingsPatch["languages"]> = {};
+  if (draft.langTheory !== saved.languages.theory)
+    languages.theory = draft.langTheory;
+  if (draft.langPractical !== saved.languages.practical)
+    languages.practical = draft.langPractical;
+  if (draft.langViva !== saved.languages.viva) languages.viva = draft.langViva;
+  if (Object.keys(languages).length > 0) patch.languages = languages;
+  const viewers = LOCATION_ROLES.filter((r) =>
+    draft.locationVisibleTo.includes(r),
+  );
+  if (viewers.join() !== saved.locationVisibleTo.join())
+    patch.locationVisibleTo = viewers;
+  if (draft.videoFailureAction !== saved.videoFailureAction)
+    patch.videoFailureAction = draft.videoFailureAction;
+  const watchers = LOCATION_ROLES.filter((r) =>
+    draft.videoVisibleTo.includes(r),
+  );
+  if (watchers.join() !== saved.videoVisibleTo.join())
+    patch.videoVisibleTo = watchers;
   const policy: NonNullable<BatchSettingsPatch["flagPolicy"]> = {};
   if (draft.action !== saved.flagPolicy.action) policy.action = draft.action;
   const after = Number(draft.pauseAfterFlags);
@@ -138,6 +226,9 @@ export function buildPatch(
     policy.countSeverities = severities;
   if (draft.extendOnUnlock !== saved.flagPolicy.extendOnUnlock)
     policy.extendOnUnlock = draft.extendOnUnlock;
+  const afterUnlock = Number(draft.pauseAfterUnlock);
+  if (afterUnlock !== saved.flagPolicy.pauseAfterUnlock)
+    policy.pauseAfterUnlock = afterUnlock;
   if (Object.keys(policy).length > 0) patch.flagPolicy = policy;
 
   const image: NonNullable<BatchSettingsPatch["imageCapture"]> = {};
@@ -146,6 +237,8 @@ export function buildPatch(
     image.intervalSeconds = interval;
   if (draft.atStartAndEnd !== saved.imageCapture.atStartAndEnd)
     image.atStartAndEnd = draft.atStartAndEnd;
+  if (draft.imageEnabled !== saved.imageCapture.enabled)
+    image.enabled = draft.imageEnabled;
   if (Object.keys(image).length > 0) patch.imageCapture = image;
 
   const popup: NonNullable<BatchSettingsPatch["candidateInfoPopup"]> = {};
@@ -231,23 +324,93 @@ export function describeChanges(saved: BatchSettings, draft: Draft): string[] {
     );
   }
   flip("Capture location", saved.captureLocation, draft.captureLocation);
-  flip("Use papers without reviewer approval", saved.skipPaperApproval, draft.skipPaperApproval);
+  flip(
+    "Use papers without reviewer approval",
+    saved.skipPaperApproval,
+    draft.skipPaperApproval,
+  );
   flip("Detect looking away", saved.detectLookingAway, draft.detectLookingAway);
   flip("Detect voice", saved.detectVoice, draft.detectVoice);
-  flip("Require screen sharing", saved.requireScreenShare, draft.requireScreenShare);
+  flip(
+    "Require screen sharing",
+    saved.requireScreenShare,
+    draft.requireScreenShare,
+  );
   flip("Record exam video", saved.recordVideo, draft.recordVideo);
   if (draft.videoFailureAction !== saved.videoFailureAction) {
     lines.push(
       `If recording fails: ${draft.videoFailureAction === "require" ? "the candidate cannot start" : "the exam continues and a flag is raised"}`,
     );
   }
-  const watchers = LOCATION_ROLES.filter((r) => draft.videoVisibleTo.includes(r));
+  const watchers = LOCATION_ROLES.filter((r) =>
+    draft.videoVisibleTo.includes(r),
+  );
   if (watchers.join() !== saved.videoVisibleTo.join()) {
     lines.push(
       `Who can watch the video: AA admin${watchers.map((r) => `, ${LOCATION_ROLE_LABELS[r]}`).join("")}`,
     );
   }
-  const viewers = LOCATION_ROLES.filter((r) => draft.locationVisibleTo.includes(r));
+  flip("Proctoring by AI", saved.aiEnabled, draft.aiEnabled);
+  if (draft.proctoringType !== saved.proctoringType) {
+    lines.push(
+      `Proctoring type: ${draft.proctoringType === "manual" ? "Manual (a person watches, no automatic flags)" : "Automatic"}`,
+    );
+  }
+  if (draft.ufmEvidence !== saved.ufmEvidence) {
+    lines.push(
+      `Evidence kept with a flag: ${draft.ufmEvidence === "video" ? "Video" : "Image"}`,
+    );
+  }
+  flip(
+    "Download of the session video",
+    saved.downloadSessionVideo,
+    draft.downloadSessionVideo,
+  );
+  flip(
+    "Download of the flag video",
+    saved.downloadFlagVideo,
+    draft.downloadFlagVideo,
+  );
+  if (Number(draft.pauseAfterUnlock) !== saved.flagPolicy.pauseAfterUnlock) {
+    lines.push(
+      `Flags allowed after an unlock: ${saved.flagPolicy.pauseAfterUnlock} to ${draft.pauseAfterUnlock}`,
+    );
+  }
+  flip(
+    "Pictures during the exam",
+    saved.imageCapture.enabled,
+    draft.imageEnabled,
+  );
+  flip("Practical video", saved.allowPracticalVideo, draft.allowPracticalVideo);
+  flip("Viva video", saved.allowVivaVideo, draft.allowVivaVideo);
+  flip(
+    "Assessor geolocation",
+    saved.assessorGeolocation,
+    draft.assessorGeolocation,
+  );
+  flip("Assessor Annexure M", saved.assessorAnnexureM, draft.assessorAnnexureM);
+  flip("Assessor feedback", saved.assessorFeedback, draft.assessorFeedback);
+  flip("Student attendance", saved.studentAttendance, draft.studentAttendance);
+  flip("Student feedback", saved.studentFeedback, draft.studentFeedback);
+  flip(
+    "Theory test in more than one language",
+    saved.languages.theory,
+    draft.langTheory,
+  );
+  flip(
+    "Practical test in more than one language",
+    saved.languages.practical,
+    draft.langPractical,
+  );
+  flip(
+    "Viva test in more than one language",
+    saved.languages.viva,
+    draft.langViva,
+  );
+  flip("OJT pictures", saved.allowOjtImages, draft.allowOjtImages);
+  const viewers = LOCATION_ROLES.filter((r) =>
+    draft.locationVisibleTo.includes(r),
+  );
   if (viewers.join() !== saved.locationVisibleTo.join()) {
     lines.push(
       `Who can see the location: AA admin${viewers.map((r) => `, ${LOCATION_ROLE_LABELS[r]}`).join("")}`,

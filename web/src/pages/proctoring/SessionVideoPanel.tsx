@@ -9,7 +9,15 @@ function megabytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function TrackPlayer({ sessionId, track }: { sessionId: string; track: "camera" | "screen" }) {
+function TrackPlayer({
+  sessionId,
+  track,
+  canDownload,
+}: {
+  sessionId: string;
+  track: "camera" | "screen";
+  canDownload: boolean;
+}) {
   const [state, setState] = useState<{ url: string | null; busy: boolean; error: string | null }>({
     url: null,
     busy: false,
@@ -29,6 +37,23 @@ function TrackPlayer({ sessionId, track }: { sessionId: string; track: "camera" 
     }
   }
 
+  async function save() {
+    setState((prev) => ({ ...prev, error: null }));
+    try {
+      const blob = await fetchSessionVideoTrack(sessionId, track, undefined, true);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `exam-${sessionId}-${track}.webm`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setState((prev) => ({ ...prev, error: errorMessage(err) }));
+    }
+  }
+
   return (
     <div>
       {state.url ? (
@@ -38,6 +63,11 @@ function TrackPlayer({ sessionId, track }: { sessionId: string; track: "camera" 
           {state.busy ? "Loading…" : `Load ${TRACK_LABELS[track].toLowerCase()} video`}
         </button>
       )}
+      {canDownload ? (
+        <button type="button" onClick={() => void save()}>
+          Download {TRACK_LABELS[track].toLowerCase()} video
+        </button>
+      ) : null}
       {state.error ? (
         <p role="alert" className="form-error">
           {state.error}
@@ -86,7 +116,7 @@ export function SessionVideoPanel({ sessionId }: { sessionId: string }) {
             {video.tracks[track].pieces} pieces, {megabytes(video.tracks[track].bytes)}
             {video.tracks[track].complete ? "" : ". Some pieces never arrived, so the video skips there."}
           </p>
-          <TrackPlayer sessionId={sessionId} track={track} />
+          <TrackPlayer sessionId={sessionId} track={track} canDownload={video.canDownload} />
         </div>
       ))}
     </section>

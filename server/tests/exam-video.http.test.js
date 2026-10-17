@@ -241,6 +241,33 @@ describe("Exam video (X-27)", () => {
     expect((await watch(admin, sessionId, "screen")).status).toBe(404);
   });
 
+  it("saving a copy needs the batch's download switch, is limited to the video viewers and is logged (X-28)", async () => {
+    await turnOn();
+    await begin();
+    await sendPiece(asha, sessionId, "camera", 0, WEBM_FIRST);
+    const download = (who) =>
+      request(app)
+        .get(`/api/v1/proctoring/sessions/${sessionId}/video/camera?download=1`)
+        .set(bearer(who.token));
+    expect((await watch(admin, sessionId, "camera")).status).toBe(200);
+    const listed = await request(app)
+      .get(`/api/v1/proctoring/sessions/${sessionId}/video`)
+      .set(bearer(admin.token));
+    expect(listed.body.canDownload).toBe(false);
+    expect((await download(admin)).status).toBe(403);
+    await Batch.updateOne({ _id: batch._id }, { $set: { "settings.downloadSessionVideo": true } });
+    const ok = await download(admin);
+    expect(ok.status).toBe(200);
+    expect(ok.headers["content-disposition"]).toBe(
+      `attachment; filename="exam-${sessionId}-camera.webm"`,
+    );
+    expect((await download(proctor)).status).toBe(200);
+    expect((await download(tp)).status).toBe(403);
+    expect((await download(asha)).status).toBe(403);
+    const logged = await AccessLog.find({}).lean();
+    expect(JSON.stringify(logged)).toContain("exam_video_camera_download");
+  });
+
   it("deletes pieces and files after the retention date and writes one audit row", async () => {
     await turnOn();
     await begin();

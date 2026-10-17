@@ -9,7 +9,10 @@ import {
   FLAG_POLICY_ACTIONS,
   IMAGE_INTERVAL_MAX_SECONDS,
   IMAGE_INTERVAL_MIN_SECONDS,
+  LANGUAGE_PARTS,
   LOCATION_VIEWER_ROLES,
+  PROCTORING_TYPES,
+  UFM_EVIDENCE_TYPES,
   VIDEO_FAILURE_ACTIONS,
 } from "../../config/batch-settings.js";
 import { assertNoNationalIdKeys } from "../question-bank/question-bank.schemas.js";
@@ -198,11 +201,13 @@ export const batchSettingsBodySchema = guard(
           pauseAfterFlags: z.number().int().min(FLAG_PAUSE_AFTER_MIN).max(FLAG_PAUSE_AFTER_MAX),
           countSeverities: countSeveritiesSchema,
           extendOnUnlock: z.boolean(),
+          pauseAfterUnlock: z.number().int().min(FLAG_PAUSE_AFTER_MIN).max(FLAG_PAUSE_AFTER_MAX),
         })
         .partial()
         .strict(),
       imageCapture: z
         .object({
+          enabled: z.boolean(),
           intervalSeconds: z
             .number()
             .int()
@@ -237,6 +242,23 @@ export const batchSettingsBodySchema = guard(
         .array(z.enum(LOCATION_VIEWER_ROLES))
         .max(LOCATION_VIEWER_ROLES.length)
         .refine((list) => new Set(list).size === list.length, "No repeated roles"),
+      proctoringType: z.enum(PROCTORING_TYPES),
+      aiEnabled: z.boolean(),
+      ufmEvidence: z.enum(UFM_EVIDENCE_TYPES),
+      downloadSessionVideo: z.boolean(),
+      downloadFlagVideo: z.boolean(),
+      allowPracticalVideo: z.boolean(),
+      allowVivaVideo: z.boolean(),
+      assessorGeolocation: z.boolean(),
+      assessorAnnexureM: z.boolean(),
+      assessorFeedback: z.boolean(),
+      studentAttendance: z.boolean(),
+      studentFeedback: z.boolean(),
+      languages: z
+        .object(Object.fromEntries(LANGUAGE_PARTS.map((part) => [part, z.boolean()])))
+        .partial()
+        .strict(),
+      allowOjtImages: z.boolean(),
     })
     .partial()
     .strict()

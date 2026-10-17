@@ -1072,3 +1072,9 @@ button.button-danger {
 .proctor-flag-capture > dl {
   flex: 1 1 22rem;
 }
+
+/* X-28: a Yes/No word beside each settings switch, as in the reference screens. */
+.yn-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.yn { font-weight: 700; font-size: 0.85rem; min-width: 2.5rem; text-align: center; padding: 0.1rem 0.5rem; border-radius: 999px; }
+.yn-yes { background: #dcf3e3; color: #14532d; }
+.yn-no { background: #e9edf2; color: #374151; }

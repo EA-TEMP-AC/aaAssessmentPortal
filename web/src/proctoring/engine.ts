@@ -230,6 +230,7 @@ export function createEngine(options: EngineOptions = {}): ProctorEngine {
   /** Compares the live face with the selfie. A flag needs the rules; one frame never raises it. */
   async function checkIdentity(r: Run) {
     const matcher = r.faceMatcher;
+    if (r.config.disabledFlags?.includes("face_mismatch")) return;
     if (!matcher || !r.faceActive || !isFrameReady(r.video)) return;
     let sample;
     try {

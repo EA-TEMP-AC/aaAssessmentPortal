@@ -105,6 +105,7 @@ export async function listVideo(user, id) {
   return {
     sessionId: String(session._id),
     recordVideo: settings.recordVideo === true,
+    canDownload: settings.downloadSessionVideo === true,
     retentionDays: compliance.EXAM_VIDEO_RETENTION_DAYS,
     expiresAt: rows.length
       ? rows
@@ -117,8 +118,10 @@ export async function listVideo(user, id) {
 }
 
 /** GET /proctoring/sessions/:id/video/:track. The pieces joined in order. The look is logged first. */
-export async function openVideoTrack(req, id, track) {
-  const { session } = await loadWatchable(req.user, id);
+export async function openVideoTrack(req, id, track, { download = false } = {}) {
+  const { session, settings } = await loadWatchable(req.user, id);
+  // X-28: saving a copy needs the batch's download switch; watching does not.
+  if (download && !settings.downloadSessionVideo) throw forbidden();
   const rows = await ExamVideoChunk.find({ sessionId: session._id, track })
     .select("storageKey size")
     .sort({ seq: 1 })
@@ -128,7 +131,7 @@ export async function openVideoTrack(req, id, track) {
     subjectType: "proctoringSession",
     subjectIds: [String(session._id)],
     kind: "detail",
-    fields: [`exam_video_${track}`],
+    fields: [download ? `exam_video_${track}_download` : `exam_video_${track}`],
   });
   // One piece at a time, so a long exam is never held in memory whole.
   return Readable.from(

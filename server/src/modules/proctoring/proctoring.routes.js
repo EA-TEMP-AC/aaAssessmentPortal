@@ -281,8 +281,12 @@ proctoringRouter.get(
   requireRoles(...PROCTORING_CAPTURE_READ_ROLES),
   asyncHandler(async (req, res) => {
     const { id, track } = videoTrackParams.parse(req.params);
-    const stream = await openVideoTrack(req, id, track);
+    const download = req.query.download === "1";
+    const stream = await openVideoTrack(req, id, track, { download });
     res.set({
+      ...(download
+        ? { "Content-Disposition": `attachment; filename="exam-${id}-${track}.webm"` }
+        : {}),
       "Content-Type": "video/webm",
       "Cache-Control": "private, no-store",
       "X-Content-Type-Options": "nosniff",

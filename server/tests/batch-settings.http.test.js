@@ -255,7 +255,7 @@ describe("batch settings (B-20)", () => {
         imageCapture: { intervalSeconds: 45, atStartAndEnd: true },
       });
       const stored = (await Batch.findById(w.batch._id).lean()).settings;
-      expect(stored.flagPolicy).toEqual({
+      expect(stored.flagPolicy).toMatchObject({
         action: "pause",
         pauseAfterFlags: 3,
         countSeverities: ["high"],
@@ -904,6 +904,146 @@ describe("batch settings (B-20)", () => {
       expect(session.body.config.disabledFlags).toEqual(["voice_detected"]);
       expectError(await patchSettings(w.admin, w, { detectVoice: "no" }), 400, "VALIDATION_ERROR");
       expectError(await patchSettings(w.proctor, w, { detectVoice: true }), 403, "FORBIDDEN");
+    });
+  });
+
+  describe("ThinkExam switches (X-28)", () => {
+    const startSessionFor = async (w) => {
+      const a = await start(w.candidate, w);
+      const res = await request(app)
+        .post("/api/v1/proctoring/sessions")
+        .set(bearer(w.candidate.token))
+        .send({ attemptId: a.body.id });
+      expect(res.status).toBe(201);
+      return res.body;
+    };
+
+    it("shows today's behaviour as the defaults for every new switch", async () => {
+      const w = await world();
+      const { settings } = (await getSettings(w.admin, w)).body;
+      expect(settings).toMatchObject({
+        proctoringType: "automatic",
+        aiEnabled: true,
+        ufmEvidence: "image",
+        downloadSessionVideo: false,
+        downloadFlagVideo: false,
+        allowPracticalVideo: false,
+        allowVivaVideo: false,
+        assessorGeolocation: false,
+        assessorAnnexureM: true,
+        assessorFeedback: false,
+        studentAttendance: true,
+        studentFeedback: true,
+        languages: { theory: false, practical: false, viva: false },
+        allowOjtImages: false,
+        flagPolicy: { pauseAfterUnlock: 3 },
+        imageCapture: { enabled: true },
+      });
+    });
+
+    it("stores each switch, keeps the others, and rejects wrong values and unknown keys", async () => {
+      const w = await world();
+      const res = await patchSettings(w.admin, w, {
+        proctoringType: "manual",
+        aiEnabled: false,
+        assessorGeolocation: true,
+        studentAttendance: false,
+        languages: { viva: true },
+        allowOjtImages: true,
+        flagPolicy: { pauseAfterUnlock: 5 },
+      });
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      expect(res.body.settings).toMatchObject({
+        proctoringType: "manual",
+        aiEnabled: false,
+        assessorGeolocation: true,
+        studentAttendance: false,
+        languages: { theory: false, practical: false, viva: true },
+        allowOjtImages: true,
+        flagPolicy: { pauseAfterUnlock: 5, pauseAfterFlags: 3 },
+      });
+      for (const bad of [
+        { proctoringType: "both" },
+        { aiEnabled: "yes" },
+        { languages: { science: true } },
+        { flagPolicy: { pauseAfterUnlock: 0 } },
+        { flagPolicy: { pauseAfterUnlock: 21 } },
+        { imageCapture: { enabled: "no" } },
+        { aadhaarVerification: true },
+      ]) {
+        expectError(await patchSettings(w.admin, w, bad), 400, "VALIDATION_ERROR");
+      }
+      const row = await AuditLog.findOne({ action: "batch.settings_update" }).lean();
+      expect(row.after.settings.proctoringType).toBe("manual");
+    });
+
+    it("manual proctoring and AI off both switch off every model-based flag", async () => {
+      for (const change of [{ proctoringType: "manual" }, { aiEnabled: false }]) {
+        const w = await world();
+        await patchSettings(w.admin, w, change);
+        const session = await startSessionFor(w);
+        expect(session.config.disabledFlags).toEqual(
+          expect.arrayContaining([
+            "face_not_present",
+            "multiple_faces",
+            "phone_detected",
+            "face_mismatch",
+            "looking_away",
+            "voice_detected",
+          ]),
+        );
+        expect(session.config.disabledFlags).not.toContain("camera_blocked");
+      }
+    });
+
+    it("turns the pictures taken during the exam off without calling the session feed lost", async () => {
+      const w = await world();
+      await patchSettings(w.admin, w, { imageCapture: { enabled: false } });
+      const session = await startSessionFor(w);
+      expect(session.config.snapshotIntervalSeconds).toBe(0);
+      const stored = await ProctoringSession.findById(session.id).lean();
+      expect(stored.periodicImagesOff).toBe(true);
+      await ProctoringSession.updateOne(
+        { _id: session.id },
+        { $set: { lastSeenAt: new Date(Date.now() - 3_600_000) } },
+      );
+      const detail = await request(app)
+        .get(`/api/v1/proctoring/sessions/${session.id}`)
+        .set(bearer(w.admin.token));
+      expect(detail.body.status).toBe("active");
+    });
+
+    it("uses the 'after unlocking' number once the exam has been unlocked", async () => {
+      const w = await world({
+        settings: { flagPolicy: { action: "pause", pauseAfterFlags: 2, pauseAfterUnlock: 3 } },
+      });
+      const { attempt, sessionId } = await begin(w);
+      await sendFlag(w.candidate, sessionId, "multiple_faces");
+      expect((await sendFlag(w.candidate, sessionId, "multiple_faces")).body.paused).toBe(true);
+      expect((await unlock(w.admin, sessionId)).status).toBe(200);
+      expect((await sendFlag(w.candidate, sessionId, "multiple_faces")).body.paused).toBe(false);
+      expect((await sendFlag(w.candidate, sessionId, "multiple_faces")).body.paused).toBe(false);
+      expect((await sendFlag(w.candidate, sessionId, "multiple_faces")).body.paused).toBe(true);
+      expect((await Attempt.findById(attempt.id).lean()).pause.timesPaused).toBe(2);
+    });
+
+    it("needs the exam video for the video evidence and the two downloads", async () => {
+      const w = await world();
+      for (const bad of [
+        { ufmEvidence: "video" },
+        { downloadSessionVideo: true },
+        { downloadFlagVideo: true },
+      ]) {
+        expectError(await patchSettings(w.admin, w, bad), 400, "VALIDATION_ERROR");
+      }
+      const ok = await patchSettings(w.admin, w, {
+        requireScreenShare: true,
+        recordVideo: true,
+        ufmEvidence: "video",
+        downloadSessionVideo: true,
+      });
+      expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+      expectError(await patchSettings(w.admin, w, { recordVideo: false }), 400, "VALIDATION_ERROR");
     });
   });
 

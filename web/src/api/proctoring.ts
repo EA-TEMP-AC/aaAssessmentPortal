@@ -465,6 +465,8 @@ export async function getFlagCapture(
 export type SessionVideo = {
   sessionId: string;
   recordVideo: boolean;
+  /** X-28: the batch lets the people who can watch the recording save a copy. */
+  canDownload: boolean;
   retentionDays: number;
   expiresAt: string | null;
   tracks: Record<"camera" | "screen", { pieces: number; bytes: number; complete: boolean }>;
@@ -484,6 +486,7 @@ export async function getSessionVideo(sessionId: string, signal?: AbortSignal): 
   return {
     sessionId,
     recordVideo: body.recordVideo === true,
+    canDownload: body.canDownload === true,
     retentionDays: typeof body.retentionDays === "number" ? body.retentionDays : 90,
     expiresAt: typeof body.expiresAt === "string" ? body.expiresAt : null,
     tracks: { camera: track(body.tracks.camera), screen: track(body.tracks.screen) },
@@ -495,9 +498,11 @@ export async function fetchSessionVideoTrack(
   sessionId: string,
   track: "camera" | "screen",
   signal?: AbortSignal,
+  /** X-28: ask for a copy to save; the server checks the batch's download switch and logs it. */
+  download = false,
 ): Promise<Blob> {
   const response = await apiRequest<Response>(
-    `/proctoring/sessions/${encodeURIComponent(sessionId)}/video/${track}`,
+    `/proctoring/sessions/${encodeURIComponent(sessionId)}/video/${track}${download ? "?download=1" : ""}`,
     { raw: true, signal },
   );
   return response.blob();

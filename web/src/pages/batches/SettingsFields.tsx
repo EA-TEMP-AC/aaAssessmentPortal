@@ -16,34 +16,47 @@ import type { Draft, Problems } from "./settingsDraft";
  * The caller owns the draft; this only draws the fields.
  */
 
+/** X-28: shown on a switch that is saved but does not change anything yet. */
+const SOON =
+  "Saved for this batch, but not applied yet: it starts working when that part of the portal is built. ";
+
 function Toggle({
   label,
   help,
   checked,
   disabled,
+  soon,
   onChange,
 }: {
   label: string;
   help: string;
   checked: boolean;
   disabled?: boolean;
+  /** The switch is stored but the feature behind it is not built yet. */
+  soon?: boolean;
   onChange: (value: boolean) => void;
 }) {
   const id = useId();
   return (
     <div className="field">
-      <label className="check-label" htmlFor={id}>
-        <input
-          id={id}
-          type="checkbox"
-          checked={checked}
-          disabled={disabled}
-          aria-describedby={`${id}-help`}
-          onChange={(event) => onChange(event.target.checked)}
-        />{" "}
-        {label}
-      </label>
+      <div className="yn-row">
+        <label className="check-label" htmlFor={id}>
+          <input
+            id={id}
+            type="checkbox"
+            checked={checked}
+            disabled={disabled}
+            aria-describedby={`${id}-help`}
+            onChange={(event) => onChange(event.target.checked)}
+          />{" "}
+          {label}
+        </label>
+        <span className={checked ? "yn yn-yes" : "yn yn-no"} aria-hidden="true">
+          {checked ? "Yes" : "No"}
+        </span>
+      </div>
       <p id={`${id}-help`} className="field-hint">
+        {soon ? SOON : ""}
         {help}
       </p>
     </div>
@@ -71,7 +84,12 @@ export function SettingsFields({
   /** The wizard shows the paper switch in its own paper step. */
   hidePaperGroup?: boolean;
 }) {
-  const ids = { after: useId(), interval: useId(), fields: useId() };
+  const ids = {
+    after: useId(),
+    unlock: useId(),
+    interval: useId(),
+    fields: useId(),
+  };
   const popupOn = draft.popupEnabled;
   return (
     <>
@@ -111,6 +129,90 @@ export function SettingsFields({
         />
       </Group>
 
+      <Group title="Proctoring">
+        <fieldset className="bare-fieldset">
+          <legend>Proctoring type</legend>
+          <label className="check-label">
+            <input
+              type="radio"
+              name="proctoring-type"
+              checked={draft.proctoringType === "automatic"}
+              onChange={() => set("proctoringType", "automatic")}
+            />{" "}
+            Automatic
+          </label>
+          <p className="field-hint">
+            The exam page raises flags by itself, and a person reviews them.
+          </p>
+          <label className="check-label">
+            <input
+              type="radio"
+              name="proctoring-type"
+              checked={draft.proctoringType === "manual"}
+              onChange={() => set("proctoringType", "manual")}
+            />{" "}
+            Manual
+          </label>
+          <p className="field-hint">
+            A proctor watches the candidates. The camera and microphone checks
+            raise no flags; tab, window and screen sharing flags still do.
+          </p>
+        </fieldset>
+        <Toggle
+          label="Proctoring by AI"
+          help="On: the exam page checks the camera and microphone for faces, phones, looking away and talking. Off: none of those flags are raised, whatever the proctoring type."
+          checked={draft.aiEnabled}
+          onChange={(v) => set("aiEnabled", v)}
+        />
+        <fieldset className="bare-fieldset" disabled={!draft.recordVideo}>
+          <legend>Evidence kept with a flag</legend>
+          <label className="check-label">
+            <input
+              type="radio"
+              name="ufm-evidence"
+              checked={draft.ufmEvidence === "image"}
+              onChange={() => set("ufmEvidence", "image")}
+            />{" "}
+            Image
+          </label>
+          <label className="check-label">
+            <input
+              type="radio"
+              name="ufm-evidence"
+              checked={draft.ufmEvidence === "video"}
+              onChange={() => set("ufmEvidence", "video")}
+            />{" "}
+            Video
+          </label>
+          <p className="field-hint">
+            Image: a camera picture with each flag (always taken). Video needs
+            Record exam video below. {draft.recordVideo ? SOON : ""}Video is
+            saved for the batch now; jumping to the moment of a flag in the
+            recording comes later.
+          </p>
+        </fieldset>
+        <Toggle
+          label="Download session video"
+          help="Allows the people who can watch the recording to save a copy. Every download is recorded in the access log. Needs Record exam video."
+          checked={draft.downloadSessionVideo}
+          disabled={!draft.recordVideo}
+          onChange={(v) => set("downloadSessionVideo", v)}
+        />
+        <Toggle
+          label="Download flag video"
+          help="Allows saving a short video of a flag. Needs Record exam video."
+          checked={draft.downloadFlagVideo}
+          disabled={!draft.recordVideo}
+          soon
+          onChange={(v) => set("downloadFlagVideo", v)}
+        />
+        {problems.videoOptions ? (
+          <p role="alert" className="form-error">
+            {problems.videoOptions}
+          </p>
+        ) : null}
+      </Group>
+
       <Group title="Flags">
         <fieldset className="bare-fieldset">
           <legend>When a flag is raised</legend>
@@ -123,7 +225,10 @@ export function SettingsFields({
             />{" "}
             Record only
           </label>
-          <p className="field-hint">Nothing interrupts the candidate. Flags are saved for a person to review.</p>
+          <p className="field-hint">
+            Nothing interrupts the candidate. Flags are saved for a person to
+            review.
+          </p>
           <label className="check-label">
             <input
               type="radio"
@@ -134,13 +239,16 @@ export function SettingsFields({
             Pause the exam
           </label>
           <p className="field-hint">
-            When the counted flags reach the limit, the candidate is told to contact the proctor. Saved answers stay safe,
-            and a pause never fails or changes a result. The aa_admin or the batch proctor
-            unlocks it from the proctoring page.
+            When the counted flags reach the limit, the candidate is told to
+            contact the proctor. Saved answers stay safe, and a pause never
+            fails or changes a result. The aa_admin or the batch proctor unlocks
+            it from the proctoring page.
           </p>
         </fieldset>
         <div className="field">
-          <label htmlFor={ids.after}>Pause after this many flags ({PAUSE_AFTER_MIN} to {PAUSE_AFTER_MAX})</label>
+          <label htmlFor={ids.after}>
+            Pause after this many flags ({PAUSE_AFTER_MIN} to {PAUSE_AFTER_MAX})
+          </label>
           <input
             id={ids.after}
             type="text"
@@ -148,12 +256,43 @@ export function SettingsFields({
             value={draft.pauseAfterFlags}
             disabled={draft.action !== "pause"}
             aria-invalid={problems.pauseAfterFlags ? true : undefined}
-            aria-describedby={problems.pauseAfterFlags ? `${ids.after}-error` : undefined}
+            aria-describedby={
+              problems.pauseAfterFlags ? `${ids.after}-error` : undefined
+            }
             onChange={(event) => set("pauseAfterFlags", event.target.value)}
           />
           {problems.pauseAfterFlags ? (
             <p id={`${ids.after}-error`} className="field-error">
               {problems.pauseAfterFlags}
+            </p>
+          ) : null}
+        </div>
+        <div className="field">
+          <label htmlFor={ids.unlock}>
+            Flags allowed after an unlock ({PAUSE_AFTER_MIN} to{" "}
+            {PAUSE_AFTER_MAX})
+          </label>
+          <input
+            id={ids.unlock}
+            type="text"
+            inputMode="numeric"
+            value={draft.pauseAfterUnlock}
+            disabled={draft.action !== "pause"}
+            aria-invalid={problems.pauseAfterUnlock ? true : undefined}
+            aria-describedby={
+              problems.pauseAfterUnlock
+                ? `${ids.unlock}-error`
+                : `${ids.unlock}-help`
+            }
+            onChange={(event) => set("pauseAfterUnlock", event.target.value)}
+          />
+          <p id={`${ids.unlock}-help`} className="field-hint">
+            After the exam has been unlocked once, it pauses again when this
+            many counted flags are raised.
+          </p>
+          {problems.pauseAfterUnlock ? (
+            <p id={`${ids.unlock}-error`} className="field-error">
+              {problems.pauseAfterUnlock}
             </p>
           ) : null}
         </div>
@@ -185,14 +324,24 @@ export function SettingsFields({
             />{" "}
             Medium and high flags
           </label>
-          <p className="field-hint">Low flags are never counted. After an unlock the count starts again from zero.</p>
+          <p className="field-hint">
+            Low flags are never counted. After an unlock the count starts again
+            from zero.
+          </p>
         </fieldset>
       </Group>
 
       <Group title="Camera images">
+        <Toggle
+          label="Take pictures during the exam"
+          help="Off: no camera picture is saved while the exam runs. Pictures with flags and at the start and the end have their own settings."
+          checked={draft.imageEnabled}
+          onChange={(v) => set("imageEnabled", v)}
+        />
         <div className="field">
           <label htmlFor={ids.interval}>
-            Take a camera image every (seconds, {INTERVAL_MIN_SECONDS} to {INTERVAL_MAX_SECONDS})
+            Take a camera image every (seconds, {INTERVAL_MIN_SECONDS} to{" "}
+            {INTERVAL_MAX_SECONDS})
           </label>
           <input
             id={ids.interval}
@@ -200,7 +349,11 @@ export function SettingsFields({
             inputMode="numeric"
             value={draft.intervalSeconds}
             aria-invalid={problems.intervalSeconds ? true : undefined}
-            aria-describedby={problems.intervalSeconds ? `${ids.interval}-error` : `${ids.interval}-help`}
+            aria-describedby={
+              problems.intervalSeconds
+                ? `${ids.interval}-error`
+                : `${ids.interval}-help`
+            }
             onChange={(event) => set("intervalSeconds", event.target.value)}
           />
           <p id={`${ids.interval}-help`} className="field-hint">
@@ -250,7 +403,12 @@ export function SettingsFields({
           checked={draft.requireScreenShare}
           onChange={(v) => {
             set("requireScreenShare", v);
-            if (!v && draft.recordVideo) set("recordVideo", false);
+            if (!v && draft.recordVideo) {
+              set("recordVideo", false);
+              set("ufmEvidence", "image");
+              set("downloadSessionVideo", false);
+              set("downloadFlagVideo", false);
+            }
           }}
         />
         <Toggle
@@ -260,6 +418,11 @@ export function SettingsFields({
           onChange={(v) => {
             set("recordVideo", v);
             if (v) set("requireScreenShare", true);
+            else {
+              set("ufmEvidence", "image");
+              set("downloadSessionVideo", false);
+              set("downloadFlagVideo", false);
+            }
           }}
         />
         {problems.recordVideo ? (
@@ -270,23 +433,32 @@ export function SettingsFields({
         {draft.recordVideo ? (
           <>
             <div className="field">
-              <label htmlFor={`${ids.after}-videofail`}>If the video cannot be recorded</label>
+              <label htmlFor={`${ids.after}-videofail`}>
+                If the video cannot be recorded
+              </label>
               <select
                 id={`${ids.after}-videofail`}
                 value={draft.videoFailureAction}
                 onChange={(event) =>
-                  set("videoFailureAction", event.target.value === "require" ? "require" : "continue")
+                  set(
+                    "videoFailureAction",
+                    event.target.value === "require" ? "require" : "continue",
+                  )
                 }
               >
-                <option value="continue">Let the exam continue and raise a flag</option>
-                <option value="require">Do not let the candidate start until recording works</option>
+                <option value="continue">
+                  Let the exam continue and raise a flag
+                </option>
+                <option value="require">
+                  Do not let the candidate start until recording works
+                </option>
               </select>
             </div>
             <fieldset className="bare-fieldset">
               <legend>Who can watch the recording</legend>
               <p className="field-hint">
-                The AA admin always can. Others only for batches they belong to, and every look is recorded in the
-                access log.
+                The AA admin always can. Others only for batches they belong to,
+                and every look is recorded in the access log.
               </p>
               {LOCATION_ROLES.map((role) => (
                 <label key={role} className="check-label">
@@ -320,7 +492,9 @@ export function SettingsFields({
         <fieldset
           className="bare-fieldset"
           disabled={!popupOn}
-          aria-describedby={problems.popupFields ? `${ids.fields}-error` : `${ids.fields}-help`}
+          aria-describedby={
+            problems.popupFields ? `${ids.fields}-error` : `${ids.fields}-help`
+          }
         >
           <legend>Details to ask for</legend>
           {INFO_FIELDS.map((field) => (
@@ -341,7 +515,8 @@ export function SettingsFields({
             </label>
           ))}
           <p id={`${ids.fields}-help`} className="field-hint">
-            National ID numbers (Aadhaar, PAN, voter id, passport) are never asked for.
+            National ID numbers (Aadhaar, PAN, voter id, passport) are never
+            asked for.
           </p>
           {problems.popupFields ? (
             <p id={`${ids.fields}-error`} className="field-error">
@@ -361,8 +536,8 @@ export function SettingsFields({
         <fieldset className="bare-fieldset">
           <legend>Who can see the location of a flag photo</legend>
           <p className="field-hint">
-            The AA admin always can. Others see it only for batches they belong to, and every look is recorded in the
-            access log.
+            The AA admin always can. Others see it only for batches they belong
+            to, and every look is recorded in the access log.
           </p>
           {LOCATION_ROLES.map((role) => (
             <label key={role} className="check-label">
@@ -382,6 +557,98 @@ export function SettingsFields({
             </label>
           ))}
         </fieldset>
+      </Group>
+
+      <Group title="Practical and viva">
+        <Toggle
+          label="Allow practical test video"
+          help="The assessor records a video of the practical test."
+          checked={draft.allowPracticalVideo}
+          soon
+          onChange={(v) => set("allowPracticalVideo", v)}
+        />
+        <Toggle
+          label="Allow viva test video"
+          help="The assessor records a video of the viva."
+          checked={draft.allowVivaVideo}
+          soon
+          onChange={(v) => set("allowVivaVideo", v)}
+        />
+      </Group>
+
+      <Group title="Assessor">
+        <Toggle
+          label="Allow assessor geolocation"
+          help="The assessor's location is added to the pictures and attendance they upload."
+          checked={draft.assessorGeolocation}
+          soon
+          onChange={(v) => set("assessorGeolocation", v)}
+        />
+        <Toggle
+          label="Allow assessor Annexure M"
+          help="The assessor fills in Annexure M for this batch."
+          checked={draft.assessorAnnexureM}
+          soon
+          onChange={(v) => set("assessorAnnexureM", v)}
+        />
+        <Toggle
+          label="Allow assessor feedback"
+          help="The assessor gives feedback on the assessment."
+          checked={draft.assessorFeedback}
+          soon
+          onChange={(v) => set("assessorFeedback", v)}
+        />
+      </Group>
+
+      <Group title="Student">
+        <Toggle
+          label="Allow student attendance"
+          help="Attendance is marked for the candidates of this batch."
+          checked={draft.studentAttendance}
+          soon
+          onChange={(v) => set("studentAttendance", v)}
+        />
+        <Toggle
+          label="Allow student feedback"
+          help="The learners' feedback is collected for this batch."
+          checked={draft.studentFeedback}
+          soon
+          onChange={(v) => set("studentFeedback", v)}
+        />
+      </Group>
+
+      <Group title="More than one language">
+        <Toggle
+          label="Design the theory test in more than one language"
+          help="The theory paper can be built in several languages for this batch."
+          checked={draft.langTheory}
+          soon
+          onChange={(v) => set("langTheory", v)}
+        />
+        <Toggle
+          label="Design the practical test in more than one language"
+          help="The practical test can be built in several languages for this batch."
+          checked={draft.langPractical}
+          soon
+          onChange={(v) => set("langPractical", v)}
+        />
+        <Toggle
+          label="Design the viva test in more than one language"
+          help="The viva can be built in several languages for this batch."
+          checked={draft.langViva}
+          soon
+          onChange={(v) => set("langViva", v)}
+        />
+      </Group>
+
+      <Group title="On-the-job training">
+        <Toggle
+          label="Allow upload of OJT pictures"
+          help="Pictures of on-the-job training can be added to this batch."
+          checked={draft.allowOjtImages}
+          soon
+          onChange={(v) => set("allowOjtImages", v)}
+        />
       </Group>
     </>
   );

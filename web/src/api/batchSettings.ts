@@ -40,7 +40,13 @@ export const GENDER_LABELS: Record<(typeof GENDER_CHOICES)[number], string> = {
 };
 
 /** X-12. Roles besides aa_admin that can be allowed to see a candidate's location. */
-export const LOCATION_ROLES = ["tp", "assessor", "proctor", "ab_reviewer", "ncvet_viewer"] as const;
+export const LOCATION_ROLES = [
+  "tp",
+  "assessor",
+  "proctor",
+  "ab_reviewer",
+  "ncvet_viewer",
+] as const;
 export type LocationRole = (typeof LOCATION_ROLES)[number];
 export const LOCATION_ROLE_LABELS: Record<LocationRole, string> = {
   tp: "Training partner of this batch",
@@ -51,6 +57,14 @@ export const LOCATION_ROLE_LABELS: Record<LocationRole, string> = {
 };
 
 export type VideoFailureAction = "continue" | "require";
+
+/** X-28 (ThinkExam parity). */
+export const PROCTORING_TYPES = ["automatic", "manual"] as const;
+export type ProctoringType = (typeof PROCTORING_TYPES)[number];
+export const UFM_EVIDENCE_TYPES = ["image", "video"] as const;
+export type UfmEvidence = (typeof UFM_EVIDENCE_TYPES)[number];
+export const LANGUAGE_PARTS = ["theory", "practical", "viva"] as const;
+export type LanguagePart = (typeof LANGUAGE_PARTS)[number];
 
 export type BatchSettings = {
   shuffleQuestions: boolean;
@@ -65,8 +79,14 @@ export type BatchSettings = {
     countSeverities: ("medium" | "high")[];
     /** X-12: an unlock gives the paused time back to the candidate. */
     extendOnUnlock: boolean;
+    /** X-28: flags allowed after an unlock before the exam is paused again. */
+    pauseAfterUnlock: number;
   };
-  imageCapture: { intervalSeconds: number; atStartAndEnd: boolean };
+  imageCapture: {
+    enabled: boolean;
+    intervalSeconds: number;
+    atStartAndEnd: boolean;
+  };
   candidateInfoPopup: { enabled: boolean; fields: InfoField[] };
   captureLocation: boolean;
   /** X-19: a complete paper can be used without the reviewer's approval (mock tests). */
@@ -84,11 +104,32 @@ export type BatchSettings = {
   videoVisibleTo: LocationRole[];
   /** X-12: roles besides aa_admin that may see the coordinates. */
   locationVisibleTo: LocationRole[];
+  /** X-28: automatic = the browser raises flags; manual = a proctor watches, no automatic flags. */
+  proctoringType: ProctoringType;
+  /** X-28: off switches every camera and microphone model flag off. */
+  aiEnabled: boolean;
+  /** X-28: what a flag keeps as evidence. `video` needs the exam video. */
+  ufmEvidence: UfmEvidence;
+  downloadSessionVideo: boolean;
+  downloadFlagVideo: boolean;
+  allowPracticalVideo: boolean;
+  allowVivaVideo: boolean;
+  assessorGeolocation: boolean;
+  assessorAnnexureM: boolean;
+  assessorFeedback: boolean;
+  studentAttendance: boolean;
+  studentFeedback: boolean;
+  languages: Record<LanguagePart, boolean>;
+  allowOjtImages: boolean;
 };
 
 export type BatchSettingsPatch = Partial<
-  Omit<BatchSettings, "flagPolicy" | "imageCapture" | "candidateInfoPopup">
+  Omit<
+    BatchSettings,
+    "flagPolicy" | "imageCapture" | "candidateInfoPopup" | "languages"
+  >
 > & {
+  languages?: Partial<BatchSettings["languages"]>;
   flagPolicy?: Partial<BatchSettings["flagPolicy"]>;
   imageCapture?: Partial<BatchSettings["imageCapture"]>;
   candidateInfoPopup?: Partial<BatchSettings["candidateInfoPopup"]>;
@@ -106,8 +147,9 @@ export const DEFAULT_BATCH_SETTINGS: BatchSettings = {
     pauseAfterFlags: 3,
     countSeverities: ["high"],
     extendOnUnlock: false,
+    pauseAfterUnlock: 3,
   },
-  imageCapture: { intervalSeconds: 30, atStartAndEnd: true },
+  imageCapture: { enabled: true, intervalSeconds: 30, atStartAndEnd: true },
   candidateInfoPopup: { enabled: false, fields: [] },
   captureLocation: false,
   skipPaperApproval: false,
@@ -118,6 +160,20 @@ export const DEFAULT_BATCH_SETTINGS: BatchSettings = {
   videoFailureAction: "continue",
   videoVisibleTo: ["proctor"],
   locationVisibleTo: ["tp", "proctor"],
+  proctoringType: "automatic",
+  aiEnabled: true,
+  ufmEvidence: "image",
+  downloadSessionVideo: false,
+  downloadFlagVideo: false,
+  allowPracticalVideo: false,
+  allowVivaVideo: false,
+  assessorGeolocation: false,
+  assessorAnnexureM: true,
+  assessorFeedback: false,
+  studentAttendance: true,
+  studentFeedback: true,
+  languages: { theory: false, practical: false, viva: false },
+  allowOjtImages: false,
 };
 
 function bad(what: string): ApiError {
@@ -150,6 +206,7 @@ export function parseBatchSettings(value: unknown): BatchSettings {
   const policy = isRecord(root.flagPolicy) ? root.flagPolicy : {};
   const image = isRecord(root.imageCapture) ? root.imageCapture : {};
   const info = isRecord(root.candidateInfoPopup) ? root.candidateInfoPopup : {};
+  const languages = isRecord(root.languages) ? root.languages : {};
   const severities = Array.isArray(policy.countSeverities)
     ? (policy.countSeverities.filter((s) => s === "medium" || s === "high") as (
         "medium" | "high"
@@ -162,7 +219,10 @@ export function parseBatchSettings(value: unknown): BatchSettings {
       root.showMarksToCandidate,
       d.showMarksToCandidate,
     ),
-    marksAfterValidation: bool(root.marksAfterValidation, d.marksAfterValidation),
+    marksAfterValidation: bool(
+      root.marksAfterValidation,
+      d.marksAfterValidation,
+    ),
     questionsMandatory: bool(root.questionsMandatory, d.questionsMandatory),
     flagPolicy: {
       action: policy.action === "pause" ? "pause" : "record",
@@ -173,8 +233,13 @@ export function parseBatchSettings(value: unknown): BatchSettings {
       countSeverities:
         severities.length > 0 ? severities : d.flagPolicy.countSeverities,
       extendOnUnlock: bool(policy.extendOnUnlock, d.flagPolicy.extendOnUnlock),
+      pauseAfterUnlock: int(
+        policy.pauseAfterUnlock,
+        d.flagPolicy.pauseAfterUnlock,
+      ),
     },
     imageCapture: {
+      enabled: bool(image.enabled, d.imageCapture.enabled),
       intervalSeconds: int(
         image.intervalSeconds,
         d.imageCapture.intervalSeconds,
@@ -193,13 +258,39 @@ export function parseBatchSettings(value: unknown): BatchSettings {
     detectVoice: bool(root.detectVoice, d.detectVoice),
     requireScreenShare: bool(root.requireScreenShare, d.requireScreenShare),
     recordVideo: bool(root.recordVideo, d.recordVideo),
-    videoFailureAction: root.videoFailureAction === "require" ? "require" : "continue",
+    videoFailureAction:
+      root.videoFailureAction === "require" ? "require" : "continue",
     videoVisibleTo: Array.isArray(root.videoVisibleTo)
-      ? LOCATION_ROLES.filter((r) => (root.videoVisibleTo as unknown[]).includes(r))
+      ? LOCATION_ROLES.filter((r) =>
+          (root.videoVisibleTo as unknown[]).includes(r),
+        )
       : d.videoVisibleTo,
     locationVisibleTo: Array.isArray(root.locationVisibleTo)
-      ? LOCATION_ROLES.filter((r) => (root.locationVisibleTo as unknown[]).includes(r))
+      ? LOCATION_ROLES.filter((r) =>
+          (root.locationVisibleTo as unknown[]).includes(r),
+        )
       : d.locationVisibleTo,
+    proctoringType: root.proctoringType === "manual" ? "manual" : "automatic",
+    aiEnabled: bool(root.aiEnabled, d.aiEnabled),
+    ufmEvidence: root.ufmEvidence === "video" ? "video" : "image",
+    downloadSessionVideo: bool(
+      root.downloadSessionVideo,
+      d.downloadSessionVideo,
+    ),
+    downloadFlagVideo: bool(root.downloadFlagVideo, d.downloadFlagVideo),
+    allowPracticalVideo: bool(root.allowPracticalVideo, d.allowPracticalVideo),
+    allowVivaVideo: bool(root.allowVivaVideo, d.allowVivaVideo),
+    assessorGeolocation: bool(root.assessorGeolocation, d.assessorGeolocation),
+    assessorAnnexureM: bool(root.assessorAnnexureM, d.assessorAnnexureM),
+    assessorFeedback: bool(root.assessorFeedback, d.assessorFeedback),
+    studentAttendance: bool(root.studentAttendance, d.studentAttendance),
+    studentFeedback: bool(root.studentFeedback, d.studentFeedback),
+    languages: {
+      theory: bool(languages.theory, d.languages.theory),
+      practical: bool(languages.practical, d.languages.practical),
+      viva: bool(languages.viva, d.languages.viva),
+    },
+    allowOjtImages: bool(root.allowOjtImages, d.allowOjtImages),
   };
 }
 

@@ -132,3 +132,9 @@ The JPEG is at most 150 KB (`flagPhotoMaxBytes`): quality goes 0.7, 0.55, 0.4, 0
 Location (`web/src/proctoring/location.ts`) is used only when the batch has `captureLocation` on (the session response says so; the check screen shows "This exam records your location with flag photos." and the exam start asks the browser once). The position is requested with `getCurrentPosition` when a photo needs it, kept for 60 seconds and reused; `watchPosition` is never used. A refusal, a timeout (5 seconds) or a browser without geolocation gives "Location not shared"; nothing else changes. A refusal is also remembered for 60 seconds so the browser is not asked again at once.
 
 The banner can be forged, so the flag body also carries `location` (when allowed) and the server keeps type, severity, both clocks and the encrypted coordinates itself. The review page shows the photo and the server's details side by side, with the server time next to the browser time that is drawn on the photo.
+
+## Batch switches that change the checks (X-28)
+
+- `proctoringType: "manual"` or `aiEnabled: false`: `config.disabledFlags` lists `face_not_present`, `multiple_faces`, `person_detected`, `phone_detected`, `object_detected`, `face_mismatch`, `looking_away` and `voice_detected`. The engine skips those rules, the face comparison and the microphone. Tab, window, camera blocked or frozen, permission, screen sharing and recording flags still work.
+- `imageCapture.enabled: false`: `config.snapshotIntervalSeconds` is 0, so the engine sets no picture timer. Start and end pictures follow `snapshotAtStartAndEnd`.
+- `flagPolicy.pauseAfterUnlock`: after the first unlock the pause limit is this number instead of `pauseAfterFlags`.

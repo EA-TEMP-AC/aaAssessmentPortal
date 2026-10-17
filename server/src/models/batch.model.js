@@ -7,7 +7,10 @@ import {
   FLAG_POLICY_ACTIONS,
   IMAGE_INTERVAL_MAX_SECONDS,
   IMAGE_INTERVAL_MIN_SECONDS,
+  LANGUAGE_PARTS,
   LOCATION_VIEWER_ROLES,
+  PROCTORING_TYPES,
+  UFM_EVIDENCE_TYPES,
   VIDEO_FAILURE_ACTIONS,
 } from "../config/batch-settings.js";
 import { RATIO_CLASSES, RECOGNITION_CHECKS, SECTOR_NAMES, STATE_UTS } from "../config/annexure.js";
@@ -100,6 +103,7 @@ const batchSettingsSchema = new mongoose.Schema(
             default: undefined,
           },
           extendOnUnlock: { type: Boolean },
+          pauseAfterUnlock: { type: Number, min: FLAG_PAUSE_AFTER_MIN, max: FLAG_PAUSE_AFTER_MAX },
         },
         { _id: false },
       ),
@@ -108,6 +112,7 @@ const batchSettingsSchema = new mongoose.Schema(
     imageCapture: {
       type: new mongoose.Schema(
         {
+          enabled: { type: Boolean },
           intervalSeconds: {
             type: Number,
             min: IMAGE_INTERVAL_MIN_SECONDS,
@@ -144,6 +149,27 @@ const batchSettingsSchema = new mongoose.Schema(
       type: [{ type: String, enum: LOCATION_VIEWER_ROLES }],
       default: undefined,
     },
+    // X-28 (ThinkExam parity)
+    proctoringType: { type: String, enum: PROCTORING_TYPES },
+    aiEnabled: { type: Boolean },
+    ufmEvidence: { type: String, enum: UFM_EVIDENCE_TYPES },
+    downloadSessionVideo: { type: Boolean },
+    downloadFlagVideo: { type: Boolean },
+    allowPracticalVideo: { type: Boolean },
+    allowVivaVideo: { type: Boolean },
+    assessorGeolocation: { type: Boolean },
+    assessorAnnexureM: { type: Boolean },
+    assessorFeedback: { type: Boolean },
+    studentAttendance: { type: Boolean },
+    studentFeedback: { type: Boolean },
+    languages: {
+      type: new mongoose.Schema(
+        Object.fromEntries(LANGUAGE_PARTS.map((part) => [part, { type: Boolean }])),
+        { _id: false },
+      ),
+      default: undefined,
+    },
+    allowOjtImages: { type: Boolean },
   },
   { _id: false },
 );

@@ -452,6 +452,19 @@ Indexes: `{ code: 1 }` unique; `{ sector: 1 }`.
 | recordVideo | boolean | `false` | X-27. Records the camera and shared screen; needs `requireScreenShare` |
 | videoFailureAction | `continue` \| `require` | `continue` | X-27. `require` blocks the start in a browser that cannot record |
 | videoVisibleTo | list of roles | `["proctor"]` | X-27. Roles besides aa_admin that may watch the video (batch scope still applies) |
+| flagPolicy.pauseAfterUnlock | integer 1 to 20 | 3 | X-28. Counted flags that pause the attempt again once it has been unlocked at least once |
+| imageCapture.enabled | boolean | `true` | X-28. Off: `config.snapshotIntervalSeconds` is 0 (no pictures during the exam) and the session is stored with `periodicImagesOff`, so it is never shown as `feed_lost` |
+| proctoringType | `automatic` \| `manual` | `automatic` | X-28. `manual`: every model-based flag is in `config.disabledFlags` |
+| aiEnabled | boolean | `true` | X-28. Off: same as `manual` for the flags (face_not_present, multiple_faces, person_detected, phone_detected, object_detected, face_mismatch, looking_away, voice_detected) |
+| ufmEvidence | `image` \| `video` | `image` | X-28. `video` needs `recordVideo`. Stored; jumping to the flag moment in the recording is not built yet |
+| downloadSessionVideo | boolean | `false` | X-28. Needs `recordVideo`. Lets the people in `videoVisibleTo` (and aa_admin) save a copy; logged |
+| downloadFlagVideo | boolean | `false` | X-28. Needs `recordVideo`. Stored only: there is no flag video clip yet |
+| allowPracticalVideo, allowVivaVideo | boolean | `false` | X-28. Stored only |
+| assessorGeolocation, assessorFeedback | boolean | `false` | X-28. Stored only |
+| assessorAnnexureM | boolean | `true` | X-28. Stored only |
+| studentAttendance, studentFeedback | boolean | `true` | X-28. Stored only; attendance and learner feedback work as before whatever the value |
+| languages.theory, .practical, .viva | boolean | `false` | X-28. Stored only |
+| allowOjtImages | boolean | `false` | X-28. Stored only. No national ID switch exists (Aadhaar checks are not offered) |
 | requireScreenShare | boolean | `false` | X-21. On: the candidate must share the whole screen on the check screen; `screen_share_stopped` (high) is raised if sharing ends. No screen image is kept |
 | imageCapture.intervalSeconds | integer 10 to 120 | `PROCTOR_SNAPSHOT_INTERVAL_SECONDS` (30) | Becomes `config.snapshotIntervalSeconds` of a new proctoring session |
 | imageCapture.atStartAndEnd | bool | true | Delivered as `config.snapshotAtStartAndEnd`; the engine does not act on it yet (Q807) |

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { batchLabels } from "../../lib/display-names.js";
-import { resolveBatchSettings } from "../../config/batch-settings.js";
+import { AI_FLAG_TYPES, resolveBatchSettings } from "../../config/batch-settings.js";
 import { compliance } from "../../config/compliance.js";
 import {
   AppError,
@@ -38,7 +38,10 @@ const SEVERITY_RANK = { low: 1, medium: 2, high: 3 };
  */
 export function proctoringConfig(settings = resolveBatchSettings(null)) {
   return {
-    snapshotIntervalSeconds: settings.imageCapture.intervalSeconds,
+    // X-28: 0 tells the browser to take no pictures during the exam (start and end pictures stay separate).
+    snapshotIntervalSeconds: settings.imageCapture.enabled
+      ? settings.imageCapture.intervalSeconds
+      : 0,
     snapshotAtStartAndEnd: settings.imageCapture.atStartAndEnd,
     detectionIntervalMs: compliance.PROCTOR_DETECTION_INTERVAL_MS,
     flagCooldownSeconds: compliance.PROCTOR_FLAG_COOLDOWN_SECONDS,
@@ -49,11 +52,22 @@ export function proctoringConfig(settings = resolveBatchSettings(null)) {
     recordVideo: settings.recordVideo === true,
     videoChunkSeconds: compliance.EXAM_VIDEO_CHUNK_SECONDS,
     // X-16: flag types the browser must not check for this batch.
-    disabledFlags: [
-      ...(settings.detectLookingAway === false ? ["looking_away"] : []),
-      ...(settings.detectVoice === false ? ["voice_detected"] : []),
-    ],
+    disabledFlags: disabledFlagsOf(settings),
   };
+}
+
+/**
+ * X-16 and X-28. Manual proctoring (a person watches) and "AI off" both switch every model-based
+ * flag off; the two older per-flag switches still apply on their own.
+ */
+export function disabledFlagsOf(settings) {
+  if (settings.proctoringType === "manual" || settings.aiEnabled === false) {
+    return [...AI_FLAG_TYPES];
+  }
+  return [
+    ...(settings.detectLookingAway === false ? ["looking_away"] : []),
+    ...(settings.detectVoice === false ? ["voice_detected"] : []),
+  ];
 }
 
 export function severityOf(type) {
@@ -71,6 +85,8 @@ function feedLostMs(session) {
  */
 export function displayStatus(session, attemptStatus, now = new Date()) {
   if (attemptStatus && attemptStatus !== "in_progress") return "ended";
+  // X-28: with no pictures during the exam there is no sign of life to measure.
+  if (session.periodicImagesOff) return "active";
   const seen = new Date(session.lastSeenAt ?? session.createdAt).getTime();
   return now.getTime() - seen > feedLostMs(session) ? "feed_lost" : "active";
 }
@@ -176,9 +192,11 @@ function presentForCandidate(
     config: {
       ...proctoringConfig(settings),
       // The session keeps the interval it began with, so a settings change mid-exam is not applied.
-      ...(session.snapshotIntervalSeconds
-        ? { snapshotIntervalSeconds: session.snapshotIntervalSeconds }
-        : {}),
+      ...(session.periodicImagesOff
+        ? { snapshotIntervalSeconds: 0 }
+        : session.snapshotIntervalSeconds
+          ? { snapshotIntervalSeconds: session.snapshotIntervalSeconds }
+          : {}),
     },
     // X-07: tells the browser whether to add its location to flag photos.
     captureLocation,
@@ -233,6 +251,7 @@ export async function createSession(user, { attemptId }, now = new Date()) {
       userId: user._id,
       lastSeenAt: now,
       snapshotIntervalSeconds: settings.imageCapture.intervalSeconds,
+      ...(settings.imageCapture.enabled ? {} : { periodicImagesOff: true }),
     });
     session = doc.toObject();
   } catch (err) {
@@ -347,8 +366,13 @@ async function applyFlagPolicy(session, settings, now) {
   const attempt = await Attempt.findById(session.attemptId).select("status pause").lean();
   if (!attempt || attempt.status !== "in_progress") return false;
   if (isOpenAndPaused(attempt)) return true;
-  const { action, pauseAfterFlags } = settings.flagPolicy;
+  const { action } = settings.flagPolicy;
   if (action !== "pause") return false;
+  // X-28: after the first unlock the limit is the "after unlocking" number.
+  const pauseAfterFlags =
+    (attempt.pause?.timesPaused ?? 0) > 0
+      ? settings.flagPolicy.pauseAfterUnlock
+      : settings.flagPolicy.pauseAfterFlags;
   const fresh = await ProctoringSession.findById(session._id).select("policyFlagCount").lean();
   const counted = fresh?.policyFlagCount ?? 0;
   if (counted < pauseAfterFlags) return false;
@@ -552,6 +576,7 @@ function presentLock(session, attempt, settings) {
     policy: {
       action: settings.flagPolicy.action,
       pauseAfterFlags: settings.flagPolicy.pauseAfterFlags,
+      pauseAfterUnlock: settings.flagPolicy.pauseAfterUnlock,
       countSeverities: settings.flagPolicy.countSeverities,
     },
   };

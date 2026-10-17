@@ -20,6 +20,23 @@ export const LOCATION_VIEWER_ROLES = Object.freeze([
 ]);
 /** X-27: what happens when the exam video cannot be recorded. `continue` flags it; `require` also blocks the start. */
 export const VIDEO_FAILURE_ACTIONS = Object.freeze(["continue", "require"]);
+/** X-28: automatic = the browser raises flags by itself; manual = a proctor watches, no automatic flags. */
+export const PROCTORING_TYPES = Object.freeze(["automatic", "manual"]);
+/** X-28: what a proctoring flag keeps as evidence. `video` needs the exam video (recordVideo). */
+export const UFM_EVIDENCE_TYPES = Object.freeze(["image", "video"]);
+/** X-28: the three parts of an assessment that can each have their own languages. */
+export const LANGUAGE_PARTS = Object.freeze(["theory", "practical", "viva"]);
+/** X-28: the flags that come from the camera and microphone models. Manual proctoring or "AI off" switches them off. */
+export const AI_FLAG_TYPES = Object.freeze([
+  "face_not_present",
+  "multiple_faces",
+  "person_detected",
+  "phone_detected",
+  "object_detected",
+  "face_mismatch",
+  "looking_away",
+  "voice_detected",
+]);
 export const IMAGE_INTERVAL_MIN_SECONDS = 10;
 export const IMAGE_INTERVAL_MAX_SECONDS = 120;
 /** The only personal fields the pop-up can ask for. There is deliberately no national ID field. */
@@ -46,8 +63,12 @@ export function defaultBatchSettings() {
       pauseAfterFlags: 3,
       countSeverities: ["high"],
       extendOnUnlock: false,
+      // X-28: flags allowed after an unlock before the exam is paused again.
+      pauseAfterUnlock: 3,
     },
     imageCapture: {
+      // X-28: false stops the pictures taken during the exam (start and end pictures have their own switch).
+      enabled: true,
       intervalSeconds: compliance.PROCTOR_SNAPSHOT_INTERVAL_SECONDS,
       atStartAndEnd: true,
     },
@@ -67,6 +88,23 @@ export function defaultBatchSettings() {
     videoVisibleTo: ["proctor"],
     // X-12: aa_admin always sees it; these roles may too (the batch's own people only).
     locationVisibleTo: ["tp", "proctor"],
+    // X-28 (ThinkExam parity). Wired: proctoringType, aiEnabled, ufmEvidence, the two downloads.
+    // Stored only until their own feature exists: the practical/viva video, assessor and student
+    // switches, languages and OJT pictures. Defaults keep today's behaviour.
+    proctoringType: "automatic",
+    aiEnabled: true,
+    ufmEvidence: "image",
+    downloadSessionVideo: false,
+    downloadFlagVideo: false,
+    allowPracticalVideo: false,
+    allowVivaVideo: false,
+    assessorGeolocation: false,
+    assessorAnnexureM: true,
+    assessorFeedback: false,
+    studentAttendance: true,
+    studentFeedback: true,
+    languages: { theory: false, practical: false, viva: false },
+    allowOjtImages: false,
   };
 }
 
@@ -92,8 +130,10 @@ export function resolveBatchSettings(stored) {
         policy.countSeverities?.length ? policy.countSeverities : base.flagPolicy.countSeverities,
       ),
       extendOnUnlock: policy.extendOnUnlock ?? base.flagPolicy.extendOnUnlock,
+      pauseAfterUnlock: policy.pauseAfterUnlock ?? base.flagPolicy.pauseAfterUnlock,
     },
     imageCapture: {
+      enabled: image.enabled ?? base.imageCapture.enabled,
       intervalSeconds: image.intervalSeconds ?? base.imageCapture.intervalSeconds,
       atStartAndEnd: image.atStartAndEnd ?? base.imageCapture.atStartAndEnd,
     },
@@ -114,5 +154,21 @@ export function resolveBatchSettings(stored) {
     locationVisibleTo: stored.locationVisibleTo
       ? LOCATION_VIEWER_ROLES.filter((r) => stored.locationVisibleTo.includes(r))
       : base.locationVisibleTo,
+    proctoringType: stored.proctoringType ?? base.proctoringType,
+    aiEnabled: stored.aiEnabled ?? base.aiEnabled,
+    ufmEvidence: stored.ufmEvidence ?? base.ufmEvidence,
+    downloadSessionVideo: stored.downloadSessionVideo ?? base.downloadSessionVideo,
+    downloadFlagVideo: stored.downloadFlagVideo ?? base.downloadFlagVideo,
+    allowPracticalVideo: stored.allowPracticalVideo ?? base.allowPracticalVideo,
+    allowVivaVideo: stored.allowVivaVideo ?? base.allowVivaVideo,
+    assessorGeolocation: stored.assessorGeolocation ?? base.assessorGeolocation,
+    assessorAnnexureM: stored.assessorAnnexureM ?? base.assessorAnnexureM,
+    assessorFeedback: stored.assessorFeedback ?? base.assessorFeedback,
+    studentAttendance: stored.studentAttendance ?? base.studentAttendance,
+    studentFeedback: stored.studentFeedback ?? base.studentFeedback,
+    languages: Object.fromEntries(
+      LANGUAGE_PARTS.map((part) => [part, stored.languages?.[part] ?? base.languages[part]]),
+    ),
+    allowOjtImages: stored.allowOjtImages ?? base.allowOjtImages,
   };
 }

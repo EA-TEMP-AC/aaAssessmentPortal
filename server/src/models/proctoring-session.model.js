@@ -35,6 +35,8 @@ const proctoringSessionSchema = new mongoose.Schema(
     lastSeenAt: { type: Date, default: null },
     /** B-20: the batch's snapshot interval when the session began. Missing means compliance.js. */
     snapshotIntervalSeconds: { type: Number, min: 1 },
+    // X-28: the batch switched off the pictures taken during the exam when this session began.
+    periodicImagesOff: { type: Boolean },
     /** B-20: flags counted by the batch's flag policy since the start or the last unlock. */
     policyFlagCount: { type: Number, default: 0, min: 0 },
     flagCounts: { type: flagCountsSchema, default: () => ({}) },

@@ -1796,6 +1796,11 @@ Batch settings `recordVideo` (default `false`), `videoFailureAction` (`continue`
 
 Pieces are deleted 90 days after they arrive (`EXAM_VIDEO_RETENTION_DAYS`) by a job that runs every 6 hours; each run that removes pieces writes one audit row `exam_video.expire` with the count. Piece audit rows (`exam_video.piece`) hold the track, number and size only.
 
+X-28 (ThinkExam parity). `GET /proctoring/sessions/:id/video` also returns `canDownload` (the batch's `downloadSessionVideo`). `GET /proctoring/sessions/:id/video/:track?download=1` sends the same stream with `Content-Disposition: attachment; filename="exam-<sessionId>-<track>.webm"`; `403` unless `downloadSessionVideo` is on and the caller may watch; the access log field is `exam_video_<track>_download`.
+
+### Batch settings added by X-28
+`PATCH /batches/:id/settings` also takes `proctoringType` (`automatic` | `manual`), `aiEnabled`, `ufmEvidence` (`image` | `video`), `downloadSessionVideo`, `downloadFlagVideo`, `allowPracticalVideo`, `allowVivaVideo`, `assessorGeolocation`, `assessorAnnexureM`, `assessorFeedback`, `studentAttendance`, `studentFeedback`, `languages: { theory, practical, viva }` (each boolean, any subset), `allowOjtImages`, `flagPolicy.pauseAfterUnlock` (1 to 20) and `imageCapture.enabled`. `ufmEvidence: "video"`, `downloadSessionVideo` and `downloadFlagVideo` need `recordVideo` on: `400 VALIDATION_ERROR` otherwise. Unknown keys, including any national ID key, are still rejected. The proctoring session `config.disabledFlags` lists every model-based flag when `proctoringType` is `manual` or `aiEnabled` is false; `config.snapshotIntervalSeconds` is `0` when `imageCapture.enabled` is false. The proctoring lock summary `policy` carries `pauseAfterUnlock`.
+
 ### GET /api/v1/proctoring/flags/:id/capture
 X-07. What the server saved about one flag photo, to show beside the picture. Roles: `aa_admin`, `proctor`, `assessor`, `ab_reviewer`, `ncvet_viewer` and `tp`, scoped like the session (the proctor and assessor of the batch, the awarding body's reviewer, the batch's training partner); anything else or outside scope `403`, unknown flag `404`.
 ```json

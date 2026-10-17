@@ -25,6 +25,7 @@ export function mergeSettings(current, patch) {
     flagPolicy: { ...current.flagPolicy },
     imageCapture: { ...current.imageCapture },
     candidateInfoPopup: { ...current.candidateInfoPopup },
+    languages: { ...current.languages },
   };
   for (const [key, value] of Object.entries(patch)) {
     if (value !== null && typeof value === "object" && !Array.isArray(value)) {
@@ -58,6 +59,20 @@ export async function updateBatchSettings(user, id, patch) {
     throw validationError("Request validation failed", {
       recordVideo: ["Turn on screen sharing to record the exam video"],
     });
+  }
+  // X-28: a flag can only keep a video moment when the exam video is recorded; the downloads need it too.
+  if (after.recordVideo !== true) {
+    const needs = {
+      ufmEvidence: after.ufmEvidence === "video",
+      downloadSessionVideo: after.downloadSessionVideo === true,
+      downloadFlagVideo: after.downloadFlagVideo === true,
+    };
+    const errors = Object.fromEntries(
+      Object.entries(needs)
+        .filter(([, on]) => on)
+        .map(([key]) => [key, ["Turn on exam video recording first"]]),
+    );
+    if (Object.keys(errors).length > 0) throw validationError("Request validation failed", errors);
   }
   // X-22: a batch under a scheme is a real assessment; it cannot be switched to a mock test.
   if (after.skipPaperApproval === true && before.skipPaperApproval !== true && existing.schemeId) {

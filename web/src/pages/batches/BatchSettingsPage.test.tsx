@@ -434,3 +434,59 @@ it("sends the looking-away and talking switches (X-16)", async () => {
     "Detect voice: On to Off",
   ]);
 });
+
+it("shows the ThinkExam switches with a Yes/No word and saves a change (X-28)", async () => {
+  const mock = api();
+  setSession(sessionFor("aa_admin"));
+  renderApp(`/batches/${ID}/settings`);
+  const user = userEvent.setup();
+
+  for (const group of [
+    "Proctoring",
+    "Practical and viva",
+    "Assessor",
+    "Student",
+    "More than one language",
+    "On-the-job training",
+  ]) {
+    expect(await screen.findByRole("group", { name: group })).toBeInTheDocument();
+  }
+  // Every option of the reference screens is there, none for a national ID.
+  for (const name of [
+    "Proctoring by AI",
+    "Download session video",
+    "Download flag video",
+    "Take pictures during the exam",
+    "Allow practical test video",
+    "Allow viva test video",
+    "Allow assessor geolocation",
+    "Allow assessor Annexure M",
+    "Allow assessor feedback",
+    "Allow student attendance",
+    "Allow student feedback",
+    "Design the theory test in more than one language",
+    "Design the practical test in more than one language",
+    "Design the viva test in more than one language",
+    "Allow upload of OJT pictures",
+  ]) {
+    expect(screen.getByRole("checkbox", { name })).toBeInTheDocument();
+  }
+  expect(screen.queryByRole("checkbox", { name: /aadhaar|aadhar|uidai/i })).toBeNull();
+  expect(screen.getByRole("radio", { name: "Automatic" })).toBeChecked();
+  expect(screen.getByLabelText(/Flags allowed after an unlock/)).toHaveValue("3");
+  // The video options wait for the exam video.
+  expect(screen.getByRole("checkbox", { name: "Download session video" })).toBeDisabled();
+  expect(screen.getByRole("radio", { name: "Video" })).toBeDisabled();
+
+  await user.click(screen.getByRole("radio", { name: "Manual" }));
+  await user.click(screen.getByRole("checkbox", { name: "Allow student attendance" }));
+  await user.click(screen.getByRole("button", { name: "Save settings" }));
+  await user.click(
+    within(await screen.findByRole("dialog")).getByRole("button", { name: "Confirm and save" }),
+  );
+  await waitFor(() => expect(patches(mock)).toHaveLength(1));
+  expect(JSON.parse(String((patches(mock)[0][1] as RequestInit).body))).toEqual({
+    proctoringType: "manual",
+    studentAttendance: false,
+  });
+});
