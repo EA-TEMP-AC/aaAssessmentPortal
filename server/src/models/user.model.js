@@ -8,6 +8,9 @@ const userSchema = new mongoose.Schema(
     // Encrypted at rest (S-01). Lookup and uniqueness use emailHash.
     email: { type: String, required: true },
     passwordHash: { type: String, required: true, select: false },
+    // X-36: a student's first temporary password, encrypted, so staff can hand it over. Removed
+    // when the student changes the password or an admin resets it.
+    initialPassword: { type: String, select: false },
     name: { type: String, required: true, trim: true },
     role: { type: String, required: true, enum: USER_ROLES },
     active: { type: Boolean, required: true, default: true },
@@ -23,7 +26,10 @@ const userSchema = new mongoose.Schema(
 
 userSchema.plugin(encryptedFieldsPlugin, {
   collection: "users",
-  fields: { email: { hash: "emailHash", normalize: normalizeEmail } },
+  fields: {
+    email: { hash: "emailHash", normalize: normalizeEmail },
+    initialPassword: {},
+  },
 });
 
 // Partial, not plain unique: rows written before the S-01 migration have no hash yet, and

@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { expect, it, vi } from "vitest";
 import type { CandidateRecord } from "../api/candidates";
@@ -210,7 +210,7 @@ it("adds a candidate without national-id fields and updates the roster", async (
   });
 });
 
-it("sends the student's email so a login is created and says so (X-35)", async () => {
+it("sends the email without checking it and says a login was made (X-36)", async () => {
   const user = userEvent.setup();
   let sent: unknown = null;
 
@@ -227,7 +227,7 @@ it("sends the student's email so a login is created and says so (X-35)", async (
         active: true,
         createdAt: "2026-10-12T12:00:00.000Z",
         updatedAt: "2026-10-12T12:00:00.000Z",
-        login: { status: "created", emailQueued: true },
+        login: { status: "created", emailQueued: false },
       });
     }
     return (
@@ -251,29 +251,79 @@ it("sends the student's email so a login is created and says so (X-35)", async (
     within(dialog).getByRole("button", { name: "Add candidate" }),
   );
   expect(
-    await within(dialog).findByText(/valid email address/),
-  ).toBeInTheDocument();
-  expect(sent).toBeNull();
-
-  await user.clear(within(dialog).getByLabelText("Email (optional)"));
-  await user.type(
-    within(dialog).getByLabelText("Email (optional)"),
-    "sunil@example.com",
-  );
-  await user.click(
-    within(dialog).getByRole("button", { name: "Add candidate" }),
-  );
-  expect(
     await screen.findByText(
-      /A login was created and the sign-in details were emailed/,
+      /A login was created; the sign-in id and password are in the list/,
     ),
   ).toBeInTheDocument();
   expect(sent).toEqual({
     name: "Sunil Kumar",
     externalRef: "SK-99",
-    email: "sunil@example.com",
+    email: "not-an-email",
     accommodations: [],
   });
+});
+
+it("shows each student's sign-in id and first password to staff, and lets staff make or reset a login (X-36)", async () => {
+  const user = userEvent.setup();
+  const calls: { url: string; body: unknown }[] = [];
+  const row = (id: string, name: string, login: unknown) => ({
+    id,
+    batchId: IDS.batch,
+    learnerId: `66f0000000000000000000a${id.slice(-1)}`,
+    name,
+    externalRef: `R-${id.slice(-1)}`,
+    accommodations: [],
+    active: true,
+    createdAt: "2026-10-12T12:00:00.000Z",
+    updatedAt: "2026-10-12T12:00:00.000Z",
+    login,
+  });
+  installFetch(async (url, init) => {
+    if (url.pathname.endsWith("/login") && methodOf(init) === "POST") {
+      calls.push({ url: url.pathname, body: requestJson(init) });
+      return jsonResponse(200, { status: "reset" });
+    }
+    if (url.pathname.endsWith("/candidates")) {
+      return jsonResponse(200, {
+        items: [
+          row("66f0000000000000000000c1", "Asha Devi", {
+            loginId: "asha@example.com",
+            initialPassword: "Tmp-abc123",
+            mustChangePassword: true,
+            active: true,
+          }),
+          row("66f0000000000000000000c2", "Ravi Kumar", {
+            loginId: "r-2-a2@students.local",
+            initialPassword: null,
+            mustChangePassword: false,
+            active: true,
+          }),
+          row("66f0000000000000000000c3", "Meera Das", null),
+        ],
+      });
+    }
+    return (
+      defaultBatchHandler(url, batchRecord()) ??
+      jsonResponse(404, { error: { code: "NOT_FOUND", message: "Not found" } })
+    );
+  });
+  setSession(sessionFor("aa_admin"));
+  renderApp(`/batches/${IDS.batch}`);
+  await screen.findByText("asha@example.com");
+  expect(screen.getByText("Tmp-abc123")).toBeInTheDocument();
+  expect(screen.getByText("r-2-a2@students.local")).toBeInTheDocument();
+  expect(screen.getByText("Changed by the student")).toBeInTheDocument();
+  expect(screen.getByText("No login")).toBeInTheDocument();
+
+  await user.click(
+    screen.getByRole("button", { name: "New password for Asha Devi" }),
+  );
+  await waitFor(() => expect(calls).toHaveLength(1));
+  expect(calls[0].url).toContain("/candidates/66f0000000000000000000c1/login");
+  expect(calls[0].body).toEqual({ reset: true });
+  expect(
+    screen.getByRole("button", { name: "Create login for Meera Das" }),
+  ).toBeInTheDocument();
 });
 
 it("shows RULE_RATIO error on add and allows aa_admin to submit ratio override", async () => {

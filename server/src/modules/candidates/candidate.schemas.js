@@ -21,8 +21,8 @@ export const addCandidateBodySchema = z
     learnerId: objectIdSchema.optional(),
     name: z.string().trim().min(1).max(200).optional(),
     externalRef: z.string().trim().min(1).max(64).optional(),
-    /** X-35: with an email the student gets a login, and the details are emailed. */
-    email: z.string().trim().toLowerCase().email().max(254).optional(),
+    /** X-35/X-36: the student's email. Used as the sign-in id when valid and free; never blocks the add. */
+    email: z.string().trim().max(254).optional(),
     accommodations: accommodationSchema.optional(),
     ratioOverrideReason: reasonSchema.optional(),
   })
@@ -57,6 +57,9 @@ export const patchCandidateBodySchema = z
   .refine((body) => body.active !== undefined || body.accommodations !== undefined, {
     message: "At least one of active or accommodations is required",
   });
+
+/** POST /batches/:id/candidates/:candidateId/login. X-36. */
+export const loginBodySchema = z.object({ reset: z.boolean().optional() }).strict();
 
 export const listCandidatesQuerySchema = z.object({
   active: z.preprocess((value) => {

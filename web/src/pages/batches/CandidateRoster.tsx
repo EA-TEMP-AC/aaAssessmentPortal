@@ -1,6 +1,7 @@
 import { useId, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  createStudentLogin,
   listCandidates,
   patchCandidate,
   type CandidateRecord,
@@ -30,11 +31,13 @@ export function CandidateRoster({ batch, role }: Props) {
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<FilterOption>("all");
   const [dialogMode, setDialogMode] = useState<"add" | "edit" | null>(null);
-  const [selectedCandidate, setSelectedCandidate] = useState<CandidateRecord | null>(null);
+  const [selectedCandidate, setSelectedCandidate] =
+    useState<CandidateRecord | null>(null);
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [notice, setNotice] = useState<Banner | null>(null);
   const [actionError, setActionError] = useState<Banner | null>(null);
   const [deactivatingId, setDeactivatingId] = useState<string | null>(null);
+  const [loginBusyId, setLoginBusyId] = useState<string | null>(null);
   const bannerSeq = useRef(0);
   const filterId = useId();
 
@@ -54,7 +57,10 @@ export function CandidateRoster({ batch, role }: Props) {
 
   if (!canRead) {
     return (
-      <section className="candidate-roster-section" aria-labelledby="roster-heading">
+      <section
+        className="candidate-roster-section"
+        aria-labelledby="roster-heading"
+      >
         <h2 id="roster-heading">Candidate roster</h2>
         <p role="status">Candidate roster is not accessible for this role.</p>
       </section>
@@ -67,12 +73,16 @@ export function CandidateRoster({ batch, role }: Props) {
     setDialogMode(null);
     setSelectedCandidate(null);
     setShowImportDialog(false);
-    void queryClient.invalidateQueries({ queryKey: ["batch-candidates", batch.id] });
+    void queryClient.invalidateQueries({
+      queryKey: ["batch-candidates", batch.id],
+    });
     void queryClient.invalidateQueries({ queryKey: ["batch", batch.id] });
   }
 
   function handleImportComplete(message: string, result: CsvImportResponse) {
-    void queryClient.invalidateQueries({ queryKey: ["batch-candidates", batch.id] });
+    void queryClient.invalidateQueries({
+      queryKey: ["batch-candidates", batch.id],
+    });
     void queryClient.invalidateQueries({ queryKey: ["batch", batch.id] });
     if (result.errors.length === 0) {
       setNotice({ id: ++bannerSeq.current, message });
@@ -106,18 +116,46 @@ export function CandidateRoster({ batch, role }: Props) {
     }
   }
 
+  async function handleLogin(item: CandidateRecord, reset: boolean) {
+    if (!canWrite || loginBusyId) return;
+    setLoginBusyId(item.id);
+    setActionError(null);
+    setNotice(null);
+    try {
+      await createStudentLogin(batch.id, item.id, reset);
+      handleSuccess(
+        reset
+          ? `New password made for ${item.name}.`
+          : `Login created for ${item.name}.`,
+      );
+    } catch (err) {
+      setActionError({
+        id: ++bannerSeq.current,
+        message:
+          err instanceof ApiError
+            ? errorMessage(err)
+            : "Could not update the login. Try again.",
+      });
+    } finally {
+      setLoginBusyId(null);
+    }
+  }
+
   const items = candidatesQuery.data?.items ?? [];
   const activeCount = items.filter((c) => c.active).length;
   const inactiveCount = items.filter((c) => !c.active).length;
 
   return (
-    <section className="candidate-roster-section" aria-labelledby="roster-heading">
+    <section
+      className="candidate-roster-section"
+      aria-labelledby="roster-heading"
+    >
       <h2 id="roster-heading">Candidate roster</h2>
 
       {!writable ? (
         <p className="field-hint" role="status">
-          Candidate roster is locked. Roster writes are allowed only while the batch is allocated,
-          accepted, or assessor assigned.
+          Candidate roster is locked. Roster writes are allowed only while the
+          batch is allocated, accepted, or assessor assigned.
         </p>
       ) : null}
 
@@ -185,7 +223,8 @@ export function CandidateRoster({ batch, role }: Props) {
           <span>Loading candidates...</span>
         ) : (
           <span>
-            Showing {items.length} candidate(s) ({activeCount} active, {inactiveCount} inactive).
+            Showing {items.length} candidate(s) ({activeCount} active,{" "}
+            {inactiveCount} inactive).
           </span>
         )}
       </p>
@@ -201,6 +240,8 @@ export function CandidateRoster({ batch, role }: Props) {
                 <th scope="col">External ref</th>
                 <th scope="col">Accommodations</th>
                 <th scope="col">Status</th>
+                {canWrite ? <th scope="col">Sign-in id</th> : null}
+                {canWrite ? <th scope="col">Password</th> : null}
                 {canWrite ? <th scope="col">Actions</th> : null}
               </tr>
             </thead>
@@ -226,8 +267,39 @@ export function CandidateRoster({ batch, role }: Props) {
                     </span>
                   </td>
                   {canWrite ? (
+                    <td>{candidate.login?.loginId ?? "No login"}</td>
+                  ) : null}
+                  {canWrite ? (
+                    <td>
+                      {!candidate.login ? (
+                        "None"
+                      ) : candidate.login.initialPassword ? (
+                        <code>{candidate.login.initialPassword}</code>
+                      ) : (
+                        "Changed by the student"
+                      )}
+                    </td>
+                  ) : null}
+                  {canWrite ? (
                     <td>
                       <div className="row-actions">
+                        <button
+                          type="button"
+                          className="button-quiet"
+                          disabled={loginBusyId === candidate.id}
+                          onClick={() =>
+                            void handleLogin(
+                              candidate,
+                              Boolean(candidate.login),
+                            )
+                          }
+                        >
+                          {candidate.login ? "New password" : "Create login"}
+                          <span className="visually-hidden">
+                            {" "}
+                            for {candidate.name}
+                          </span>
+                        </button>
                         <button
                           type="button"
                           className="button-quiet"
@@ -243,7 +315,9 @@ export function CandidateRoster({ batch, role }: Props) {
                         <button
                           type="button"
                           className="button-quiet"
-                          disabled={!writable || deactivatingId === candidate.id}
+                          disabled={
+                            !writable || deactivatingId === candidate.id
+                          }
                           onClick={() => void handleToggleActive(candidate)}
                         >
                           {candidate.active ? "Deactivate" : "Activate"}

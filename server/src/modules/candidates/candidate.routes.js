@@ -13,10 +13,12 @@ import {
   candidateIdParamSchema,
   importQuerySchema,
   listCandidatesQuerySchema,
+  loginBodySchema,
   patchCandidateBodySchema,
 } from "./candidate.schemas.js";
 import {
   addCandidate,
+  ensureStudentLogin,
   getCandidates,
   importCandidates,
   patchCandidate,
@@ -159,7 +161,36 @@ export function mountCandidateRoutes(router) {
         kind: "list",
         fields: ["name", "externalRef", "accommodations"],
       });
-      await res.status(200).json(body);
+      // X-36: reading a student's first password is logged against the login.
+      if (body.shownPasswordUserIds?.length) {
+        await recordAccess(req, {
+          subjectType: "user",
+          subjectIds: body.shownPasswordUserIds,
+          kind: "list",
+          fields: ["loginId", "initialPassword"],
+        });
+      }
+      await res.status(200).json({ items: body.items });
+    }),
+  );
+
+  router.post(
+    "/:id/candidates/:candidateId/login",
+    requireRoles(...CANDIDATE_WRITE_ROLES),
+    asyncHandler(async (req, res) => {
+      const { id, candidateId } = candidateIdParamSchema.parse(req.params);
+      const body = loginBodySchema.parse(req.body ?? {});
+      const saved = await ensureStudentLogin(req.user, id, candidateId, body);
+      setAudit(req, {
+        action: saved.status === "reset" ? "candidate.login_reset" : "candidate.login_create",
+        entity: "candidate",
+        omitRequestBody: true,
+        entityId: saved.candidateId,
+        abId: saved.abId,
+        batchId: id,
+        meta: { status: saved.status },
+      });
+      await res.status(200).json({ status: saved.status });
     }),
   );
 

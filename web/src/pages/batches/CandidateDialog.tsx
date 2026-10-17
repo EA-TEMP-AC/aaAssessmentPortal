@@ -102,10 +102,6 @@ export function CandidateDialog({
         messages.push("External reference is required.");
         fields.push("externalRef");
       }
-      if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-        messages.push("Enter a valid email address, or leave it blank.");
-        fields.push("email");
-      }
     }
 
     if (showRatioOverride) {
@@ -141,14 +137,12 @@ export function CandidateDialog({
         if (!mounted.current) return;
         onSaved(
           saved.login?.status === "created"
-            ? "Candidate added. A login was created and the sign-in details were emailed."
+            ? "Candidate added. A login was created; the sign-in id and password are in the list."
             : saved.login?.status === "has_login"
               ? "Candidate added. This student already has a login."
-              : saved.login?.status === "email_in_use"
-                ? "Candidate added, but that email already belongs to another login, so no login was created."
-                : saved.login?.status === "failed"
-                  ? "Candidate added, but the login could not be created."
-                  : "Candidate added to roster.",
+              : saved.login?.status === "failed"
+                ? "Candidate added, but the login could not be created. Use Create login in the list."
+                : "Candidate added to roster.",
         );
       } else if (candidate) {
         await patchCandidate(batchId, candidate.id, {
@@ -223,8 +217,10 @@ export function CandidateDialog({
               <div className="field">
                 <label htmlFor={emailId}>Email (optional)</label>
                 <p className="field-hint">
-                  With an email the student gets a login, and the sign-in
-                  details are emailed to them.
+                  A login is made for every student. If this email is valid and
+                  free it is the sign-in id and the details are emailed;
+                  otherwise an id is generated. Staff see the id and password in
+                  the list.
                 </p>
                 <input
                   id={emailId}

@@ -19,6 +19,7 @@ Phases tag each collection: `1` = Phase 1, `2` = Phase 2, `3` = Phase 3.
 | Collection | Field | Hash column | Searchable |
 |---|---|---|---|
 | `users` | `email` | `emailHash` | equality only (login, duplicate check) |
+| `users` | `initialPassword` | none | no (X-36: a student's first temporary password, `select: false`; removed when the student changes the password or an admin resets it) |
 | `assessors` | `email` | `emailHash` | equality only |
 | `proctors` | `email` | `emailHash` | equality only |
 | `learners` | `phone` | none | no |

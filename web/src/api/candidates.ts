@@ -1,7 +1,16 @@
 import { apiRequest } from "./client";
 
 /** X-35: what happened to the student's login when an email was sent with the candidate. */
-export type LoginStatus = "created" | "has_login" | "email_in_use" | "failed";
+export type LoginStatus = "created" | "has_login" | "failed";
+
+/** X-36: the sign-in id and first password of a student, for staff who manage the roster. */
+export type StudentLogin = {
+  loginId: string;
+  /** Null once the student has changed it (or staff reset it elsewhere). */
+  initialPassword: string | null;
+  mustChangePassword: boolean;
+  active: boolean;
+};
 
 export type CandidateRecord = {
   id: string;
@@ -13,7 +22,11 @@ export type CandidateRecord = {
   active: boolean;
   createdAt: string;
   updatedAt: string;
-  /** Only on the add response, and only when an email was sent. */
+  /** On the roster list for staff who manage it: null means the student has no login yet. */
+  login?: StudentLogin | null;
+};
+
+export type AddedCandidate = Omit<CandidateRecord, "login"> & {
   login?: { status: LoginStatus; emailQueued: boolean };
 };
 
@@ -25,7 +38,7 @@ export type AddCandidateInput = {
   name?: string;
   externalRef?: string;
   learnerId?: string;
-  /** X-35: creates the student's login and emails the temporary password. */
+  /** X-36: the student's email. Used as the sign-in id when valid and free; never blocks the add. */
   email?: string;
   accommodations?: string[];
   ratioOverrideReason?: string;
@@ -46,7 +59,7 @@ export type CsvImportResponse = {
   created: number;
   skipped: number;
   errors: CsvImportRowError[];
-  /** X-35: present when the CSV had an email column. */
+  /** X-36: every student added gets a login. */
   logins?: { created: number; existing: number; failed: number };
 };
 
@@ -67,13 +80,25 @@ export async function listCandidates(
 export async function addCandidate(
   batchId: string,
   input: AddCandidateInput,
-): Promise<CandidateRecord> {
-  return apiRequest<CandidateRecord>(
+): Promise<AddedCandidate> {
+  return apiRequest<AddedCandidate>(
     `/batches/${encodeURIComponent(batchId)}/candidates`,
     {
       method: "POST",
       body: input,
     },
+  );
+}
+
+/** X-36: creates the login of a student who has none, or with `reset` gives a new first password. */
+export async function createStudentLogin(
+  batchId: string,
+  candidateId: string,
+  reset = false,
+): Promise<{ status: "created" | "has_login" | "reset" }> {
+  return apiRequest(
+    `/batches/${encodeURIComponent(batchId)}/candidates/${encodeURIComponent(candidateId)}/login`,
+    { method: "POST", body: reset ? { reset: true } : {} },
   );
 }
 

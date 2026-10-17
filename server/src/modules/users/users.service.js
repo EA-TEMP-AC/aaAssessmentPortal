@@ -141,7 +141,7 @@ async function applyPassword(userId, passwordHash) {
       { _id: userId },
       {
         $set: { passwordHash, mustChangePassword: true },
-        $unset: { passwordResetTokenHash: "", passwordResetExpiresAt: "" },
+        $unset: { passwordResetTokenHash: "", passwordResetExpiresAt: "", initialPassword: "" },
       },
     );
   } catch (err) {

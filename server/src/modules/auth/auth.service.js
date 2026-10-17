@@ -174,6 +174,8 @@ export async function changePassword(actor, body, now = new Date()) {
   user.passwordResetTokenHash = undefined;
   user.passwordResetExpiresAt = undefined;
   await user.save();
+  // X-36: the student's first temporary password is no longer readable by staff.
+  await User.updateOne({ _id: user._id }, { $unset: { initialPassword: "" } });
 
   const keepHash = body.refreshToken ? hashRefreshToken(body.refreshToken) : null;
   const kept = keepHash

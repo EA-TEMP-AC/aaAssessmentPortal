@@ -133,8 +133,9 @@ export function CandidateImportDialog({
             header row.
           </p>
           <p className="field-hint">
-            Add an <code>email</code> column to give each student a login; the
-            sign-in details are emailed to them.
+            Every student gets a login. An optional <code>email</code> column is
+            used as the sign-in id when valid; otherwise an id is generated.
+            Staff see the ids and passwords in the list.
           </p>
           <p className="field-hint">
             Note: Cells starting with <code>=</code>, <code>+</code>,{" "}
@@ -189,7 +190,7 @@ export function CandidateImportDialog({
                 Import processed: {importResult.created} candidate(s) added,{" "}
                 {importResult.skipped} duplicate(s) skipped.
                 {importResult.logins
-                  ? ` ${importResult.logins.created} login(s) created and emailed${
+                  ? ` ${importResult.logins.created} login(s) created${
                       importResult.logins.existing +
                         importResult.logins.failed >
                       0

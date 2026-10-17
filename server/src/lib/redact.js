@@ -10,6 +10,7 @@ const SECRET_KEYS = new Set([
   "currentpassword",
   "oldpassword",
   "temporarypassword",
+  "initialpassword",
   "plainpassword",
   "smtppassword",
   "smtppass",

@@ -669,66 +669,128 @@ describe("batch candidates", () => {
     );
   });
 
-  it("creates the student's login from an email and emails the temporary password (X-35)", async () => {
+  const listFor = (token, batchId) =>
+    request(app).get(`/api/v1/batches/${batchId}/candidates`).set(bearer(token));
+
+  it("makes a login for every student added, with or without an email (X-36)", async () => {
     const m = await masters();
     const admin = await sessionFor("aa_admin");
     const batch = await createBatch(admin.token, m);
 
-    const res = await request(app)
+    const withEmail = await request(app)
       .post(`/api/v1/batches/${batch.id}/candidates`)
       .set(bearer(admin.token))
       .send({ name: "Asha Devi", externalRef: "TP-REG-1", email: "Asha@Example.com" });
-    expect(res.status, JSON.stringify(res.body)).toBe(201);
-    expect(res.body.login).toEqual({ status: "created", emailQueued: true });
-    expect(JSON.stringify(res.body)).not.toMatch(/Tmp-/);
+    expect(withEmail.status, JSON.stringify(withEmail.body)).toBe(201);
+    expect(withEmail.body.login).toMatchObject({ status: "created", emailQueued: true });
+    expect(JSON.stringify(withEmail.body)).not.toMatch(/Tmp-/);
 
-    const user = await User.findOne({ role: "candidate" }).lean();
-    expect(String(user.linkedProfileId)).toBe(res.body.learnerId);
-    expect(user.mustChangePassword).toBe(true);
+    const noEmail = await request(app)
+      .post(`/api/v1/batches/${batch.id}/candidates`)
+      .set(bearer(admin.token))
+      .send({ name: "Ravi Kumar", externalRef: "TP-REG-2" });
+    expect(noEmail.status).toBe(201);
+    expect(noEmail.body.login).toMatchObject({ status: "created", emailQueued: false });
 
-    // The mail carries the sign-in email and the password; the password signs in.
+    const badEmail = await request(app)
+      .post(`/api/v1/batches/${batch.id}/candidates`)
+      .set(bearer(admin.token))
+      .send({ name: "Meera Das", externalRef: "TP-REG-3", email: "not-an-email" });
+    expect(badEmail.status, JSON.stringify(badEmail.body)).toBe(201);
+    expect(badEmail.body.login.status).toBe("created");
+
+    // The student list shows each sign-in id and first password to staff.
+    const listed = (await listFor(admin.token, batch.id)).body.items;
+    expect(listed).toHaveLength(3);
+    const byName = Object.fromEntries(listed.map((i) => [i.name, i.login]));
+    expect(byName["Asha Devi"].loginId).toBe("asha@example.com");
+    expect(byName["Ravi Kumar"].loginId).toMatch(/^tp-reg-2-[0-9a-f]{6}@students\.local$/);
+    expect(byName["Meera Das"].loginId).toMatch(/@students\.local$/);
+    for (const login of Object.values(byName)) {
+      expect(login.initialPassword).toMatch(/^Tmp-/);
+      expect(login.mustChangePassword).toBe(true);
+    }
+
+    // The password shown signs in, and it is gone from the list once the student changes it.
+    const signIn = await request(app).post("/api/v1/auth/login").send({
+      email: byName["Ravi Kumar"].loginId,
+      password: byName["Ravi Kumar"].initialPassword,
+      device: webDevice,
+    });
+    expect(signIn.status, JSON.stringify(signIn.body)).toBe(200);
+    const changed = await request(app)
+      .post("/api/v1/auth/change-password")
+      .set(bearer(signIn.body.accessToken))
+      .send({
+        currentPassword: byName["Ravi Kumar"].initialPassword,
+        newPassword: "A-new-Strong-pass-123",
+        refreshToken: signIn.body.refreshToken,
+      });
+    expect(changed.status, JSON.stringify(changed.body)).toBeLessThan(300);
+    const after = (await listFor(admin.token, batch.id)).body.items.find(
+      (i) => i.name === "Ravi Kumar",
+    );
+    expect(after.login).toMatchObject({ initialPassword: null, mustChangePassword: false });
+
+    // The mail carries the id and password; nothing personal or secret reaches the audit rows.
     const [mail] = await EmailQueue.find({ kind: "candidate_login" }).lean();
     expect(mail.to).toEqual(["asha@example.com"]);
-    const password = /Temporary password: (\S+)/.exec(mail.text)[1];
-    const signIn = await request(app)
-      .post("/api/v1/auth/login")
-      .send({ email: "asha@example.com", password, device: webDevice });
-    expect(signIn.status, JSON.stringify(signIn.body)).toBe(200);
-
-    // Nothing personal reaches the audit row.
+    expect(mail.text).toContain(byName["Asha Devi"].initialPassword);
     const audit = JSON.stringify(await AuditLog.find({ action: "candidate.create" }).lean());
     expect(audit).not.toMatch(/asha@example|Tmp-/i);
   });
 
-  it("keeps the student on the roster when the learner already has a login or the email is taken (X-35)", async () => {
+  it("does not show passwords to the student or read-only staff (X-36)", async () => {
+    const m = await masters();
+    const admin = await sessionFor("aa_admin");
+    const batch = await createBatch(admin.token, m);
+    const added = await request(app)
+      .post(`/api/v1/batches/${batch.id}/candidates`)
+      .set(bearer(admin.token))
+      .send({ name: "Asha Devi", externalRef: "TP-REG-1" });
+    const candidate = await sessionFor("candidate", { linkedProfileId: added.body.learnerId });
+    const own = (await listFor(candidate.token, batch.id)).body.items;
+    expect(own).toHaveLength(1);
+    expect(JSON.stringify(own)).not.toMatch(/Tmp-|initialPassword|loginId/);
+  });
+
+  it("keeps an existing login, and creates or resets one for older students (X-36)", async () => {
     const m = await masters();
     const admin = await sessionFor("aa_admin");
     const batch = await createBatch(admin.token, m);
     const learner = await createLearnerDoc({ name: "Ravi Kumar", externalRef: "TP-REG-2" });
-    await createUser({
-      role: "candidate",
-      email: "ravi@example.com",
-      name: "Ravi",
-      linkedProfileId: learner._id,
-    });
-    const has = await request(app)
+    const first = await request(app)
       .post(`/api/v1/batches/${batch.id}/candidates`)
       .set(bearer(admin.token))
-      .send({ learnerId: String(learner._id), email: "other@example.com" });
-    expect(has.status).toBe(201);
-    expect(has.body.login.status).toBe("has_login");
+      .send({ learnerId: String(learner._id) });
+    expect(first.body.login.status).toBe("created");
 
-    const taken = await request(app)
+    const again = await request(app)
       .post(`/api/v1/batches/${batch.id}/candidates`)
       .set(bearer(admin.token))
-      .send({ name: "Meera", externalRef: "TP-REG-3", email: "ravi@example.com" });
-    expect(taken.status).toBe(201);
-    expect(taken.body.login.status).toBe("email_in_use");
-    expect(await Candidate.countDocuments({ batchId: batch.id })).toBe(2);
-    expect(await EmailQueue.countDocuments({ kind: "candidate_login" })).toBe(0);
+      .send({ learnerId: String(learner._id) });
+    expect(again.status).toBe(409);
+
+    const row = (await listFor(admin.token, batch.id)).body.items[0];
+    const before = row.login.initialPassword;
+    const login = `/api/v1/batches/${batch.id}/candidates/${row.id}/login`;
+    const reset = await request(app).post(login).set(bearer(admin.token)).send({ reset: true });
+    expect(reset.body).toEqual({ status: "reset" });
+    const next = (await listFor(admin.token, batch.id)).body.items[0].login.initialPassword;
+    expect(next).toMatch(/^Tmp-/);
+    expect(next).not.toBe(before);
+
+    // A student added before logins existed has none, and gets one here.
+    await User.deleteMany({ role: "candidate" });
+    expect((await listFor(admin.token, batch.id)).body.items[0].login).toBeNull();
+    const made = await request(app).post(login).set(bearer(admin.token)).send({});
+    expect(made.body).toEqual({ status: "created" });
+    expect((await listFor(admin.token, batch.id)).body.items[0].login.initialPassword).toMatch(
+      /^Tmp-/,
+    );
   });
 
-  it("makes logins from an email column in the CSV and rejects a bad email (X-35)", async () => {
+  it("counts logins in the CSV import and never fails a row for a bad email (X-36)", async () => {
     const m = await masters();
     const admin = await sessionFor("aa_admin");
     const batch = await createBatch(admin.token, m);
@@ -744,9 +806,11 @@ describe("batch candidates", () => {
       .set("Content-Type", "text/csv")
       .send(csv);
     expect(res.status, JSON.stringify(res.body)).toBe(200);
-    expect(res.body.created).toBe(2);
-    expect(res.body.errors).toEqual([{ row: 3, reason: "email is not valid" }]);
-    expect(res.body.logins).toEqual({ created: 1, existing: 0, failed: 0 });
-    expect(await User.countDocuments({ role: "candidate" })).toBe(1);
+    expect(res.body).toMatchObject({
+      created: 3,
+      errors: [],
+      logins: { created: 3, existing: 0, failed: 0 },
+    });
+    expect(await User.countDocuments({ role: "candidate" })).toBe(3);
   });
 });

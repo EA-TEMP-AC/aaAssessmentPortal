@@ -11,9 +11,14 @@ import { recordAudit } from "../../middleware/audit.middleware.js";
 import { isInBatchScope } from "../../middleware/scope.js";
 import { Batch } from "../../models/batch.model.js";
 import { Candidate } from "../../models/candidate.model.js";
+import { CANDIDATE_WRITE_ROLES } from "../../models/roles.js";
 import { Learner } from "../../models/learner.model.js";
 import { assertRatioOrOverride } from "../batches/assign-rules.js";
-import { createCandidateLogin } from "./candidate-login.service.js";
+import {
+  createCandidateLogin,
+  loginsForLearners,
+  resetCandidateLogin,
+} from "./candidate-login.service.js";
 import { learnerIsOnBatch } from "./candidate-scope.js";
 import { rosterFromCsv } from "./candidate-csv.js";
 
@@ -23,8 +28,6 @@ export const CANDIDATE_ROSTER_OPEN_STATUSES = Object.freeze([
   "accepted",
   "assessor_assigned",
 ]);
-
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function iso(value) {
   return new Date(value).toISOString();
@@ -190,7 +193,7 @@ export async function addCandidate(user, batchId, body, context = {}) {
     });
     // X-35: the login is made after the roster row is saved; a problem there never undoes the row.
     const { learner, ...result } = saved;
-    if (body.email) result.login = await createCandidateLogin({ learner, email: body.email });
+    result.login = await createCandidateLogin({ learner, email: body.email });
     return result;
   } catch (err) {
     if (err?.code === 11000) throw duplicateResource("Learner is already on this batch");
@@ -202,6 +205,8 @@ export async function addCandidate(user, batchId, body, context = {}) {
  * List roster rows. Existing batch outside scope is 403; unknown id is 404.
  */
 export async function getCandidates(user, batchId, query = {}) {
+  // X-36: staff who manage the roster also see each student's sign-in id and first password.
+  const withLogins = CANDIDATE_WRITE_ROLES.includes(user?.role);
   const batch = await loadBatch(batchId);
   if (!(await canReadCandidates(user, batch))) throw forbidden();
 
@@ -213,7 +218,15 @@ export async function getCandidates(user, batchId, query = {}) {
   if (query.active !== undefined) filter.active = query.active;
 
   const docs = await Candidate.find(filter).sort({ createdAt: 1, _id: 1 }).lean();
-  return { items: docs.map(presentCandidate) };
+  if (!withLogins) return { items: docs.map(presentCandidate), shownPasswordUserIds: [] };
+  const { byLearner, shown } = await loginsForLearners(docs.map((d) => d.learnerId));
+  return {
+    items: docs.map((doc) => ({
+      ...presentCandidate(doc),
+      login: byLearner.get(String(doc.learnerId)) ?? null,
+    })),
+    shownPasswordUserIds: shown,
+  };
 }
 
 /**
@@ -281,10 +294,6 @@ export async function importCandidates(user, batchId, csvText, extras = {}, cont
       errors.push({ row: row.rowNumber, reason: "name and externalRef are required" });
       continue;
     }
-    if (row.email && !EMAIL_PATTERN.test(row.email)) {
-      errors.push({ row: row.rowNumber, reason: "email is not valid" });
-      continue;
-    }
     try {
       const saved = await addCandidate(
         user,
@@ -292,7 +301,7 @@ export async function importCandidates(user, batchId, csvText, extras = {}, cont
         {
           name: row.name,
           externalRef: row.externalRef,
-          ...(row.email ? { email: row.email.toLowerCase() } : {}),
+          ...(row.email ? { email: row.email } : {}),
           ratioOverrideReason: extras.ratioOverrideReason,
         },
         context,
@@ -323,7 +332,7 @@ export async function importCandidates(user, batchId, csvText, extras = {}, cont
     errors,
     ratioOverride,
     abId: idOf(batch.abId),
-    ...(rows.some((r) => r.email) ? { logins } : {}),
+    logins,
   };
 }
 
@@ -342,4 +351,26 @@ export async function writeRatioOverrideAudit(user, batchId, ratioOverride, ip) 
     meta: { reason: ratioOverride.reason },
     ip,
   });
+}
+
+/**
+ * X-36. Creates the login of a student who has none (students added before logins existed), or
+ * with `reset` gives the existing one a new temporary password. The password is not returned
+ * here; it shows in the student list. Returns the status for the audit row.
+ */
+export async function ensureStudentLogin(user, batchId, candidateId, { reset = false } = {}) {
+  const batch = await loadBatch(batchId);
+  const candidate = await Candidate.findOne({ _id: candidateId, batchId: batch._id }).lean();
+  if (!candidate) throw notFound();
+  const learner = await Learner.findById(candidate.learnerId).lean();
+  if (!learner) throw notFound();
+  let status;
+  if (reset) {
+    const done = await resetCandidateLogin(learner._id);
+    status = done ? "reset" : (await createCandidateLogin({ learner })).status;
+  } else {
+    status = (await createCandidateLogin({ learner })).status;
+  }
+  if (status === "failed") throw new AppError(500, "INTERNAL", "The login could not be created");
+  return { status, candidateId: idOf(candidate._id), abId: idOf(batch.abId) };
 }
