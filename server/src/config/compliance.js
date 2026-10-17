@@ -117,7 +117,7 @@ export const compliance = Object.freeze({
     face_not_present: 2,
     camera_blocked: 2,
     camera_frozen: 8,
-    looking_away: 6,
+    looking_away: 2,
     voice_detected: 4,
   }),
   /**

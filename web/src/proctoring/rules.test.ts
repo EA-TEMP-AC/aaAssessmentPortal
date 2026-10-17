@@ -213,7 +213,7 @@ describe("frameStats and toGray", () => {
 describe("looking_away and voice_detected (X-14)", () => {
   const cfg: ProctorConfig = {
     ...config,
-    sustainedSeconds: { ...config.sustainedSeconds, looking_away: 6, voice_detected: 4 },
+    sustainedSeconds: { ...config.sustainedSeconds, looking_away: 2, voice_detected: 4 },
   };
   const turned = (headTurn: number): Detection => ({ kind: "face", label: "face", confidence: 0.9, headTurn });
 
@@ -222,17 +222,17 @@ describe("looking_away and voice_detected (X-14)", () => {
     let r = evaluateFrame(state, frame([turned(0.7)]), 0, cfg);
     expect(r.flags).toEqual([]);
     state = r.state;
-    r = evaluateFrame(state, frame([turned(-0.7)]), 5999, cfg);
+    r = evaluateFrame(state, frame([turned(-0.7)]), 1999, cfg);
     expect(r.flags).toEqual([]);
-    r = evaluateFrame(r.state, frame([turned(0.7)]), 6000, cfg);
+    r = evaluateFrame(r.state, frame([turned(0.7)]), 2000, cfg);
     expect(r.flags.map((f) => f.type)).toEqual(["looking_away"]);
   });
 
   it("turning back resets the timer", () => {
     let r = evaluateFrame(createRulesState(), frame([turned(0.7)]), 0, cfg);
-    r = evaluateFrame(r.state, frame([turned(0.1)]), 4000, cfg);
-    r = evaluateFrame(r.state, frame([turned(0.7)]), 5000, cfg);
-    r = evaluateFrame(r.state, frame([turned(0.7)]), 9000, cfg);
+    r = evaluateFrame(r.state, frame([turned(0.1)]), 1500, cfg);
+    r = evaluateFrame(r.state, frame([turned(0.7)]), 2000, cfg);
+    r = evaluateFrame(r.state, frame([turned(0.7)]), 3500, cfg);
     expect(r.flags).toEqual([]);
   });
 

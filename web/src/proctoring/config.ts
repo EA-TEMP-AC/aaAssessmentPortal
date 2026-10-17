@@ -59,7 +59,7 @@ export const DEFAULT_SUSTAINED_SECONDS: Record<string, number> = {
   object_detected: 2,
   camera_blocked: 3,
   camera_frozen: 5,
-  looking_away: 6,
+  looking_away: 2,
   voice_detected: 4,
 };
 

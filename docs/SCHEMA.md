@@ -220,7 +220,7 @@ Implement in B-02. No magic numbers in feature code.
 | `PROCTOR_SNAPSHOT_INTERVAL_SECONDS` | `30` | Project (P-01). Seconds between proctor snapshots in the candidate's browser. Returned as `config.snapshotIntervalSeconds`. Open Q620 |
 | `PROCTOR_DETECTION_INTERVAL_MS` | `1000` | Project (P-01). Milliseconds between two in-browser detection runs (`config.detectionIntervalMs`) |
 | `PROCTOR_FLAG_COOLDOWN_SECONDS` | `15` | Project (P-01). Seconds the browser waits before sending a second flag of the same type (`config.flagCooldownSeconds`). Not enforced by the server |
-| `PROCTOR_SUSTAINED_SECONDS` | `{ face_not_present: 2, camera_blocked: 2, camera_frozen: 8, looking_away: 6, voice_detected: 4 }` | Project (P-01, P-05). How long the condition must last before the browser raises the flag (`config.sustainedSeconds`) |
+| `PROCTOR_SUSTAINED_SECONDS` | `{ face_not_present: 2, camera_blocked: 2, camera_frozen: 8, looking_away: 2, voice_detected: 4 }` | Project (P-01, P-05). How long the condition must last before the browser raises the flag (`config.sustainedSeconds`) |
 | `PROCTOR_FEED_LOST_INTERVALS` | `3` | Project (P-01). No heartbeat for this many snapshot intervals (90 s) shows the session as `feed_lost`. Open Q621 |
 | `PROCTOR_FLAG_SEVERITY` | table | Project (P-04). low: `tab_hidden`, `fullscreen_exit`, `window_blur`, `permission_revoked`, `object_detected`; medium: `face_not_present`, `id_unreadable`, `looking_away`, `voice_detected`; high: `multiple_faces`, `person_detected`, `phone_detected`, `camera_blocked`, `camera_frozen`, `face_mismatch`, `id_mismatch`. Set by the server, never by the client |
 

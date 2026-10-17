@@ -67,7 +67,13 @@ describe("compliance constants", () => {
       PROCTOR_SNAPSHOT_INTERVAL_SECONDS: 30,
       PROCTOR_DETECTION_INTERVAL_MS: 1000,
       PROCTOR_FLAG_COOLDOWN_SECONDS: 15,
-      PROCTOR_SUSTAINED_SECONDS: { face_not_present: 5, camera_blocked: 5, camera_frozen: 8 },
+      PROCTOR_SUSTAINED_SECONDS: {
+        face_not_present: 2,
+        camera_blocked: 2,
+        camera_frozen: 8,
+        looking_away: 2,
+        voice_detected: 4,
+      },
       PROCTOR_FEED_LOST_INTERVALS: 3,
       PROCTOR_FLAG_SEVERITY: {
         tab_hidden: "low",
