@@ -15,6 +15,8 @@ export const ACCESS_SUBJECT_TYPES = Object.freeze([
   "testPaper",
   // X-07: one row per proctoring flag whose photo coordinates a read returned.
   "proctoringFlag",
+  // X-27: one row per proctoring session whose exam video was watched or downloaded.
+  "proctoringSession",
 ]);
 export const ACCESS_KINDS = Object.freeze(["list", "detail"]);
 

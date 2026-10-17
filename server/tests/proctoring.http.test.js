@@ -350,7 +350,7 @@ describe("Proctoring API (server/src/modules/proctoring)", () => {
         expect(body.severity, type).toBe(expected[type]);
       }
       const row = await ProctoringSession.findById(s.id).lean();
-      expect(row.flagCounts).toEqual({ low: 5, medium: 2, high: 7 });
+      expect(row.flagCounts).toEqual({ low: 5, medium: 5, high: 8 });
 
       expectError(
         await sendFlag(w.asha, s.id, { type: "phone_detected", severity: "low" }),

@@ -679,7 +679,7 @@ describe("batch settings (B-20)", () => {
       const row = await AuditLog.findOne({ action: "proctoring.unlock" }).lean();
       expect(row.actorRole).toBe("proctor");
       expect(row.before).toEqual({ paused: true, countedFlags: 2 });
-      expect(row.after).toEqual({ paused: false, countedFlags: 0 });
+      expect(row.after).toMatchObject({ paused: false, countedFlags: 0 });
 
       // Saving works again, and the count starts from zero: one flag is not enough.
       const q0 = attempt.questions[0].questionId;

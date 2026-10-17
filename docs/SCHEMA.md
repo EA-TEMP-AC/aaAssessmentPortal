@@ -623,7 +623,7 @@ One row per person whose personal data a read endpoint returned. Append-only (up
 |---|---|---|
 | `actorId` | ObjectId | user who read |
 | `actorRole` | string | role at the time |
-| `subjectType` | string | `user`, `learner`, `assessor`, `proctor`, `evidence` (V-01: one row per evidence file download), `question` (S-02: one row per question whose text a read returned), `testPaper` (S-02: one row per test paper read), `proctoringFlag` (X-07: one row per flag whose photo coordinates a read returned; field `location`) |
+| `subjectType` | string | `user`, `learner`, `assessor`, `proctor`, `evidence` (V-01: one row per evidence file download), `question` (S-02: one row per question whose text a read returned), `testPaper` (S-02: one row per test paper read), `proctoringFlag` (X-07: one row per flag whose photo coordinates a read returned; field `location`), `proctoringSession` (X-27: one row per exam video watched or downloaded) |
 | `subjectId` | string | id of the person read (`users._id`, `learners._id`, ...). The roster endpoint logs `learnerId`, not the candidate row id |
 | `kind` | string | `list` or `detail` |
 | `fields` | string[] | names of the personal fields the response carried, for example `["name","phone","externalRef"]` |

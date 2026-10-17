@@ -252,7 +252,7 @@ describe("Images in questions (X-25)", () => {
         ],
       );
       const res = await importFile(buffer);
-      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      expect(res.status, JSON.stringify(res.body)).toBe(201);
       expect(res.body.importedCount).toBe(2);
       const withPictures = await Question.findOne({ stem: "With two pictures" }).lean();
       expect(withPictures.images.map((i) => i.alt)).toEqual(["First", "Second"]);

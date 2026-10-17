@@ -358,6 +358,7 @@ describe("Question and answer on a flag (X-23)", () => {
     proctor = await sessionFor("proctor", { linkedProfileId: batch.proctorId });
     assessor = await sessionFor("assessor", { linkedProfileId: batch.assessorId });
     question = await Question.create({
+      createdBy: admin.userId,
       qualificationId: batch.qualificationId,
       nosId: "NOS-01",
       pcId: "PC-1",
