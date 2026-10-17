@@ -14,6 +14,7 @@
     "test": "vitest run",
     "seed": "node src/scripts/seed.js",
     "seed:demo-exam": "node src/scripts/seed-demo-exam.js",
+    "seed:demo-full": "node src/scripts/seed-demo-full.js",
     "migrate:encrypt": "node src/scripts/encrypt-existing-data.js",
     "retention:dry-run": "node src/scripts/retention-dry-run.js",
     "scrub:logs": "node src/scripts/scrub-logs.js"
