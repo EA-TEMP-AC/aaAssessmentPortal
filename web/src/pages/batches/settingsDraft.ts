@@ -5,12 +5,16 @@ import {
   INTERVAL_MIN_SECONDS,
   LOCATION_ROLES,
   LOCATION_ROLE_LABELS,
+  PASS_PERCENTAGE_MAX,
+  PASS_PERCENTAGE_MIN,
   PAUSE_AFTER_MAX,
   PAUSE_AFTER_MIN,
   type BatchSettings,
   type BatchSettingsPatch,
   type InfoField,
   type LocationRole,
+  type MarkingType,
+  type PassCriteria,
   type ProctoringType,
   type UfmEvidence,
   type VideoFailureAction,
@@ -59,12 +63,17 @@ export type Draft = {
   allowOjtImages: boolean;
   pauseAfterUnlock: string;
   imageEnabled: boolean;
+  passCriteria: PassCriteria;
+  passPercentage: string;
+  practicalMarking: MarkingType;
+  vivaMarking: MarkingType;
 };
 
 export type Problems = Partial<
   Record<
     | "pauseAfterFlags"
     | "pauseAfterUnlock"
+    | "passPercentage"
     | "intervalSeconds"
     | "popupFields"
     | "recordVideo"
@@ -115,6 +124,10 @@ export function toDraft(s: BatchSettings): Draft {
     allowOjtImages: s.allowOjtImages,
     pauseAfterUnlock: String(s.flagPolicy.pauseAfterUnlock),
     imageEnabled: s.imageCapture.enabled,
+    passCriteria: s.passCriteria,
+    passPercentage: String(s.passPercentage),
+    practicalMarking: s.practicalMarking,
+    vivaMarking: s.vivaMarking,
   };
 }
 
@@ -143,6 +156,16 @@ export function validateDraft(draft: Draft): Problems {
   const unlock = wholeNumber(draft.pauseAfterUnlock);
   if (unlock === null || unlock < PAUSE_AFTER_MIN || unlock > PAUSE_AFTER_MAX) {
     problems.pauseAfterUnlock = `Enter a whole number from ${PAUSE_AFTER_MIN} to ${PAUSE_AFTER_MAX}.`;
+  }
+  if (draft.passCriteria !== "qualification") {
+    const pass = wholeNumber(draft.passPercentage);
+    if (
+      pass === null ||
+      pass < PASS_PERCENTAGE_MIN ||
+      pass > PASS_PERCENTAGE_MAX
+    ) {
+      problems.passPercentage = `Enter a whole number from ${PASS_PERCENTAGE_MIN} to ${PASS_PERCENTAGE_MAX}.`;
+    }
   }
   if (draft.recordVideo && !draft.requireScreenShare) {
     problems.recordVideo = "Turn on screen sharing to record the exam video.";
@@ -191,6 +214,19 @@ export function buildPatch(
   ] as const) {
     if (draft[key] !== saved[key]) patch[key] = draft[key];
   }
+  if (draft.passCriteria !== saved.passCriteria)
+    patch.passCriteria = draft.passCriteria;
+  const passNumber = Number(draft.passPercentage);
+  if (
+    draft.passCriteria !== "qualification" &&
+    passNumber !== saved.passPercentage
+  ) {
+    patch.passPercentage = passNumber;
+  }
+  if (draft.practicalMarking !== saved.practicalMarking)
+    patch.practicalMarking = draft.practicalMarking;
+  if (draft.vivaMarking !== saved.vivaMarking)
+    patch.vivaMarking = draft.vivaMarking;
   if (draft.proctoringType !== saved.proctoringType)
     patch.proctoringType = draft.proctoringType;
   if (draft.ufmEvidence !== saved.ufmEvidence)
@@ -349,6 +385,33 @@ export function describeChanges(saved: BatchSettings, draft: Draft): string[] {
     lines.push(
       `Who can watch the video: AA admin${watchers.map((r) => `, ${LOCATION_ROLE_LABELS[r]}`).join("")}`,
     );
+  }
+  if (draft.passCriteria !== saved.passCriteria) {
+    const names = {
+      qualification: "The qualification's own rule",
+      nos_wise: "NOS wise",
+      overall: "Overall",
+    };
+    lines.push(
+      `Pass rule: ${names[saved.passCriteria]} to ${names[draft.passCriteria]}`,
+    );
+  }
+  if (
+    draft.passCriteria !== "qualification" &&
+    Number(draft.passPercentage) !== saved.passPercentage
+  ) {
+    lines.push(
+      `Pass percentage: ${saved.passPercentage} to ${draft.passPercentage}`,
+    );
+  }
+  for (const [label, from, to] of [
+    ["Practical marking", saved.practicalMarking, draft.practicalMarking],
+    ["Viva marking", saved.vivaMarking, draft.vivaMarking],
+  ] as const) {
+    if (from !== to)
+      lines.push(
+        `${label}: ${from === "rubric" ? "Three levels" : "Marks"} to ${to === "rubric" ? "Three levels" : "Marks"}`,
+      );
   }
   flip("Proctoring by AI", saved.aiEnabled, draft.aiEnabled);
   if (draft.proctoringType !== saved.proctoringType) {

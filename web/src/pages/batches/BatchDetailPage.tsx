@@ -11,6 +11,7 @@ import { visibleBatchActions, type BatchAction } from "./access";
 import { ActionDialog } from "./ActionDialog";
 import { BatchReportsSection } from "./BatchReportsSection";
 import { TestPaperSection } from "./TestPaperSection";
+import { TpSpocSection } from "./TpSpocSection";
 import { BATCH_ACTION_LABELS, BATCH_STATUS_LABELS } from "./labels";
 import { formatInstant } from "./sla";
 import { SlaTimeline } from "./SlaCountdown";
@@ -266,10 +267,11 @@ export function BatchDetailPage() {
                 <h2>Settings</h2>
                 <p>
                   <Link to={`/batches/${batch.id}/settings`}>Batch settings</Link>: shuffling, marks shown to the
-                  candidate, flags, camera images, the candidate pop-up and location.
+                  candidate, flags, camera images, the candidate pop-up, location, the pass rule and how practical and viva are marked.
                 </p>
               </>
             ) : null}
+            <TpSpocSection key={batch.updatedAt} batch={batch} role={session.user.role} />
             <TestPaperSection batch={batch} role={session.user.role} />
             {REPORT_ROLES.includes(session.user.role) ? <BatchReportsSection batchId={batch.id} /> : null}
             <CandidateRoster batch={batch} role={session.user.role} />

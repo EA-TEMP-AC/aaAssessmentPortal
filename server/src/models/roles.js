@@ -275,6 +275,9 @@ export const BATCH_TEST_PAPER_ROLES = Object.freeze(["aa_admin"]);
 /** PUT /batches/:id/capture-location. X-07: aa_admin turns location on flag photos on or off. */
 export const BATCH_CAPTURE_LOCATION_ROLES = Object.freeze(["aa_admin"]);
 
+/** PUT /batches/:id/tp-spoc. X-29: who may set the training partner's contact person on a batch. */
+export const BATCH_TP_SPOC_WRITE_ROLES = Object.freeze(["aa_admin", "mis", "tp"]);
+
 /** GET /tests, GET /tests/:id, regenerate-check. E-01: candidate, tp and the rest get nothing. */
 export const TEST_READ_ROLES = Object.freeze(["aa_admin", "sme", "ab_reviewer"]);
 /** Sector coverage reads. Q-05: same readers as the question bank. */

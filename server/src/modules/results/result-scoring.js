@@ -1,5 +1,6 @@
 import { compliance } from "../../config/compliance.js";
 import { passMarkInvalid } from "../../lib/errors.js";
+import { RUBRIC_LEVELS } from "../../config/batch-settings.js";
 import { MARK_COMPONENTS } from "../master-data/pass-marks.js";
 
 /**
@@ -105,4 +106,49 @@ export function outcomeFromMarks(qualification, nosMarks) {
     ),
   );
   return passed ? "Pass" : "Fail";
+}
+
+/**
+ * X-29. The qualification as this batch judges it. With `passCriteria: "qualification"` nothing
+ * changes. Otherwise one percentage applies to theory, practical and viva, per NOS or on the sums.
+ */
+export function withBatchPassRule(qualification, settings) {
+  if (!settings || settings.passCriteria === "qualification") return qualification;
+  const p = settings.passPercentage;
+  return {
+    ...qualification,
+    passCriteriaMode: settings.passCriteria,
+    passMarkUnit: "percent",
+    passMarks: { theory: p, practical: p, viva: p },
+  };
+}
+
+/**
+ * X-29. With rubric marking a practical or viva mark must be one of the three levels of its ceiling
+ * (100%, 70% or 10%). Needs a known ceiling; without one the mark cannot be checked and is left alone.
+ */
+export function assertRubricMarks(qualification, candidateId, nosMarks, settings) {
+  const rubric = {
+    practical: settings.practicalMarking === "rubric",
+    viva: settings.vivaMarking === "rubric",
+  };
+  if (!rubric.practical && !rubric.viva) return;
+  const byId = new Map((qualification.nos ?? []).map((nos) => [nos.nosId, nos]));
+  for (const entry of nosMarks) {
+    const nos = byId.get(entry.nosId);
+    if (!nos) continue;
+    for (const component of ["practical", "viva"]) {
+      const mark = entry[component];
+      if (!rubric[component] || !isMark(mark)) continue;
+      const max = componentCeiling(qualification, nos, component);
+      if (max == null) continue;
+      const allowed = RUBRIC_LEVELS.map((level) => (max * level.percent) / 100);
+      if (!allowed.some((value) => Math.abs(value - mark) < 1e-9)) {
+        throw passMarkInvalid(
+          `${component} marks for NOS ${entry.nosId} must be one of the rubric levels`,
+          { candidateId, nosId: entry.nosId, component, allowed },
+        );
+      }
+    }
+  }
 }

@@ -1047,6 +1047,89 @@ describe("batch settings (B-20)", () => {
     });
   });
 
+  describe("pass rule, marking type and TP contact (X-29)", () => {
+    const putSpoc = (who, w, body) =>
+      request(app).put(`/api/v1/batches/${w.batch._id}/tp-spoc`).set(bearer(who.token)).send(body);
+
+    it("defaults to the qualification's rule and typed marks", async () => {
+      const w = await world();
+      expect((await getSettings(w.admin, w)).body.settings).toMatchObject({
+        passCriteria: "qualification",
+        passPercentage: 50,
+        practicalMarking: "marks",
+        vivaMarking: "marks",
+      });
+    });
+
+    it("stores the rule and the marking type, and rejects wrong values", async () => {
+      const w = await world();
+      const ok = await patchSettings(w.admin, w, {
+        passCriteria: "overall",
+        passPercentage: 60,
+        practicalMarking: "rubric",
+        vivaMarking: "rubric",
+      });
+      expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+      expect(ok.body.settings).toMatchObject({ passCriteria: "overall", passPercentage: 60 });
+      for (const bad of [
+        { passCriteria: "any" },
+        { passPercentage: 0 },
+        { passPercentage: 101 },
+        { passPercentage: 50.5 },
+        { practicalMarking: "stars" },
+        { vivaMarking: true },
+      ]) {
+        expectError(await patchSettings(w.admin, w, bad), 400, "VALIDATION_ERROR");
+      }
+    });
+
+    it("locks the rule once marks were saved, but other settings stay open", async () => {
+      const w = await world();
+      await Result.collection.insertOne({ batchId: w.batch._id, status: "draft", rows: [] });
+      expectError(
+        await patchSettings(w.admin, w, { passPercentage: 70 }),
+        409,
+        "BATCH_SETTINGS_LOCKED",
+      );
+      expectError(
+        await patchSettings(w.admin, w, { practicalMarking: "rubric" }),
+        409,
+        "BATCH_SETTINGS_LOCKED",
+      );
+      expect((await patchSettings(w.admin, w, { shuffleOptions: true })).status).toBe(200);
+      // Saving the same value again is not a change.
+      expect((await patchSettings(w.admin, w, { passPercentage: 50 })).status).toBe(200);
+    });
+
+    it("sets the TP contact: the batch's own tp, aa_admin and mis only; name needed; not in the audit", async () => {
+      const w = await world();
+      const body = { name: "Nitin Sharma", contact: "+91 98765 43210" };
+      const ok = await putSpoc(w.tp, w, body);
+      expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+      expect(ok.body.tpSpoc).toEqual(body);
+      expect((await putSpoc(w.admin, w, { name: "Asha" })).body.tpSpoc).toEqual({
+        name: "Asha",
+        contact: null,
+      });
+      expect((await putSpoc(w.mis, w, body)).status).toBe(200);
+      expectError(await putSpoc(w.otherTp, w, body), 403, "FORBIDDEN");
+      for (const who of [w.proctor, w.assessor, w.candidate]) {
+        expectError(await putSpoc(who, w, body), 403, "FORBIDDEN");
+      }
+      for (const bad of [
+        { contact: "98765" },
+        { name: "" },
+        { name: "A", contact: "abc 123 4567" },
+        { name: "A", aadhaar: "123412341234" },
+      ]) {
+        expectError(await putSpoc(w.admin, w, bad), 400, "VALIDATION_ERROR");
+      }
+      const rows = await AuditLog.find({ action: "batch.set_tp_spoc" }).lean();
+      expect(rows.length).toBeGreaterThan(0);
+      expect(JSON.stringify(rows)).not.toMatch(/Nitin|98765/);
+    });
+  });
+
   describe("mock safeguard (X-22)", () => {
     it("refuses the mock switch on a batch linked to a scheme, allows it otherwise", async () => {
       const w = await world();

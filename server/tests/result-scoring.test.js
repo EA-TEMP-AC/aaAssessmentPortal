@@ -2,6 +2,8 @@ import {
   assertMarksWithinCeilings,
   componentCeiling,
   outcomeFromMarks,
+  assertRubricMarks,
+  withBatchPassRule,
 } from "../src/modules/results/result-scoring.js";
 
 const nos = (nosId, maxMarks) => ({ nosId, code: nosId, name: nosId, maxMarks, pcs: [] });
@@ -99,5 +101,67 @@ describe("result scoring", () => {
       });
     }
     expect(() => assertMarksWithinCeilings(q, "k1", [marks("NOS-01", 10, 101, 10)])).toThrow();
+  });
+});
+
+describe("batch pass rule and rubric marking (X-29)", () => {
+  const defaults = {
+    passCriteria: "qualification",
+    passPercentage: 50,
+    practicalMarking: "marks",
+    vivaMarking: "marks",
+  };
+
+  it("leaves the qualification alone unless the batch has its own rule", () => {
+    const q = qualification();
+    expect(withBatchPassRule(q, defaults)).toBe(q);
+  });
+
+  it("judges by the batch percentage, NOS-wise or overall, for all three components", () => {
+    const q = qualification({ passMarks: { theory: 90, practical: 90, viva: 90 } });
+    const rows = [marks("NOS-01", 70, 70, 70), marks("NOS-02", 40, 40, 40)];
+    expect(outcomeFromMarks(q, rows)).toBe("Fail");
+    const overall = withBatchPassRule(q, {
+      ...defaults,
+      passCriteria: "overall",
+      passPercentage: 55,
+    });
+    expect(overall.passMarks).toEqual({ theory: 55, practical: 55, viva: 55 });
+    expect(outcomeFromMarks(overall, rows)).toBe("Pass");
+    const nosWise = withBatchPassRule(q, {
+      ...defaults,
+      passCriteria: "nos_wise",
+      passPercentage: 55,
+    });
+    expect(outcomeFromMarks(nosWise, rows)).toBe("Fail");
+    expect(q.passMarks.theory).toBe(90);
+  });
+
+  it("accepts only the three rubric levels when the batch marks practical or viva by rubric", () => {
+    const q = qualification();
+    const rubric = { ...defaults, practicalMarking: "rubric", vivaMarking: "rubric" };
+    expect(() =>
+      assertRubricMarks(
+        q,
+        "c1",
+        [marks("NOS-01", 33, 100, 70), marks("NOS-02", 99, 10, 10)],
+        rubric,
+      ),
+    ).not.toThrow();
+    expect(() => assertRubricMarks(q, "c1", [marks("NOS-01", 50, 69, 70)], rubric)).toThrow(
+      /rubric levels/,
+    );
+    expect(() => assertRubricMarks(q, "c1", [marks("NOS-01", 50, 100, 71)], rubric)).toThrow(
+      /rubric levels/,
+    );
+    // Theory is never a rubric; typed marks stay free when the batch marks by number.
+    expect(() => assertRubricMarks(q, "c1", [marks("NOS-01", 51, 69, 71)], defaults)).not.toThrow();
+    const ofTwenty = qualification({
+      nos: [nos("NOS-01", { theory: 10, practical: 20, viva: 10 })],
+    });
+    expect(() =>
+      assertRubricMarks(ofTwenty, "c1", [marks("NOS-01", 5, 14, 7)], rubric),
+    ).not.toThrow();
+    expect(() => assertRubricMarks(ofTwenty, "c1", [marks("NOS-01", 5, 15, 7)], rubric)).toThrow();
   });
 });

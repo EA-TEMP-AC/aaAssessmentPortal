@@ -118,6 +118,7 @@ export function presentBatch(doc, { now = new Date(), recompute = true } = {}) {
     assessmentLanguage: doc.assessmentLanguage,
     state: doc.state,
     learnerFeedback: presentLearnerFeedback(doc.learnerFeedback),
+    tpSpoc: doc.tpSpoc ? { name: doc.tpSpoc.name, contact: doc.tpSpoc.contact ?? null } : null,
     recognitionOverride: presentRecognitionOverride(doc.recognitionOverride),
     status: doc.status,
     statusVersion: doc.statusVersion,

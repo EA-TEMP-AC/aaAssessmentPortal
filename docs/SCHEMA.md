@@ -409,6 +409,7 @@ Indexes: `{ code: 1 }` unique; `{ sector: 1 }`.
 | assessmentLanguage | string | Y | Trimmed, 1–80 characters. Scheduled language of this batch |
 | state | StateUt | Y | Copied from `centres.state` at create |
 | learnerFeedback | { collected: bool, reason: string\|null, note: string\|null, collectedOn: string\|null, recordedBy: ObjectId, recordedAt: Date } \| null | N | Null until recorded; one record, replaced on each PUT. Reason required when `collected` is false, otherwise null. `note` ≤2000 characters. `collectedOn` is `YYYY-MM-DD` IST, only when `collected` is true. Written by B-10 once the batch is `assessment_completed` or later (not `rejected` or `cancelled`). NCVET:FR §J; Annexure IX(a) Governance sub-parameter 4; docs/ERF.md row 26 |
+| tpSpoc | { name: string (1 to 120), contact: string\|null (8 to 20 digits, spaces and a leading + allowed) } \| null | N | X-29. The training partner's contact person for this batch. Personal data: set by `PUT /batches/:id/tp-spoc`, never written to audit rows (they only say whether one is set) |
 | settings | object | N | B-20. Per-batch settings, set by aa_admin with `PATCH /batches/:id/settings`. Absent on a batch nobody changed, which behaves exactly as before. Once set, the full shape below is stored. See "Batch settings" under this table |
 | recognitionOverride | { byUserId, reason, at, checks: string[] } \| null | N | Set when `aa_admin` overrides §4.3 |
 | status | BatchStatus | Y | |
@@ -465,6 +466,11 @@ Indexes: `{ code: 1 }` unique; `{ sector: 1 }`.
 | studentAttendance, studentFeedback | boolean | `true` | X-28. Stored only; attendance and learner feedback work as before whatever the value |
 | languages.theory, .practical, .viva | boolean | `false` | X-28. Stored only |
 | allowOjtImages | boolean | `false` | X-28. Stored only. No national ID switch exists (Aadhaar checks are not offered) |
+| passCriteria | `qualification` \| `nos_wise` \| `overall` | `qualification` | X-29. `qualification` keeps the qualification's pass rule. The other two replace it for this batch: one percentage (`passPercentage`) for theory, practical and viva, judged per NOS or on the sums |
+| passPercentage | integer 1 to 100 | 50 | X-29. Used only when `passCriteria` is not `qualification` |
+| practicalMarking, vivaMarking | `marks` \| `rubric` | `marks` | X-29. `rubric`: the mark of each NOS must be 100%, 70% or 10% of its ceiling (Good, Satisfactory, Poor; fixed levels) |
+
+The four X-29 settings cannot change once a result exists for the batch (`409 BATCH_SETTINGS_LOCKED`).
 | requireScreenShare | boolean | `false` | X-21. On: the candidate must share the whole screen on the check screen; `screen_share_stopped` (high) is raised if sharing ends. No screen image is kept |
 | imageCapture.intervalSeconds | integer 10 to 120 | `PROCTOR_SNAPSHOT_INTERVAL_SECONDS` (30) | Becomes `config.snapshotIntervalSeconds` of a new proctoring session |
 | imageCapture.atStartAndEnd | bool | true | Delivered as `config.snapshotAtStartAndEnd`; the engine does not act on it yet (Q807) |

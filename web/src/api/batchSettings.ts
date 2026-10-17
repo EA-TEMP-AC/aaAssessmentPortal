@@ -59,6 +59,23 @@ export const LOCATION_ROLE_LABELS: Record<LocationRole, string> = {
 export type VideoFailureAction = "continue" | "require";
 
 /** X-28 (ThinkExam parity). */
+/** X-29 */
+export const PASS_CRITERIA_CHOICES = [
+  "qualification",
+  "nos_wise",
+  "overall",
+] as const;
+export type PassCriteria = (typeof PASS_CRITERIA_CHOICES)[number];
+export const PASS_PERCENTAGE_MIN = 1;
+export const PASS_PERCENTAGE_MAX = 100;
+export const MARKING_TYPES = ["marks", "rubric"] as const;
+export type MarkingType = (typeof MARKING_TYPES)[number];
+/** X-29: the three fixed levels used when practical or viva is marked by rubric. */
+export const RUBRIC_LEVELS = [
+  { key: "good", label: "Good", percent: 100 },
+  { key: "satisfactory", label: "Satisfactory", percent: 70 },
+  { key: "poor", label: "Poor", percent: 10 },
+] as const;
 export const PROCTORING_TYPES = ["automatic", "manual"] as const;
 export type ProctoringType = (typeof PROCTORING_TYPES)[number];
 export const UFM_EVIDENCE_TYPES = ["image", "video"] as const;
@@ -121,6 +138,11 @@ export type BatchSettings = {
   studentFeedback: boolean;
   languages: Record<LanguagePart, boolean>;
   allowOjtImages: boolean;
+  /** X-29: `qualification` keeps the qualification's pass rule; the other two replace it for this batch. */
+  passCriteria: PassCriteria;
+  passPercentage: number;
+  practicalMarking: MarkingType;
+  vivaMarking: MarkingType;
 };
 
 export type BatchSettingsPatch = Partial<
@@ -174,6 +196,10 @@ export const DEFAULT_BATCH_SETTINGS: BatchSettings = {
   studentFeedback: true,
   languages: { theory: false, practical: false, viva: false },
   allowOjtImages: false,
+  passCriteria: "qualification",
+  passPercentage: 50,
+  practicalMarking: "marks",
+  vivaMarking: "marks",
 };
 
 function bad(what: string): ApiError {
@@ -291,6 +317,13 @@ export function parseBatchSettings(value: unknown): BatchSettings {
       viva: bool(languages.viva, d.languages.viva),
     },
     allowOjtImages: bool(root.allowOjtImages, d.allowOjtImages),
+    passCriteria:
+      root.passCriteria === "nos_wise" || root.passCriteria === "overall"
+        ? root.passCriteria
+        : "qualification",
+    passPercentage: int(root.passPercentage, d.passPercentage),
+    practicalMarking: root.practicalMarking === "rubric" ? "rubric" : "marks",
+    vivaMarking: root.vivaMarking === "rubric" ? "rubric" : "marks",
   };
 }
 

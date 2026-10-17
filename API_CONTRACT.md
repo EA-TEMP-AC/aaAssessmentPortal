@@ -535,6 +535,12 @@ X-22. Every batch response has `mockTest` (true when the batch setting `skipPape
 X-07. Role: `aa_admin` only; every other role `403`. Body `{ "captureLocation": true|false }` (the only key; a non-boolean or any other key is `400 VALIDATION_ERROR`). Returns the batch (`200`, with `captureLocation`). Unknown batch `404`. Any batch status. `captureLocation` is on every batch response and defaults to `false`. When it is `true` the candidate's browser may add its location to flag photos (see Proctoring, flag photos). Turning it off stops new coordinates being kept; coordinates already saved stay with their flags.
 Audit: `batch.set_capture_location`, entity `batch`, `before: { captureLocation }`, `after: { captureLocation }`.
 
+### PUT /batches/:id/tp-spoc
+X-29. Sets the training partner's contact person. Roles: `aa_admin`, `mis`, `tp` (the batch's own training partner). Body `{ name, contact? }`: `name` 1 to 120 characters; `contact` optional, 8 to 20 digits, spaces and a leading `+` allowed; unknown keys (a national ID, say) are `400 VALIDATION_ERROR`. Returns the batch, which now carries `tpSpoc: { name, contact } | null`. Audit `batch.set_tp_spoc` holds only `{ tpSpocSet, hasContactNumber }`, never the name or number. `403` for other roles or another training partner; `404` unknown batch.
+
+### Batch settings added by X-29
+`PATCH /batches/:id/settings` also takes `passCriteria` (`qualification` | `nos_wise` | `overall`), `passPercentage` (integer 1 to 100), `practicalMarking` and `vivaMarking` (`marks` | `rubric`). When `passCriteria` is not `qualification`, `PUT /batches/:id/results` and submit judge Pass/Fail with that percentage for theory, practical and viva (per NOS for `nos_wise`, on the sums for `overall`) instead of the qualification's pass marks. With `rubric`, a practical or viva mark whose ceiling is known must be 100%, 70% or 10% of it, otherwise `400 RESULT_PASS_MARK_INVALID` with `details.allowed`. Changing any of these four after a result exists: `409 BATCH_SETTINGS_LOCKED`.
+
 ### GET /batches/:id/learner-feedback
 
 Roles: `aa_admin`, `mis`, `ncvet_viewer` (all batches), `ab_reviewer` (own awarding body), `assessor` (assigned batch), `proctor` (assigned batch). `candidate`, `tp`, and `sme` get `403`. Any batch status; unknown id `404`; outside scope `403`.

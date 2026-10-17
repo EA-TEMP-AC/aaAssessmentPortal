@@ -9,6 +9,10 @@ import {
   IMAGE_INTERVAL_MIN_SECONDS,
   LANGUAGE_PARTS,
   LOCATION_VIEWER_ROLES,
+  MARKING_TYPES,
+  PASS_CRITERIA_CHOICES,
+  PASS_PERCENTAGE_MAX,
+  PASS_PERCENTAGE_MIN,
   PROCTORING_TYPES,
   UFM_EVIDENCE_TYPES,
   VIDEO_FAILURE_ACTIONS,
@@ -170,6 +174,11 @@ const batchSettingsSchema = new mongoose.Schema(
       default: undefined,
     },
     allowOjtImages: { type: Boolean },
+    // X-29
+    passCriteria: { type: String, enum: PASS_CRITERIA_CHOICES },
+    passPercentage: { type: Number, min: PASS_PERCENTAGE_MIN, max: PASS_PERCENTAGE_MAX },
+    practicalMarking: { type: String, enum: MARKING_TYPES },
+    vivaMarking: { type: String, enum: MARKING_TYPES },
   },
   { _id: false },
 );
@@ -196,6 +205,17 @@ const batchSchema = new mongoose.Schema(
     assessmentLanguage: { type: String, required: true, trim: true, minlength: 1, maxlength: 80 },
     state: { type: String, required: true, enum: STATE_UTS },
     learnerFeedback: { type: learnerFeedbackSchema, default: null },
+    // X-29: the training partner's contact person for this batch. Personal data: never in audit rows.
+    tpSpoc: {
+      type: new mongoose.Schema(
+        {
+          name: { type: String, required: true, trim: true, minlength: 1, maxlength: 120 },
+          contact: { type: String, default: null, match: /^\+?\d[\d ]{6,18}\d$/ },
+        },
+        { _id: false },
+      ),
+      default: null,
+    },
     settings: { type: batchSettingsSchema, default: undefined },
     recognitionOverride: { type: recognitionOverrideSchema, default: null },
     status: { type: String, required: true, enum: BATCH_STATUSES },

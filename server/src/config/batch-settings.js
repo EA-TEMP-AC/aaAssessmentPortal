@@ -37,6 +37,21 @@ export const AI_FLAG_TYPES = Object.freeze([
   "looking_away",
   "voice_detected",
 ]);
+/**
+ * X-29. `qualification` keeps the pass rule of the qualification. `nos_wise` and `overall` replace its
+ * rule for this batch: one percentage for theory, practical and viva, judged per NOS or on the sums.
+ */
+export const PASS_CRITERIA_CHOICES = Object.freeze(["qualification", "nos_wise", "overall"]);
+export const PASS_PERCENTAGE_MIN = 1;
+export const PASS_PERCENTAGE_MAX = 100;
+/** X-29. `rubric`: the assessor picks one of the three levels below instead of typing a mark. */
+export const MARKING_TYPES = Object.freeze(["marks", "rubric"]);
+/** X-29. Fixed for every batch (the human chose the three levels of the reference system). */
+export const RUBRIC_LEVELS = Object.freeze([
+  Object.freeze({ key: "good", label: "Good", percent: 100 }),
+  Object.freeze({ key: "satisfactory", label: "Satisfactory", percent: 70 }),
+  Object.freeze({ key: "poor", label: "Poor", percent: 10 }),
+]);
 export const IMAGE_INTERVAL_MIN_SECONDS = 10;
 export const IMAGE_INTERVAL_MAX_SECONDS = 120;
 /** The only personal fields the pop-up can ask for. There is deliberately no national ID field. */
@@ -105,6 +120,11 @@ export function defaultBatchSettings() {
     studentFeedback: true,
     languages: { theory: false, practical: false, viva: false },
     allowOjtImages: false,
+    // X-29: a pass rule for this batch only; `qualification` leaves the qualification's rule alone.
+    passCriteria: "qualification",
+    passPercentage: 50,
+    practicalMarking: "marks",
+    vivaMarking: "marks",
   };
 }
 
@@ -170,5 +190,9 @@ export function resolveBatchSettings(stored) {
       LANGUAGE_PARTS.map((part) => [part, stored.languages?.[part] ?? base.languages[part]]),
     ),
     allowOjtImages: stored.allowOjtImages ?? base.allowOjtImages,
+    passCriteria: stored.passCriteria ?? base.passCriteria,
+    passPercentage: stored.passPercentage ?? base.passPercentage,
+    practicalMarking: stored.practicalMarking ?? base.practicalMarking,
+    vivaMarking: stored.vivaMarking ?? base.vivaMarking,
   };
 }

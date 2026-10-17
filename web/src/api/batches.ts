@@ -129,6 +129,8 @@ export type BatchRecord = {
   testPaperId: string | null;
   /** X-22: the batch is set up as a mock test (papers without reviewer approval). */
   mockTest?: boolean;
+  /** X-29: the training partner's contact person for this batch. */
+  tpSpoc?: { name: string; contact: string | null } | null;
   rejectReason: string | null;
   cancelReason: string | null;
   isReassessment: boolean;
@@ -443,6 +445,16 @@ export function parseBatch(value: unknown): BatchRecord {
     resultId,
     testPaperId,
     mockTest: value.mockTest === true,
+    tpSpoc:
+      isRecord(value.tpSpoc) && typeof value.tpSpoc.name === "string"
+        ? {
+            name: value.tpSpoc.name,
+            contact:
+              typeof value.tpSpoc.contact === "string"
+                ? value.tpSpoc.contact
+                : null,
+          }
+        : null,
     rejectReason,
     cancelReason,
     isReassessment: value.isReassessment,
@@ -507,6 +519,18 @@ export async function getBatch(
   const body = await apiRequest<unknown>(`/batches/${encodeURIComponent(id)}`, {
     signal,
   });
+  return parseBatch(body);
+}
+
+/** X-29: sets the training partner's contact person for a batch. */
+export async function saveTpSpoc(
+  id: string,
+  input: { name: string; contact: string | null },
+): Promise<BatchRecord> {
+  const body = await apiRequest<unknown>(
+    `/batches/${encodeURIComponent(id)}/tp-spoc`,
+    { method: "PUT", body: input },
+  );
   return parseBatch(body);
 }
 

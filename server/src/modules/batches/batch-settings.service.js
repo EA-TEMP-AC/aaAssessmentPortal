@@ -2,6 +2,7 @@ import { resolveBatchSettings } from "../../config/batch-settings.js";
 import { AppError, forbidden, notFound, validationError } from "../../lib/errors.js";
 import { isInBatchScope } from "../../middleware/scope.js";
 import { Batch } from "../../models/batch.model.js";
+import { Result } from "../../models/result.model.js";
 
 const idOf = (value) => (value == null ? null : value.toString());
 
@@ -73,6 +74,18 @@ export async function updateBatchSettings(user, id, patch) {
         .map(([key]) => [key, ["Turn on exam video recording first"]]),
     );
     if (Object.keys(errors).length > 0) throw validationError("Request validation failed", errors);
+  }
+  // X-29: the pass rule and the marking type cannot change once marks have been saved for the batch.
+  const RESULT_KEYS = ["passCriteria", "passPercentage", "practicalMarking", "vivaMarking"];
+  if (
+    RESULT_KEYS.some((key) => after[key] !== before[key]) &&
+    (await Result.exists({ batchId: existing._id }))
+  ) {
+    throw new AppError(
+      409,
+      "BATCH_SETTINGS_LOCKED",
+      "The pass rule and the marking type cannot be changed after marks were saved for this batch",
+    );
   }
   // X-22: a batch under a scheme is a real assessment; it cannot be switched to a mock test.
   if (after.skipPaperApproval === true && before.skipPaperApproval !== true && existing.schemeId) {

@@ -1,3 +1,4 @@
+import { resolveBatchSettings } from "../../config/batch-settings.js";
 import {
   forbidden,
   invalidTransition,
@@ -23,7 +24,12 @@ import { attendanceByCandidate } from "../attendance/attendance.service.js";
 import { resolveTransition, rolesForAction } from "../batches/batch-transitions.js";
 import { loadReadableBatch } from "../batches/batch.service.js";
 import { MARK_COMPONENTS } from "../master-data/pass-marks.js";
-import { assertMarksWithinCeilings, outcomeFromMarks } from "./result-scoring.js";
+import {
+  assertMarksWithinCeilings,
+  assertRubricMarks,
+  outcomeFromMarks,
+  withBatchPassRule,
+} from "./result-scoring.js";
 
 /** PUT results is open only here. docs/SCHEMA.md §3.14. */
 export const RESULT_EDIT_BATCH_STATUS = "assessment_completed";
@@ -163,11 +169,14 @@ async function activeCandidateIds(batchId) {
  * @param {Array<object>} inputRows `{ candidateId, absent?, outcome?, nos }`
  */
 async function computeRows(batch, inputRows) {
-  const [qualification, activeIds, attendance] = await Promise.all([
+  const [storedQualification, activeIds, attendance] = await Promise.all([
     loadQualification(batch),
     activeCandidateIds(batch._id),
     attendanceByCandidate(batch._id),
   ]);
+  // X-29: the batch's own pass rule and marking type, when it has one.
+  const settings = resolveBatchSettings(batch.settings);
+  const qualification = withBatchPassRule(storedQualification, settings);
   const active = new Set(activeIds);
   const nosIds = new Set((qualification.nos ?? []).map((nos) => nos.nosId));
 
@@ -203,7 +212,10 @@ async function computeRows(batch, inputRows) {
 
   const mismatches = [];
   const computed = rows.map((row) => {
-    if (!row.absent) assertMarksWithinCeilings(qualification, row.candidateId, row.nos);
+    if (!row.absent) {
+      assertMarksWithinCeilings(qualification, row.candidateId, row.nos);
+      assertRubricMarks(qualification, row.candidateId, row.nos, settings);
+    }
     const built = presentRow({
       ...row,
       outcome: row.absent ? "Absent" : outcomeFromMarks(qualification, row.nos),

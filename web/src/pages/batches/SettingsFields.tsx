@@ -6,6 +6,8 @@ import {
   INTERVAL_MIN_SECONDS,
   LOCATION_ROLE_LABELS,
   LOCATION_ROLES,
+  PASS_PERCENTAGE_MAX,
+  PASS_PERCENTAGE_MIN,
   PAUSE_AFTER_MAX,
   PAUSE_AFTER_MIN,
 } from "../../api/batchSettings";
@@ -85,6 +87,7 @@ export function SettingsFields({
   hidePaperGroup?: boolean;
 }) {
   const ids = {
+    pass: useId(),
     after: useId(),
     unlock: useId(),
     interval: useId(),
@@ -557,6 +560,102 @@ export function SettingsFields({
             </label>
           ))}
         </fieldset>
+      </Group>
+
+      <Group title="Pass rule and marking">
+        <fieldset className="bare-fieldset">
+          <legend>Passing criteria</legend>
+          {(
+            [
+              [
+                "qualification",
+                "As set on the qualification",
+                "The pass marks of the qualification decide.",
+              ],
+              [
+                "nos_wise",
+                "NOS wise",
+                "Every NOS must reach the percentage below, in theory, practical and viva.",
+              ],
+              [
+                "overall",
+                "Overall",
+                "The marks of all NOS added together must reach the percentage below.",
+              ],
+            ] as const
+          ).map(([value, label, hint]) => (
+            <div key={value}>
+              <label className="check-label">
+                <input
+                  type="radio"
+                  name="pass-criteria"
+                  checked={draft.passCriteria === value}
+                  onChange={() => set("passCriteria", value)}
+                />{" "}
+                {label}
+              </label>
+              <p className="field-hint">{hint}</p>
+            </div>
+          ))}
+        </fieldset>
+        <div className="field">
+          <label htmlFor={ids.pass}>
+            Passing percentage ({PASS_PERCENTAGE_MIN} to {PASS_PERCENTAGE_MAX})
+          </label>
+          <input
+            id={ids.pass}
+            type="text"
+            inputMode="numeric"
+            value={draft.passPercentage}
+            disabled={draft.passCriteria === "qualification"}
+            aria-invalid={problems.passPercentage ? true : undefined}
+            aria-describedby={
+              problems.passPercentage ? `${ids.pass}-error` : `${ids.pass}-help`
+            }
+            onChange={(event) => set("passPercentage", event.target.value)}
+          />
+          <p id={`${ids.pass}-help`} className="field-hint">
+            One percentage for theory, practical and viva. It cannot be changed
+            after marks have been saved for the batch.
+          </p>
+          {problems.passPercentage ? (
+            <p id={`${ids.pass}-error`} className="field-error">
+              {problems.passPercentage}
+            </p>
+          ) : null}
+        </div>
+        {(
+          [
+            ["practicalMarking", "Practical marking", draft.practicalMarking],
+            ["vivaMarking", "Viva marking", draft.vivaMarking],
+          ] as const
+        ).map(([key, label, value]) => (
+          <fieldset key={key} className="bare-fieldset">
+            <legend>{label}</legend>
+            <label className="check-label">
+              <input
+                type="radio"
+                name={key}
+                checked={value === "marks"}
+                onChange={() => set(key, "marks")}
+              />{" "}
+              Type the marks
+            </label>
+            <label className="check-label">
+              <input
+                type="radio"
+                name={key}
+                checked={value === "rubric"}
+                onChange={() => set(key, "rubric")}
+              />{" "}
+              Three levels: Good (100%), Satisfactory (70%), Poor (10%)
+            </label>
+          </fieldset>
+        ))}
+        <p className="field-hint">
+          With three levels, the assessor picks a level for each NOS and the
+          marks are that share of the maximum.
+        </p>
       </Group>
 
       <Group title="Practical and viva">

@@ -10,6 +10,7 @@ import {
   BATCH_SETTINGS_READ_ROLES,
   BATCH_SETTINGS_WRITE_ROLES,
   BATCH_TEST_PAPER_ROLES,
+  BATCH_TP_SPOC_WRITE_ROLES,
   CANDIDATE_INFO_READ_ROLES,
   CANDIDATE_INFO_WRITE_ROLES,
   LEARNER_FEEDBACK_READ_ROLES,
@@ -32,7 +33,9 @@ import {
   reassignBodySchema,
   rejectBodySchema,
   testPaperBodySchema,
+  tpSpocBodySchema,
 } from "./batch.schemas.js";
+import { saveTpSpoc } from "./tp-spoc.service.js";
 import { mountBatchChildReadRoutes } from "../attendance/attendance.routes.js";
 import { mountAssessorPaymentRoutes } from "../assessor-payments/assessor-payment.routes.js";
 import { mountEvidenceBatchRoutes } from "../evidence/evidence.routes.js";
@@ -182,6 +185,26 @@ batchesRouter.put(
       batchId: saved.batch.id,
       before: { learnerFeedback: saved.before },
       after: { learnerFeedback: saved.after },
+    });
+    await res.status(200).json(saved.batch);
+  }),
+);
+
+batchesRouter.put(
+  "/:id/tp-spoc",
+  requireRoles(...BATCH_TP_SPOC_WRITE_ROLES),
+  asyncHandler(async (req, res) => {
+    const { id } = batchIdParamSchema.parse(req.params);
+    const body = tpSpocBodySchema.parse(req.body ?? {});
+    const saved = await saveTpSpoc(req.user, id, body);
+    setAudit(req, {
+      action: "batch.set_tp_spoc",
+      entity: "batch",
+      entityId: saved.batch.id,
+      abId: saved.abId,
+      batchId: saved.batch.id,
+      before: saved.before,
+      after: saved.after,
     });
     await res.status(200).json(saved.batch);
   }),

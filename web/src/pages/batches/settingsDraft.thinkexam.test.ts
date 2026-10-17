@@ -102,3 +102,68 @@ describe("ThinkExam switches (X-28)", () => {
     ).toBeUndefined();
   });
 });
+
+describe("pass rule and marking type (X-29)", () => {
+  const saved = DEFAULT_BATCH_SETTINGS;
+
+  it("defaults to the qualification's rule and typed marks", () => {
+    expect(saved).toMatchObject({
+      passCriteria: "qualification",
+      passPercentage: 50,
+      practicalMarking: "marks",
+      vivaMarking: "marks",
+    });
+    expect(parseBatchSettings({ settings: {} }).passCriteria).toBe(
+      "qualification",
+    );
+    expect(
+      parseBatchSettings({
+        settings: { passCriteria: "overall", passPercentage: 65 },
+      }),
+    ).toMatchObject({
+      passCriteria: "overall",
+      passPercentage: 65,
+    });
+  });
+
+  it("sends the rule, the percentage and the marking type, and describes them", () => {
+    const draft = {
+      ...toDraft(saved),
+      passCriteria: "nos_wise" as const,
+      passPercentage: "60",
+      practicalMarking: "rubric" as const,
+    };
+    expect(buildPatch(saved, draft)).toEqual({
+      passCriteria: "nos_wise",
+      passPercentage: 60,
+      practicalMarking: "rubric",
+    });
+    const lines = describeChanges(saved, draft).join("\n");
+    expect(lines).toMatch(
+      /Pass rule: The qualification's own rule to NOS wise/,
+    );
+    expect(lines).toMatch(/Pass percentage: 50 to 60/);
+    expect(lines).toMatch(/Practical marking: Marks to Three levels/);
+  });
+
+  it("checks the percentage only when the batch has its own rule", () => {
+    const draft = { ...toDraft(saved), passPercentage: "0" };
+    expect(validateDraft(draft).passPercentage).toBeUndefined();
+    for (const bad of ["0", "101", "abc", ""]) {
+      expect(
+        validateDraft({
+          ...draft,
+          passCriteria: "overall",
+          passPercentage: bad,
+        }).passPercentage,
+      ).toMatch(/whole number from 1 to 100/);
+    }
+    expect(
+      validateDraft({
+        ...draft,
+        passCriteria: "overall",
+        passPercentage: "100",
+      }).passPercentage,
+    ).toBeUndefined();
+  });
+});

@@ -11,6 +11,10 @@ import {
   IMAGE_INTERVAL_MIN_SECONDS,
   LANGUAGE_PARTS,
   LOCATION_VIEWER_ROLES,
+  MARKING_TYPES,
+  PASS_CRITERIA_CHOICES,
+  PASS_PERCENTAGE_MAX,
+  PASS_PERCENTAGE_MIN,
   PROCTORING_TYPES,
   UFM_EVIDENCE_TYPES,
   VIDEO_FAILURE_ACTIONS,
@@ -134,6 +138,18 @@ export const testPaperBodySchema = z.object({ testPaperId: objectIdSchema }).str
 
 /** X-07: PUT /batches/:id/capture-location. */
 export const captureLocationBodySchema = z.object({ captureLocation: z.boolean() }).strict();
+
+/** PUT /batches/:id/tp-spoc. X-29. Name needed; contact optional, 8 to 20 digits, spaces and a leading + allowed. */
+export const tpSpocBodySchema = z
+  .object({
+    name: z.string().trim().min(1).max(120),
+    contact: z
+      .string()
+      .trim()
+      .regex(/^\+?\d[\d ]{6,18}\d$/, "Enter a phone number with 8 to 20 digits")
+      .nullish(),
+  })
+  .strict();
 
 /** PUT /batches/:id/learner-feedback. `reason` is required exactly when `collected` is false. */
 export const learnerFeedbackBodySchema = z
@@ -259,6 +275,10 @@ export const batchSettingsBodySchema = guard(
         .partial()
         .strict(),
       allowOjtImages: z.boolean(),
+      passCriteria: z.enum(PASS_CRITERIA_CHOICES),
+      passPercentage: z.number().int().min(PASS_PERCENTAGE_MIN).max(PASS_PERCENTAGE_MAX),
+      practicalMarking: z.enum(MARKING_TYPES),
+      vivaMarking: z.enum(MARKING_TYPES),
     })
     .partial()
     .strict()
