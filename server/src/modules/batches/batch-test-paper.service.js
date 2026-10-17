@@ -3,6 +3,7 @@ import { sameLanguage } from "../../lib/language.js";
 import { Attempt } from "../../models/attempt.model.js";
 import { Batch } from "../../models/batch.model.js";
 import { TestPaper } from "../../models/test-paper.model.js";
+import { resolveBatchSettings } from "../../config/batch-settings.js";
 import { presentBatch } from "./batch.service.js";
 
 const idOf = (value) => (value == null ? null : value.toString());
@@ -29,7 +30,9 @@ export async function setBatchTestPaper(user, id, { testPaperId }) {
 
   const paper = await TestPaper.findById(testPaperId).select("-items").lean();
   if (!paper) throw notFound("Test paper not found");
-  if (paper.status !== "approved" || paper.complete !== true) {
+  // X-19: a batch set up for a mock test can use any complete paper without the reviewer's approval.
+  const skipApproval = resolveBatchSettings(existing.settings).skipPaperApproval === true;
+  if ((paper.status !== "approved" && !skipApproval) || paper.complete !== true) {
     throw new AppError(
       409,
       "BATCH_TEST_PAPER_NOT_APPROVED",

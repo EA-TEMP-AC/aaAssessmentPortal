@@ -67,6 +67,8 @@ export type BatchSettings = {
   imageCapture: { intervalSeconds: number; atStartAndEnd: boolean };
   candidateInfoPopup: { enabled: boolean; fields: InfoField[] };
   captureLocation: boolean;
+  /** X-19: a complete paper can be used without the reviewer's approval (mock tests). */
+  skipPaperApproval: boolean;
   /** X-16: raise the looking-away flag from the camera. */
   detectLookingAway: boolean;
   /** X-16: raise the voice-heard flag from the microphone loudness. */
@@ -99,6 +101,7 @@ export const DEFAULT_BATCH_SETTINGS: BatchSettings = {
   imageCapture: { intervalSeconds: 30, atStartAndEnd: true },
   candidateInfoPopup: { enabled: false, fields: [] },
   captureLocation: false,
+  skipPaperApproval: false,
   detectLookingAway: true,
   detectVoice: true,
   locationVisibleTo: ["tp", "proctor"],
@@ -172,6 +175,7 @@ export function parseBatchSettings(value: unknown): BatchSettings {
         : [],
     },
     captureLocation: bool(root.captureLocation, d.captureLocation),
+    skipPaperApproval: bool(root.skipPaperApproval, d.skipPaperApproval),
     detectLookingAway: bool(root.detectLookingAway, d.detectLookingAway),
     detectVoice: bool(root.detectVoice, d.detectVoice),
     locationVisibleTo: Array.isArray(root.locationVisibleTo)

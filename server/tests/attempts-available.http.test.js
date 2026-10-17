@@ -404,6 +404,29 @@ describe("GET /api/v1/attempts/available (B-19)", () => {
     });
   });
 
+  describe("mock-test batches (X-19)", () => {
+    it("lists and starts a draft paper only when the batch skips the reviewer's approval", async () => {
+      await TestPaper.updateOne({ _id: w.paper._id }, { status: "draft" });
+      // Not approved and the batch does not skip approval: not listed, and start looks the same.
+      expect(await itemsOf(w.candidate)).toEqual([]);
+      expect((await start(w.candidate, w.batch._id, w.paper._id)).status).toBe(404);
+
+      await Batch.updateOne({ _id: w.batch._id }, { $set: { "settings.skipPaperApproval": true } });
+      const items = await itemsOf(w.candidate);
+      expect(items).toHaveLength(1);
+      expect(items[0].startable).toEqual({ ok: true });
+      expect((await start(w.candidate, w.batch._id, w.paper._id)).status).toBe(201);
+
+      // An incomplete paper is never usable, whatever the setting.
+      await TestPaper.updateOne({ _id: w.otherPaper._id }, { status: "draft", complete: false });
+      await Batch.updateOne(
+        { _id: w.otherBatch._id },
+        { $set: { "settings.skipPaperApproval": true } },
+      );
+      expect((await start(w.otherCandidate, w.otherBatch._id, w.otherPaper._id)).status).toBe(404);
+    });
+  });
+
   describe("list and start agree", () => {
     const absent = () =>
       AttendanceRecord.create({

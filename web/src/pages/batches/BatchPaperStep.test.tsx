@@ -1,6 +1,7 @@
 import { fireEvent, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { DEFAULT_BATCH_SETTINGS } from "../../api/batchSettings";
 import { setSession } from "../../api/session";
 import { IDS, batchRecord, emptyMasterList } from "../../test/batchFixtures";
 import { jsonResponse, sessionFor } from "../../test/fixtures";
@@ -193,5 +194,99 @@ describe("create batch with a paper step (X-18)", () => {
     renderApp("/batches/new");
     await screen.findByLabelText("Awarding body");
     expect(screen.queryByText(/Question paper/)).not.toBeInTheDocument();
+  });
+});
+
+describe("create batch: mock test and exam settings (X-19)", () => {
+  const settingsReply = (url: URL, init?: RequestInit) =>
+    (init?.method ?? "GET").toUpperCase() === "PATCH" && url.pathname.endsWith("/settings")
+      ? jsonResponse(200, { settings: DEFAULT_BATCH_SETTINGS })
+      : null;
+
+  it("sends only the changed exam settings, then goes to the batch", async () => {
+    const user = userEvent.setup();
+    const mock = install(settingsReply);
+    setSession(sessionFor("aa_admin"));
+    renderApp("/batches/new");
+    await fillRequired();
+    await user.click(screen.getByRole("checkbox", { name: "Show marks to the candidate" }));
+    await user.click(screen.getByRole("checkbox", { name: "Check for talking" }));
+    await user.click(screen.getByRole("button", { name: "Create batch" }));
+    expect(await screen.findByRole("heading", { name: `Batch ${batchRecord().id}` })).toBeInTheDocument();
+    const patch = callsTo(mock, "PATCH", "/settings")[0];
+    expect(bodyOf(patch[1] as RequestInit)).toEqual({ showMarksToCandidate: true, detectVoice: false });
+  });
+
+  it("sends no settings call when nothing was changed", async () => {
+    const user = userEvent.setup();
+    const mock = install(settingsReply);
+    setSession(sessionFor("aa_admin"));
+    renderApp("/batches/new");
+    await fillRequired();
+    await user.click(screen.getByRole("button", { name: "Create batch" }));
+    expect(await screen.findByRole("heading", { name: `Batch ${batchRecord().id}` })).toBeInTheDocument();
+    expect(callsTo(mock, "PATCH", "/settings")).toHaveLength(0);
+  });
+
+  it("mock test: saves the switch first, builds the paper and sets it without sending it to the reviewer", async () => {
+    const user = userEvent.setup();
+    const order: string[] = [];
+    const mock = install((url, init) => {
+      const method = (init?.method ?? "GET").toUpperCase();
+      const settings = settingsReply(url, init);
+      if (settings) {
+        order.push("settings");
+        return settings;
+      }
+      if (method === "POST" && url.pathname.endsWith("/tests/generate")) {
+        order.push("generate");
+        return jsonResponse(201, paperDoc());
+      }
+      if (method === "PUT" && url.pathname.endsWith("/test-paper")) {
+        order.push("set-paper");
+        return jsonResponse(200, batchRecord());
+      }
+      return null;
+    });
+    setSession(sessionFor("aa_admin"));
+    renderApp("/batches/new");
+    await fillRequired();
+    await user.click(screen.getByRole("checkbox", { name: "Mock test: use a paper without the reviewer's approval" }));
+    await user.click(screen.getByRole("radio", { name: "Build a new paper from the question bank" }));
+    await user.type(screen.getByLabelText("Number of questions"), "4");
+    expect(screen.queryByText(/Send the new paper to the awarding body reviewer/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Create batch" }));
+    expect(await screen.findByText(/the new paper was set on it for the mock test/)).toBeInTheDocument();
+    expect(order).toEqual(["settings", "generate", "set-paper"]);
+    expect(bodyOf(callsTo(mock, "PATCH", "/settings")[0][1] as RequestInit)).toEqual({ skipPaperApproval: true });
+    expect(callsTo(mock, "POST", `/tests/${PAPER_ID}/submit`)).toHaveLength(0);
+  });
+
+  it("keeps the batch and skips the paper when the settings cannot be saved", async () => {
+    const user = userEvent.setup();
+    const mock = install((url, init) => {
+      const method = (init?.method ?? "GET").toUpperCase();
+      if (method === "PATCH" && url.pathname.endsWith("/settings")) {
+        return jsonResponse(500, { error: { code: "INTERNAL", message: "Could not save" } });
+      }
+      if (method === "GET" && url.pathname.endsWith("/tests")) {
+        return jsonResponse(200, {
+          page: 1,
+          pageSize: 100,
+          total: 1,
+          items: [paperDoc({ status: "approved", rules: { language: "hi", quotas: [] } })],
+        });
+      }
+      return null;
+    });
+    setSession(sessionFor("aa_admin"));
+    renderApp("/batches/new");
+    await fillRequired();
+    await user.click(screen.getByRole("checkbox", { name: "Show marks to the candidate" }));
+    await user.click(screen.getByRole("radio", { name: "Use an approved paper" }));
+    await user.selectOptions(await screen.findByLabelText("Approved paper"), PAPER_ID);
+    await user.click(screen.getByRole("button", { name: "Create batch" }));
+    expect(await screen.findByText(/exam settings could not be saved/)).toBeInTheDocument();
+    expect(callsTo(mock, "PUT", "/test-paper")).toHaveLength(0);
   });
 });

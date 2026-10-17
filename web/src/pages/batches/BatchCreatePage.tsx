@@ -16,10 +16,13 @@ import { FormAlert } from "../masterData/dialog";
 import { useProjectOptions, useSchemeOptions } from "../schemes/schemeData";
 import { serverFieldErrors } from "../schemes/schemeWrite";
 import { canAssignBatchPaper } from "../../routing/access";
+import { DEFAULT_BATCH_SETTINGS, saveBatchSettings } from "../../api/batchSettings";
 import { generatePaper, setBatchTestPaper, submitPaper } from "../../api/testPapers";
 import { nosOf, useQualifications } from "../questionBank/qualifications";
 import { canCreateBatch } from "./access";
 import { BatchPaperStep } from "./BatchPaperStep";
+import { SettingsFields } from "./SettingsFields";
+import { buildPatch, toDraft, validateDraft, type Draft } from "./settingsDraft";
 import { LATER_PLAN, buildPaperRequest, type PaperPlan } from "./paperPlan";
 
 const OBJECT_ID = /^[a-fA-F0-9]{24}$/;
@@ -64,6 +67,7 @@ export function BatchCreatePage() {
     recognitionOverrideReason: "",
   });
   const [paperPlan, setPaperPlan] = useState<PaperPlan>(LATER_PLAN);
+  const [settingsDraft, setSettingsDraft] = useState<Draft>(() => toDraft(DEFAULT_BATCH_SETTINGS));
   const [afterNote, setAfterNote] = useState<{ batchId: string; message: string } | null>(null);
   const [needRecognitionOverride, setNeedRecognitionOverride] = useState(false);
   const [pending, setPending] = useState(false);
@@ -139,7 +143,7 @@ export function BatchCreatePage() {
         <Link to="/batches">Back to batches</Link>
       </p>
       <h1>Create batch</h1>
-      {canChoosePaper ? <p className="field-hint">Step 1: batch details. Step 2 (optional): the question paper.</p> : null}
+      {canChoosePaper ? <p className="field-hint">Step 1: batch details. Step 2 (optional): the question paper. Step 3 (optional): exam settings.</p> : null}
       <p>Sector, ratio class, and state are copied by the server from the qualification and centre.</p>
       {afterNote ? (
         <p role="status" className="form-notice">
@@ -212,6 +216,9 @@ export function BatchCreatePage() {
             );
             if ("problem" in paperRequest) messages.push(paperRequest.problem);
           }
+          if (canChoosePaper) {
+            for (const text of Object.values(validateDraft(settingsDraft))) messages.push(text);
+          }
           if (messages.length > 0) {
             showError(messages.join(" "), fields);
             return;
@@ -242,7 +249,20 @@ export function BatchCreatePage() {
               if (!mounted.current) return;
               // X-18: the paper step runs after the batch exists. A failure here never undoes the batch.
               let note: string | null = null;
-              if (canChoosePaper && paperPlan.mode === "existing") {
+              // X-19: the settings go first, because a mock-test batch accepts a draft paper only once its switch is on.
+              const patch = canChoosePaper ? buildPatch(DEFAULT_BATCH_SETTINGS, settingsDraft) : {};
+              let settingsSaved = true;
+              if (Object.keys(patch).length > 0) {
+                try {
+                  await saveBatchSettings(saved.id, patch);
+                } catch (failure) {
+                  settingsSaved = false;
+                  note = `The batch was created, but the exam settings could not be saved. Set them on the batch settings page. ${errorMessage(failure)}`;
+                }
+              }
+              if (!settingsSaved) {
+                // Without the settings (for example the mock-test switch) the paper step would be refused or wrong.
+              } else if (canChoosePaper && paperPlan.mode === "existing") {
                 try {
                   await setBatchTestPaper(saved.id, paperPlan.paperId);
                 } catch (failure) {
@@ -251,8 +271,13 @@ export function BatchCreatePage() {
               } else if (canChoosePaper && paperPlan.mode === "build" && paperRequest && "input" in paperRequest) {
                 try {
                   const built = await generatePaper(paperRequest.input);
-                  if (paperPlan.sendForApproval) await submitPaper(built.id);
-                  note = `The batch was created. A draft paper${paperPlan.sendForApproval ? " was sent for approval" : " was saved"}. Set it on the batch page once it is approved.`;
+                  if (settingsDraft.skipPaperApproval) {
+                    await setBatchTestPaper(saved.id, built.id);
+                    note = "The batch was created and the new paper was set on it for the mock test.";
+                  } else {
+                    if (paperPlan.sendForApproval) await submitPaper(built.id);
+                    note = `The batch was created. A draft paper${paperPlan.sendForApproval ? " was sent for approval" : " was saved"}. Set it on the batch page once it is approved.`;
+                  }
                 } catch (failure) {
                   note = `The batch was created, but the paper could not be built. ${errorMessage(failure)}`;
                 }
@@ -556,7 +581,27 @@ export function BatchCreatePage() {
                 setPaperPlan(next);
                 setFormError(null);
               }}
+              skipApproval={settingsDraft.skipPaperApproval}
+              onSkipApprovalChange={(value) => setSettingsDraft((current) => ({ ...current, skipPaperApproval: value }))}
             />
+          ) : null}
+          {canChoosePaper ? (
+            <fieldset className="bare-fieldset">
+              <legend>Step 3: Exam settings (optional)</legend>
+              <p className="field-hint">
+                These are the normal settings. Change only what this batch needs; you can change them later on the batch
+                settings page.
+              </p>
+              <SettingsFields
+                hidePaperGroup
+                draft={settingsDraft}
+                problems={validateDraft(settingsDraft)}
+                set={(key, value) => {
+                  setSettingsDraft((current) => ({ ...current, [key]: value }));
+                  setFormError(null);
+                }}
+              />
+            </fieldset>
           ) : null}
           <div className="dialog-actions">
             <button type="submit">{needRecognitionOverride ? "Create with override" : "Create batch"}</button>

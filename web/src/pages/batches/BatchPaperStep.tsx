@@ -20,11 +20,22 @@ type Props = {
   plan: PaperPlan;
   onChange: (plan: PaperPlan) => void;
   disabled?: boolean;
+  /** X-19: the batch is a mock test: the paper needs no reviewer approval. */
+  skipApproval: boolean;
+  onSkipApprovalChange: (value: boolean) => void;
 };
 
 const OBJECT_ID = /^[a-fA-F0-9]{24}$/;
 
-export function BatchPaperStep({ qualificationId, assessmentLanguage, plan, onChange, disabled }: Props) {
+export function BatchPaperStep({
+  qualificationId,
+  assessmentLanguage,
+  plan,
+  onChange,
+  disabled,
+  skipApproval,
+  onSkipApprovalChange,
+}: Props) {
   const ids = useId();
   const ready = OBJECT_ID.test(qualificationId);
   const approved = useQuery({
@@ -52,6 +63,14 @@ export function BatchPaperStep({ qualificationId, assessmentLanguage, plan, onCh
         A candidate can start only when the batch has an approved paper. You can also set it later on the batch page.
       </p>
       {!ready ? <p role="status">Choose a qualification above to see papers.</p> : null}
+      <label className="check-label">
+        <input type="checkbox" checked={skipApproval} onChange={(event) => onSkipApprovalChange(event.target.checked)} />{" "}
+        Mock test: use a paper without the reviewer&apos;s approval
+      </label>
+      <p className="field-hint">
+        Normally only a paper approved by the awarding body reviewer can be used. For a mock test, tick this and any
+        complete paper, even a draft, can be set on this batch.
+      </p>
       <label className="check-label">
         <input
           type="radio"
@@ -152,18 +171,26 @@ export function BatchPaperStep({ qualificationId, assessmentLanguage, plan, onCh
               onChange={(event) => onChange({ ...buildPlan, durationMinutes: event.target.value })}
             />
           </div>
-          <label className="check-label">
-            <input
-              type="checkbox"
-              checked={buildPlan.sendForApproval}
-              onChange={(event) => onChange({ ...buildPlan, sendForApproval: event.target.checked })}
-            />{" "}
-            Send the new paper to the awarding body reviewer for approval
-          </label>
-          <p className="field-hint">
-            The new paper is a draft until the reviewer approves it. Then set it on the batch page; candidates cannot
-            start before that.
-          </p>
+          {skipApproval ? (
+            <p className="field-hint">
+              Mock test: the new paper is set on this batch as soon as it is built. It is not sent to the reviewer.
+            </p>
+          ) : (
+            <>
+              <label className="check-label">
+                <input
+                  type="checkbox"
+                  checked={buildPlan.sendForApproval}
+                  onChange={(event) => onChange({ ...buildPlan, sendForApproval: event.target.checked })}
+                />{" "}
+                Send the new paper to the awarding body reviewer for approval
+              </label>
+              <p className="field-hint">
+                The new paper is a draft until the reviewer approves it. Then set it on the batch page; candidates
+                cannot start before that.
+              </p>
+            </>
+          )}
         </div>
       ) : null}
     </fieldset>

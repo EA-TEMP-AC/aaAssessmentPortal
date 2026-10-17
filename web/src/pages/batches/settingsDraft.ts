@@ -31,6 +31,7 @@ export type Draft = {
   popupEnabled: boolean;
   popupFields: InfoField[];
   captureLocation: boolean;
+  skipPaperApproval: boolean;
   detectLookingAway: boolean;
   detectVoice: boolean;
 };
@@ -56,6 +57,7 @@ export function toDraft(s: BatchSettings): Draft {
     popupEnabled: s.candidateInfoPopup.enabled,
     popupFields: [...s.candidateInfoPopup.fields],
     captureLocation: s.captureLocation,
+    skipPaperApproval: s.skipPaperApproval,
     detectLookingAway: s.detectLookingAway,
     detectVoice: s.detectVoice,
   };
@@ -99,6 +101,7 @@ export function buildPatch(
     "marksAfterValidation",
     "questionsMandatory",
     "captureLocation",
+    "skipPaperApproval",
     "detectLookingAway",
     "detectVoice",
   ] as const) {
@@ -211,6 +214,7 @@ export function describeChanges(saved: BatchSettings, draft: Draft): string[] {
     );
   }
   flip("Capture location", saved.captureLocation, draft.captureLocation);
+  flip("Use papers without reviewer approval", saved.skipPaperApproval, draft.skipPaperApproval);
   flip("Detect looking away", saved.detectLookingAway, draft.detectLookingAway);
   flip("Detect voice", saved.detectVoice, draft.detectVoice);
   const viewers = LOCATION_ROLES.filter((r) => draft.locationVisibleTo.includes(r));

@@ -129,6 +129,7 @@ const batchSettingsSchema = new mongoose.Schema(
       default: undefined,
     },
     captureLocation: { type: Boolean },
+    skipPaperApproval: { type: Boolean },
     detectLookingAway: { type: Boolean },
     detectVoice: { type: Boolean },
     locationVisibleTo: {

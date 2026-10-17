@@ -1923,3 +1923,10 @@ Attempt view for the candidate: `clockHeld` (boolean) is true while the attempt 
 ## Looking-away and voice switches (task X-16)
 
 Batch settings (`GET`/`PATCH /batches/:id/settings`, `aa_admin` writes) gain `detectLookingAway` and `detectVoice` (booleans, both default `true`). The proctoring session `config` (from `POST /proctoring/sessions`) gains `disabledFlags`: the flag types the browser must not check for this batch, for example `["voice_detected"]` (empty when both are on). The hold times stay the server constants in `PROCTOR_SUSTAINED_SECONDS`, the same for every batch.
+
+## Mock-test batches: papers without approval (task X-19)
+
+Batch setting `skipPaperApproval` (boolean, default `false`; `GET`/`PATCH /batches/:id/settings`, `aa_admin` writes). When `true`:
+- `PUT /batches/:id/test-paper` accepts a `draft`, `submitted` or `approved` paper, as long as it is `complete`, for the batch's qualification and in the batch's language. An incomplete paper still gives `409 BATCH_TEST_PAPER_NOT_APPROVED`.
+- `GET /attempts/available` lists that paper and `POST /attempts/start` starts it, with the same rules as for an approved paper.
+When `false` nothing changes: only an approved, complete paper can be set or started. The setting can be turned off again; a draft paper already set then no longer starts (`404`, as any unapproved paper). The change is audited as `batch.settings_update`.

@@ -222,6 +222,7 @@ export const batchSettingsBodySchema = guard(
         .partial()
         .strict(),
       captureLocation: z.boolean(),
+      skipPaperApproval: z.boolean(),
       detectLookingAway: z.boolean(),
       detectVoice: z.boolean(),
       locationVisibleTo: z

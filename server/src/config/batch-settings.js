@@ -52,6 +52,8 @@ export function defaultBatchSettings() {
     candidateInfoPopup: { enabled: false, fields: [] },
     captureLocation: false,
     // X-16: the two newer camera and microphone checks can be switched off for a batch.
+    // X-19: on, a complete paper can be used without the awarding body reviewer approving it (mock tests).
+    skipPaperApproval: false,
     detectLookingAway: true,
     detectVoice: true,
     // X-12: aa_admin always sees it; these roles may too (the batch's own people only).
@@ -91,6 +93,7 @@ export function resolveBatchSettings(stored) {
       fields: CANDIDATE_INFO_FIELDS.filter((f) => (info.fields ?? []).includes(f)),
     },
     captureLocation: stored.captureLocation ?? base.captureLocation,
+    skipPaperApproval: stored.skipPaperApproval ?? base.skipPaperApproval,
     detectLookingAway: stored.detectLookingAway ?? base.detectLookingAway,
     detectVoice: stored.detectVoice ?? base.detectVoice,
     locationVisibleTo: stored.locationVisibleTo

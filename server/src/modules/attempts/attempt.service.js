@@ -291,6 +291,14 @@ export async function closeExpiredAttempts({ now = new Date(), limit = 200 } = {
  * null when the paper may be started, else { status, code, message, details }.
  * `today` is the IST calendar date; `deliverable` is false when a paper question is missing.
  */
+/** X-19: complete, and approved unless the batch is set up to skip the reviewer's approval. */
+export function paperUsable(paper, batch) {
+  if (paper.complete !== true) return false;
+  return (
+    paper.status === "approved" || resolveBatchSettings(batch.settings).skipPaperApproval === true
+  );
+}
+
 export function startBlocker({ batch, paper, absent, deliverable, today }) {
   if (batch.status !== "in_progress") {
     return {
@@ -331,8 +339,7 @@ export function startBlocker({ batch, paper, absent, deliverable, today }) {
   if (
     !paper ||
     idStr(paper._id) !== idStr(batch.testPaperId) ||
-    paper.status !== "approved" ||
-    paper.complete !== true ||
+    !paperUsable(paper, batch) ||
     idStr(paper.qualificationId) !== idStr(batch.qualificationId)
   ) {
     return { status: 404, code: "NOT_FOUND", message: "Unknown id" };
@@ -423,7 +430,7 @@ export async function listAvailable(user) {
     ],
   })
     .select(
-      "status qualificationId assessmentStartDate assessmentEndDate assessmentLanguage testPaperId captureLocation",
+      "status qualificationId assessmentStartDate assessmentEndDate assessmentLanguage testPaperId captureLocation settings",
     )
     .sort({ assessmentStartDate: 1, _id: 1 })
     .lean();
@@ -476,7 +483,7 @@ export async function listAvailable(user) {
       const attempt = attemptByKey.get(`${idStr(roster._id)}:${paperId}`) ?? null;
       const open = attempt?.status === "in_progress";
       // Without an open attempt only an approved, complete paper is listed.
-      if (!attempt && (paper.status !== "approved" || paper.complete !== true)) continue;
+      if (!attempt && !paperUsable(paper, batch)) continue;
       const blocker = startBlocker({
         batch,
         paper,

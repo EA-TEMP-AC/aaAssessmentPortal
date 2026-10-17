@@ -423,6 +423,7 @@ Indexes: `{ code: 1 }` unique; `{ sector: 1 }`.
 | flagPolicy.extendOnUnlock | boolean | `false` | X-12. On: the exam clock is held while the attempt is paused and an unlock adds the paused time to `deadlineAt` and `acceptUntil`. Off: the clock keeps running |
 | marksAfterValidation | boolean | `true` | X-12. With `showMarksToCandidate` on, marks wait until the batch's result is `validated` or `published`. Off: marks show as soon as the attempt closes |
 | locationVisibleTo | list from `tp`, `assessor`, `proctor`, `ab_reviewer`, `ncvet_viewer` | `["tp","proctor"]` | X-12. Roles besides `aa_admin` that may read the coordinates of a flag photo, each inside their own batch scope. Stored in this fixed order |
+| skipPaperApproval | boolean | `false` | X-19. On (a mock test): a complete paper of the batch's qualification and language can be set on the batch and started without being approved by the reviewer. Off: only an approved, complete paper |
 | detectLookingAway | boolean | `true` | X-16. Off: the browser does not check for the `looking_away` flag in this batch |
 | detectVoice | boolean | `true` | X-16. Off: the browser does not check for the `voice_detected` flag and does not ask for the microphone |
 | imageCapture.intervalSeconds | integer 10 to 120 | `PROCTOR_SNAPSHOT_INTERVAL_SECONDS` (30) | Becomes `config.snapshotIntervalSeconds` of a new proctoring session |

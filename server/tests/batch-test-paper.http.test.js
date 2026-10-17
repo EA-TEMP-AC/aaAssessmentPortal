@@ -144,6 +144,20 @@ describe("PUT /api/v1/batches/:id/test-paper (B-18a, D5)", () => {
     expect((await Batch.findById(batch._id).lean()).testPaperId).toBeNull();
   });
 
+  it("lets a batch set up for a mock test use a draft paper, but never an incomplete one (X-19)", async () => {
+    await Batch.updateOne({ _id: batch._id }, { $set: { "settings.skipPaperApproval": true } });
+    for (const over of [{ status: "draft" }, { status: "submitted" }]) {
+      const mock = await makePaper(qualificationId, over);
+      const res = await setPaper(mock);
+      expect(res.status).toBe(200);
+      expect(res.body.testPaperId).toBe(String(mock._id));
+    }
+    const incomplete = await makePaper(qualificationId, { status: "draft", complete: false });
+    const res = await setPaper(incomplete);
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe("BATCH_TEST_PAPER_NOT_APPROVED");
+  });
+
   it("refuses a paper of another qualification", async () => {
     const res = await setPaper(await makePaper(oid()));
     expect(res.status).toBe(400);
