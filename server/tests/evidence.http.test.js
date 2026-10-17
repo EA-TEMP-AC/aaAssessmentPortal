@@ -597,6 +597,82 @@ describe("evidence vault", () => {
     });
   });
 
+  describe("batch switches (X-30)", () => {
+    it("drops the assessor's location when the batch switches assessor geolocation off", async () => {
+      const w = await world();
+      await Batch.updateOne(
+        { _id: w.batch._id },
+        { $set: { settings: { assessorGeolocation: false } } },
+      );
+      const res = await upload(w.assessorSession.token, w.batch._id);
+      expect(res.status, JSON.stringify(res.body)).toBe(201);
+      expect(res.body).toMatchObject({
+        locationStatus: "not_provided",
+        latitude: null,
+        hasLocation: false,
+      });
+      await Batch.updateOne(
+        { _id: w.batch._id },
+        { $set: { "settings.assessorGeolocation": true } },
+      );
+      const again = await upload(w.assessorSession.token, w.batch._id);
+      expect(again.body).toMatchObject({ locationStatus: "captured", hasLocation: true });
+    });
+
+    it("refuses video evidence only when both practical and viva video are off", async () => {
+      const w = await world();
+      const send = () =>
+        upload(w.assessorSession.token, w.batch._id, {
+          file: mp4(),
+          filename: "a.mp4",
+          type: "video/mp4",
+          fields: { kind: "video" },
+        });
+      expect((await send()).status).toBe(201);
+      await Batch.updateOne(
+        { _id: w.batch._id },
+        { $set: { settings: { allowPracticalVideo: false, allowVivaVideo: true } } },
+      );
+      expect((await send()).status).toBe(201);
+      await Batch.updateOne(
+        { _id: w.batch._id },
+        { $set: { settings: { allowPracticalVideo: false, allowVivaVideo: false } } },
+      );
+      expectError(await send(), 409, "BATCH_FEATURE_OFF");
+    });
+
+    it("takes OJT pictures only when the batch switch is on, and never from a candidate", async () => {
+      const w = await world();
+      const send = (token = w.assessorSession.token) =>
+        upload(token, w.batch._id, {
+          fields: {
+            kind: "ojt_image",
+            latitude: undefined,
+            longitude: undefined,
+            accuracy: undefined,
+          },
+        });
+      expectError(await send(), 409, "BATCH_FEATURE_OFF");
+      await Batch.updateOne({ _id: w.batch._id }, { $set: { settings: { allowOjtImages: true } } });
+      const ok = await send();
+      expect(ok.status, JSON.stringify(ok.body)).toBe(201);
+      expect(ok.body.kind).toBe("ojt_image");
+      // A PDF is not a picture.
+      const pdfRes = await upload(w.assessorSession.token, w.batch._id, {
+        file: pdf(),
+        filename: "a.pdf",
+        type: "application/pdf",
+        fields: {
+          kind: "ojt_image",
+          latitude: undefined,
+          longitude: undefined,
+          accuracy: undefined,
+        },
+      });
+      expect(pdfRes.status).toBe(400);
+    });
+  });
+
   describe("who may upload", () => {
     it("lets aa_admin, the batch assessor and the batch proctor upload", async () => {
       const w = await world();

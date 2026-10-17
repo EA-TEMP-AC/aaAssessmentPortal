@@ -334,6 +334,25 @@ describe("attendance and checklist", () => {
       expect(await AttendanceRecord.countDocuments({})).toBe(0);
       expect(await AuditLog.countDocuments({ action: "attendance.record" })).toBe(0);
     });
+
+    it("is refused with BATCH_FEATURE_OFF when the batch switches student attendance off (X-30)", async () => {
+      const w = await world();
+      await Batch.updateOne(
+        { _id: w.batch._id },
+        { $set: { settings: { studentAttendance: false } } },
+      );
+      const assessor = await sessionFor("assessor", { linkedProfileId: w.assessor._id });
+      expectError(
+        await postAttendance(assessor.token, w.batch._id, attendanceBody(w)),
+        409,
+        "BATCH_FEATURE_OFF",
+      );
+      expect(await AttendanceRecord.countDocuments({})).toBe(0);
+      await Batch.updateOne({ _id: w.batch._id }, { $set: { "settings.studentAttendance": true } });
+      expect((await postAttendance(assessor.token, w.batch._id, attendanceBody(w))).status).toBe(
+        200,
+      );
+    });
   });
 
   describe("POST /assessor/batches/:id/checklist", () => {

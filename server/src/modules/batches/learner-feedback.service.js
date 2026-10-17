@@ -1,4 +1,5 @@
-import { forbidden, invalidTransition, notFound } from "../../lib/errors.js";
+import { resolveBatchSettings } from "../../config/batch-settings.js";
+import { AppError, forbidden, invalidTransition, notFound } from "../../lib/errors.js";
 import { Batch } from "../../models/batch.model.js";
 import { isInBatchScope } from "../../middleware/scope.js";
 import { presentBatch } from "./batch.service.js";
@@ -50,6 +51,10 @@ export async function saveLearnerFeedback(user, id, body, context = {}) {
   if (!existing) throw notFound();
   if (!isInBatchScope(user, existing)) throw forbidden();
   if (!LEARNER_FEEDBACK_STATUSES.includes(existing.status)) throw invalidTransition();
+  // X-30: the batch can switch student feedback off.
+  if (resolveBatchSettings(existing.settings).studentFeedback === false) {
+    throw new AppError(409, "BATCH_FEATURE_OFF", "Student feedback is switched off for this batch");
+  }
 
   const record = {
     collected: body.collected,

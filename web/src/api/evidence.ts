@@ -7,6 +7,7 @@ export const EVIDENCE_KINDS = [
   "equipment",
   "other",
   "video",
+  "ojt_image",
   "proctor_snapshot",
 ] as const;
 export type EvidenceKind = (typeof EVIDENCE_KINDS)[number];
@@ -18,6 +19,7 @@ export const KIND_LABELS: Record<EvidenceKind, string> = {
   equipment: "Equipment",
   other: "Other",
   video: "Video",
+  ojt_image: "OJT picture",
   proctor_snapshot: "Proctor snapshot",
 };
 

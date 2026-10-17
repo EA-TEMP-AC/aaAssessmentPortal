@@ -106,6 +106,10 @@ export async function listVideo(user, id) {
     sessionId: String(session._id),
     recordVideo: settings.recordVideo === true,
     canDownload: settings.downloadSessionVideo === true,
+    // X-30: with `video` the viewer jumps to the moment of a flag. startedAt is when the session began;
+    // the recording starts a moment later, so the jump is about right, not exact.
+    flagEvidence: settings.ufmEvidence,
+    startedAt: session.createdAt ? new Date(session.createdAt).toISOString() : null,
     retentionDays: compliance.EXAM_VIDEO_RETENTION_DAYS,
     expiresAt: rows.length
       ? rows

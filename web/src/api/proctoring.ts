@@ -467,13 +467,26 @@ export type SessionVideo = {
   recordVideo: boolean;
   /** X-28: the batch lets the people who can watch the recording save a copy. */
   canDownload: boolean;
+  /** X-30: `video` lets the viewer jump to the moment of a flag. */
+  flagEvidence: "image" | "video";
+  /** X-30: when the session began (the recording starts a moment later). */
+  startedAt: string | null;
   retentionDays: number;
   expiresAt: string | null;
-  tracks: Record<"camera" | "screen", { pieces: number; bytes: number; complete: boolean }>;
+  tracks: Record<
+    "camera" | "screen",
+    { pieces: number; bytes: number; complete: boolean }
+  >;
 };
 
-export async function getSessionVideo(sessionId: string, signal?: AbortSignal): Promise<SessionVideo> {
-  const body = await apiRequest<unknown>(`/proctoring/sessions/${encodeURIComponent(sessionId)}/video`, { signal });
+export async function getSessionVideo(
+  sessionId: string,
+  signal?: AbortSignal,
+): Promise<SessionVideo> {
+  const body = await apiRequest<unknown>(
+    `/proctoring/sessions/${encodeURIComponent(sessionId)}/video`,
+    { signal },
+  );
   if (!isRecord(body) || !isRecord(body.tracks)) throw bad("Session video");
   const track = (value: unknown) =>
     isRecord(value)
@@ -487,9 +500,15 @@ export async function getSessionVideo(sessionId: string, signal?: AbortSignal): 
     sessionId,
     recordVideo: body.recordVideo === true,
     canDownload: body.canDownload === true,
-    retentionDays: typeof body.retentionDays === "number" ? body.retentionDays : 90,
+    flagEvidence: body.flagEvidence === "video" ? "video" : "image",
+    startedAt: typeof body.startedAt === "string" ? body.startedAt : null,
+    retentionDays:
+      typeof body.retentionDays === "number" ? body.retentionDays : 90,
     expiresAt: typeof body.expiresAt === "string" ? body.expiresAt : null,
-    tracks: { camera: track(body.tracks.camera), screen: track(body.tracks.screen) },
+    tracks: {
+      camera: track(body.tracks.camera),
+      screen: track(body.tracks.screen),
+    },
   };
 }
 

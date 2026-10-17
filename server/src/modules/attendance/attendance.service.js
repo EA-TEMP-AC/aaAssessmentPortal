@@ -1,4 +1,11 @@
-import { forbidden, invalidTransition, notFound, validationError } from "../../lib/errors.js";
+import { resolveBatchSettings } from "../../config/batch-settings.js";
+import {
+  AppError,
+  forbidden,
+  invalidTransition,
+  notFound,
+  validationError,
+} from "../../lib/errors.js";
 import { AttendanceRecord } from "../../models/attendance-record.model.js";
 import { Batch } from "../../models/batch.model.js";
 import { Candidate } from "../../models/candidate.model.js";
@@ -58,6 +65,14 @@ export async function recordAttendance(user, batchId, body, context = {}) {
   const receivedAt = context.now ?? new Date();
   const capturedAt = new Date(body.capturedAt);
   const batch = await loadBatchForFieldWrite(user, batchId, capturedAt);
+  // X-30: the batch can switch student attendance off.
+  if (resolveBatchSettings(batch.settings).studentAttendance === false) {
+    throw new AppError(
+      409,
+      "BATCH_FEATURE_OFF",
+      "Student attendance is switched off for this batch",
+    );
+  }
 
   const candidateIds = body.records.map((row) => row.candidateId);
   const roster = await Candidate.find({

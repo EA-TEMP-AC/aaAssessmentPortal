@@ -103,17 +103,18 @@ export function defaultBatchSettings() {
     videoVisibleTo: ["proctor"],
     // X-12: aa_admin always sees it; these roles may too (the batch's own people only).
     locationVisibleTo: ["tp", "proctor"],
-    // X-28 (ThinkExam parity). Wired: proctoringType, aiEnabled, ufmEvidence, the two downloads.
-    // Stored only until their own feature exists: the practical/viva video, assessor and student
-    // switches, languages and OJT pictures. Defaults keep today's behaviour.
+    // X-28 (ThinkExam parity). Wired: proctoringType, aiEnabled, the session video download, the
+    // practical/viva video, assessor geolocation, student attendance and feedback, OJT pictures (X-30).
+    // Stored only until their own feature exists: ufmEvidence video, the flag video download,
+    // Annexure M, assessor feedback and the languages. Defaults keep today's behaviour.
     proctoringType: "automatic",
     aiEnabled: true,
     ufmEvidence: "image",
     downloadSessionVideo: false,
     downloadFlagVideo: false,
-    allowPracticalVideo: false,
-    allowVivaVideo: false,
-    assessorGeolocation: false,
+    allowPracticalVideo: true,
+    allowVivaVideo: true,
+    assessorGeolocation: true,
     assessorAnnexureM: true,
     assessorFeedback: false,
     studentAttendance: true,

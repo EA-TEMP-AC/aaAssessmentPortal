@@ -188,10 +188,9 @@ export function SettingsFields({
             Video
           </label>
           <p className="field-hint">
-            Image: a camera picture with each flag (always taken). Video needs
-            Record exam video below. {draft.recordVideo ? SOON : ""}Video is
-            saved for the batch now; jumping to the moment of a flag in the
-            recording comes later.
+            Image: a camera picture with each flag (always taken). Video:
+            besides the picture, the person reviewing a flag can jump to its
+            moment in the exam video. Needs Record exam video below.
           </p>
         </fieldset>
         <Toggle
@@ -661,16 +660,14 @@ export function SettingsFields({
       <Group title="Practical and viva">
         <Toggle
           label="Allow practical test video"
-          help="The assessor records a video of the practical test."
+          help="Video files from the assessor are accepted for this batch. They are refused when both the practical and the viva video are off."
           checked={draft.allowPracticalVideo}
-          soon
           onChange={(v) => set("allowPracticalVideo", v)}
         />
         <Toggle
           label="Allow viva test video"
-          help="The assessor records a video of the viva."
+          help="Video files from the assessor are accepted for this batch. They are refused when both the practical and the viva video are off."
           checked={draft.allowVivaVideo}
-          soon
           onChange={(v) => set("allowVivaVideo", v)}
         />
       </Group>
@@ -678,9 +675,8 @@ export function SettingsFields({
       <Group title="Assessor">
         <Toggle
           label="Allow assessor geolocation"
-          help="The assessor's location is added to the pictures and attendance they upload."
+          help="On: the assessor's location is kept with the files they upload. Off: the location is dropped when a file is saved."
           checked={draft.assessorGeolocation}
-          soon
           onChange={(v) => set("assessorGeolocation", v)}
         />
         <Toggle
@@ -702,16 +698,14 @@ export function SettingsFields({
       <Group title="Student">
         <Toggle
           label="Allow student attendance"
-          help="Attendance is marked for the candidates of this batch."
+          help="Off: the assessor's attendance upload is refused for this batch. Candidates are then marked absent by hand in the marks grid."
           checked={draft.studentAttendance}
-          soon
           onChange={(v) => set("studentAttendance", v)}
         />
         <Toggle
           label="Allow student feedback"
-          help="The learners' feedback is collected for this batch."
+          help="Off: learner feedback cannot be recorded for this batch."
           checked={draft.studentFeedback}
-          soon
           onChange={(v) => set("studentFeedback", v)}
         />
       </Group>
@@ -743,9 +737,8 @@ export function SettingsFields({
       <Group title="On-the-job training">
         <Toggle
           label="Allow upload of OJT pictures"
-          help="Pictures of on-the-job training can be added to this batch."
+          help="On: pictures of on-the-job training can be uploaded to this batch. Off: they are refused."
           checked={draft.allowOjtImages}
-          soon
           onChange={(v) => set("allowOjtImages", v)}
         />
       </Group>

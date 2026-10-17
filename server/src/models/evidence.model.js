@@ -13,6 +13,8 @@ export const EVIDENCE_KINDS = Object.freeze([
   "equipment",
   "other",
   "video",
+  // X-30: a picture of on-the-job training. Needs the batch switch allowOjtImages.
+  "ojt_image",
   // P-01: a JPEG the candidate's browser takes during a proctored attempt. Needs a sessionId.
   "proctor_snapshot",
 ]);

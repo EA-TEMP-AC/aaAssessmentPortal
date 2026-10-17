@@ -109,6 +109,14 @@ describe("learner feedback", () => {
       expect(stored.learnerFeedback.collected).toBe(true);
     });
 
+    it("is refused with BATCH_FEATURE_OFF when the batch switches student feedback off (X-30)", async () => {
+      const batch = await makeBatch();
+      await Batch.updateOne({ _id: batch._id }, { $set: { settings: { studentFeedback: false } } });
+      const admin = await sessionFor("aa_admin");
+      expectError(await put(admin.token, batch._id, { collected: true }), 409, "BATCH_FEATURE_OFF");
+      expect((await Batch.findById(batch._id).lean()).learnerFeedback).toBeNull();
+    });
+
     it("lets mis write", async () => {
       const batch = await makeBatch();
       const mis = await sessionFor("mis");

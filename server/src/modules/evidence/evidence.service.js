@@ -10,6 +10,7 @@ import {
   notFound,
   validationError,
 } from "../../lib/errors.js";
+import { resolveBatchSettings } from "../../config/batch-settings.js";
 import { toObjectIdOrNull } from "../../lib/object-id.js";
 import { batchQueryFilter, isInBatchScope } from "../../middleware/scope.js";
 import { Batch } from "../../models/batch.model.js";
@@ -32,6 +33,7 @@ export const EVIDENCE_CLOSED_BATCH_STATUSES = Object.freeze(["cancelled", "rejec
 const KIND_CONTENT_TYPES = {
   photo: ["image/jpeg", "image/png"],
   video: ["video/mp4"],
+  ojt_image: ["image/jpeg", "image/png"],
   id_proof: ["image/jpeg", "image/png", "application/pdf"],
   attendance: ["image/jpeg", "image/png", "application/pdf"],
   equipment: ["image/jpeg", "image/png", "application/pdf"],
@@ -161,6 +163,22 @@ function locationFrom(fields) {
   };
 }
 
+/** X-30: the same upload with no location, when the batch does not allow assessor geolocation. */
+function withoutLocation(fields) {
+  return {
+    ...fields,
+    locationStatus: undefined,
+    latitude: undefined,
+    longitude: undefined,
+    accuracy: undefined,
+    locationUnavailableReason: undefined,
+  };
+}
+
+function featureOff(message) {
+  return new AppError(409, "BATCH_FEATURE_OFF", message);
+}
+
 function replay(existing, hashValue) {
   if (existing.payloadHash !== hashValue) throw conflictIdempotent();
   return { evidence: existing, replayed: true };
@@ -217,6 +235,22 @@ export async function createEvidence(user, batch, fields, file, context = {}) {
     throw invalidTransition("Batch status does not allow evidence uploads");
   }
 
+  // X-30: batch switches. A candidate's own uploads are controlled by their own settings.
+  const batchSettings = resolveBatchSettings(batch.settings);
+  if (!isCandidate) {
+    if (
+      fields.kind === "video" &&
+      !batchSettings.allowPracticalVideo &&
+      !batchSettings.allowVivaVideo
+    ) {
+      throw featureOff("Practical and viva video are switched off for this batch");
+    }
+    if (fields.kind === "ojt_image" && !batchSettings.allowOjtImages) {
+      throw featureOff("OJT pictures are switched off for this batch");
+    }
+  } else if (fields.kind === "ojt_image") {
+    throw forbidden("A candidate may upload only proctor_snapshot or id_proof evidence");
+  }
   if (size === 0) throw validationError("The file is empty", { file: ["The file is empty"] });
   const contentType = sniffContentType(head);
   if (!contentType) {
@@ -297,7 +331,9 @@ export async function createEvidence(user, batch, fields, file, context = {}) {
       uploaderRole: user.role,
       capturedAt: new Date(fields.capturedAt),
       uploadedAt,
-      ...locationFrom(fields),
+      ...locationFrom(
+        isCandidate || batchSettings.assessorGeolocation ? fields : withoutLocation(fields),
+      ),
       deviceId: fields.deviceId ?? null,
       payloadHash: hashValue,
     });

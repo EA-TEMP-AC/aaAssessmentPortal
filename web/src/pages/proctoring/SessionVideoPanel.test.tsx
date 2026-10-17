@@ -13,11 +13,18 @@ beforeEach(() => {
 });
 
 const json = (status: number, body: unknown) =>
-  new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
 
 function show() {
   render(
-    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+    <QueryClientProvider
+      client={
+        new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      }
+    >
       <SessionVideoPanel sessionId={"a".repeat(24)} />
     </QueryClientProvider>,
   );
@@ -40,13 +47,19 @@ it("lists the tracks and loads a video only when asked (X-27)", async () => {
   expect(await screen.findByText("Exam video")).toBeInTheDocument();
   expect(screen.getByText(/deleted 90 days/)).toBeInTheDocument();
   expect(fetchMock).toHaveBeenCalledTimes(1);
-  await userEvent.click(screen.getByRole("button", { name: "Load camera video" }));
+  await userEvent.click(
+    screen.getByRole("button", { name: "Load camera video" }),
+  );
   expect(await screen.findByLabelText("Camera recording")).toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: /screen video/i })).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: /screen video/i }),
+  ).not.toBeInTheDocument();
 });
 
 it("shows nothing when the role may not watch, or the batch does not record", async () => {
-  fetchMock.mockResolvedValueOnce(json(403, { error: { code: "FORBIDDEN", message: "No" } }));
+  fetchMock.mockResolvedValueOnce(
+    json(403, { error: { code: "FORBIDDEN", message: "No" } }),
+  );
   show();
   await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
   expect(screen.queryByText("Exam video")).not.toBeInTheDocument();
@@ -55,6 +68,8 @@ it("shows nothing when the role may not watch, or the batch does not record", as
 
 it("offers a download only when the batch allows it, and asks the server for a copy (X-28)", async () => {
   let canDownload = false;
+  // jsdom cannot follow a download link; the click itself is not what is under test.
+  vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
   fetchMock.mockImplementation(async (url: string) =>
     url.endsWith("/video")
       ? json(200, {
@@ -69,18 +84,97 @@ it("offers a download only when the batch allows it, and asks the server for a c
       : new Response(new Blob(["x"], { type: "video/webm" }), { status: 200 }),
   );
   const first = render(
-    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+    <QueryClientProvider
+      client={
+        new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      }
+    >
       <SessionVideoPanel sessionId={"a".repeat(24)} />
     </QueryClientProvider>,
   );
   expect(await screen.findByText("Exam video")).toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: /Download/ })).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: /Download/ }),
+  ).not.toBeInTheDocument();
   first.unmount();
 
   canDownload = true;
   show();
-  await userEvent.click(await screen.findByRole("button", { name: "Download camera video" }));
-  await vi.waitFor(() =>
-    expect(fetchMock.mock.calls.some((c) => String(c[0]).endsWith("/video/camera?download=1"))).toBe(true),
+  await userEvent.click(
+    await screen.findByRole("button", { name: "Download camera video" }),
   );
+  await vi.waitFor(() =>
+    expect(
+      fetchMock.mock.calls.some((c) =>
+        String(c[0]).endsWith("/video/camera?download=1"),
+      ),
+    ).toBe(true),
+  );
+});
+
+it("lets the reviewer jump to the moment of a flag when the batch keeps video as flag evidence (X-30)", async () => {
+  const panel = (flagEvidence: "image" | "video") =>
+    fetchMock.mockImplementation(async (url: string) =>
+      url.endsWith("/video")
+        ? json(200, {
+            recordVideo: true,
+            canDownload: false,
+            flagEvidence,
+            startedAt: "2026-11-20T05:00:00.000Z",
+            retentionDays: 90,
+            tracks: {
+              camera: { pieces: 1, bytes: 1_000_000, complete: true },
+              screen: { pieces: 0, bytes: 0, complete: false },
+            },
+          })
+        : new Response(new Blob(["x"], { type: "video/webm" }), {
+            status: 200,
+          }),
+    );
+  const flags = [
+    {
+      id: "f1",
+      type: "phone_detected",
+      capturedAt: "2026-11-20T05:01:40.000Z",
+    },
+  ];
+
+  panel("image");
+  const first = render(
+    <QueryClientProvider
+      client={
+        new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      }
+    >
+      <SessionVideoPanel sessionId={"a".repeat(24)} flags={flags} />
+    </QueryClientProvider>,
+  );
+  expect(await screen.findByText("Exam video")).toBeInTheDocument();
+  expect(
+    screen.queryByLabelText("Go to the moment of a flag"),
+  ).not.toBeInTheDocument();
+  first.unmount();
+
+  panel("video");
+  render(
+    <QueryClientProvider
+      client={
+        new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      }
+    >
+      <SessionVideoPanel sessionId={"a".repeat(24)} flags={flags} />
+    </QueryClientProvider>,
+  );
+  await userEvent.click(
+    await screen.findByRole("button", { name: "Load camera video" }),
+  );
+  const player = (await screen.findByLabelText(
+    "Camera recording",
+  )) as HTMLVideoElement;
+  await userEvent.selectOptions(
+    screen.getByLabelText("Go to the moment of a flag"),
+    "f1",
+  );
+  // 100 seconds after the start, minus the 5 second lead.
+  await vi.waitFor(() => expect(player.currentTime).toBe(95));
 });

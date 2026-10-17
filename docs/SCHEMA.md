@@ -457,15 +457,17 @@ Indexes: `{ code: 1 }` unique; `{ sector: 1 }`.
 | imageCapture.enabled | boolean | `true` | X-28. Off: `config.snapshotIntervalSeconds` is 0 (no pictures during the exam) and the session is stored with `periodicImagesOff`, so it is never shown as `feed_lost` |
 | proctoringType | `automatic` \| `manual` | `automatic` | X-28. `manual`: every model-based flag is in `config.disabledFlags` |
 | aiEnabled | boolean | `true` | X-28. Off: same as `manual` for the flags (face_not_present, multiple_faces, person_detected, phone_detected, object_detected, face_mismatch, looking_away, voice_detected) |
-| ufmEvidence | `image` \| `video` | `image` | X-28. `video` needs `recordVideo`. Stored; jumping to the flag moment in the recording is not built yet |
+| ufmEvidence | `image` \| `video` | `image` | X-28. `video` needs `recordVideo`. X-30: with `video`, the video panel lets the reviewer jump to the moment of a flag (about right, from the session start) |
 | downloadSessionVideo | boolean | `false` | X-28. Needs `recordVideo`. Lets the people in `videoVisibleTo` (and aa_admin) save a copy; logged |
 | downloadFlagVideo | boolean | `false` | X-28. Needs `recordVideo`. Stored only: there is no flag video clip yet |
-| allowPracticalVideo, allowVivaVideo | boolean | `false` | X-28. Stored only |
-| assessorGeolocation, assessorFeedback | boolean | `false` | X-28. Stored only |
-| assessorAnnexureM | boolean | `true` | X-28. Stored only |
-| studentAttendance, studentFeedback | boolean | `true` | X-28. Stored only; attendance and learner feedback work as before whatever the value |
+| allowPracticalVideo, allowVivaVideo | boolean | `true` | X-28. X-30: `evidence` uploads of kind `video` are refused (`409 BATCH_FEATURE_OFF`) when both are off. The two are not told apart |
+| assessorGeolocation | boolean | `true` | X-28. X-30: off drops the location of evidence uploaded by staff (stored as `not_provided`); a candidate's own uploads follow `captureLocation` |
+| assessorFeedback | boolean | `false` | X-28. Stored only (assessor feedback is not built; parked by the human) |
+| assessorAnnexureM | boolean | `true` | X-28. Stored only: no Annexure M feature exists yet |
+| studentAttendance | boolean | `true` | X-28. X-30: off makes the assessor attendance upload `409 BATCH_FEATURE_OFF` |
+| studentFeedback | boolean | `true` | X-28. X-30: off makes `PUT /batches/:id/learner-feedback` `409 BATCH_FEATURE_OFF` |
 | languages.theory, .practical, .viva | boolean | `false` | X-28. Stored only |
-| allowOjtImages | boolean | `false` | X-28. Stored only. No national ID switch exists (Aadhaar checks are not offered) |
+| allowOjtImages | boolean | `false` | X-28. X-30: on allows evidence kind `ojt_image` (JPEG or PNG, staff only); off is `409 BATCH_FEATURE_OFF`. No national ID switch exists (Aadhaar checks are not offered) |
 | passCriteria | `qualification` \| `nos_wise` \| `overall` | `qualification` | X-29. `qualification` keeps the qualification's pass rule. The other two replace it for this batch: one percentage (`passPercentage`) for theory, practical and viva, judged per NOS or on the sums |
 | passPercentage | integer 1 to 100 | 50 | X-29. Used only when `passCriteria` is not `qualification` |
 | practicalMarking, vivaMarking | `marks` \| `rubric` | `marks` | X-29. `rubric`: the mark of each NOS must be 100%, 70% or 10% of its ceiling (Good, Satisfactory, Poor; fixed levels) |

@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { errorMessage } from "../api/client";
 import type { EvidenceRow } from "../api/evidence";
 import {
@@ -36,7 +40,15 @@ export const PROCTORING_REFRESH_MS = 10_000;
 
 type Filters = { batchId: string; status: string; minSeverity: string };
 const EMPTY: Filters = { batchId: "", status: "", minSeverity: "" };
-const COLUMNS = ["Candidate", "Batch", "Status", "Last seen", "Flags", "To review", "Details"] as const;
+const COLUMNS = [
+  "Candidate",
+  "Batch",
+  "Status",
+  "Last seen",
+  "Flags",
+  "To review",
+  "Details",
+] as const;
 
 function typeLabel(type: string): string {
   return FLAG_TYPE_LABELS[type] ?? type;
@@ -52,15 +64,25 @@ function candidateLabel(item: SessionItem): string {
 
 /** Severity is always written out, so colour is never the only signal. */
 function SeverityTag({ severity }: { severity: Severity }) {
-  return <span className={`severity-tag severity-${severity}`}>{SEVERITY_LABELS[severity]}</span>;
+  return (
+    <span className={`severity-tag severity-${severity}`}>
+      {SEVERITY_LABELS[severity]}
+    </span>
+  );
 }
 
 function StatusTag({ item }: { item: SessionItem }) {
   return (
     <>
-      <span className={`session-status session-${item.status}`}>{STATUS_LABELS[item.status]}</span>
-      {item.paused ? <span className="session-flagged"> Exam paused</span> : null}
-      {item.invalidationRecommended ? <span className="session-flagged"> Invalidation recommended</span> : null}
+      <span className={`session-status session-${item.status}`}>
+        {STATUS_LABELS[item.status]}
+      </span>
+      {item.paused ? (
+        <span className="session-flagged"> Exam paused</span>
+      ) : null}
+      {item.invalidationRecommended ? (
+        <span className="session-flagged"> Invalidation recommended</span>
+      ) : null}
     </>
   );
 }
@@ -92,7 +114,11 @@ function ReviewControls({
     setBusy(true);
     setError(null);
     try {
-      await reviewProctoringFlag(flag.id, decision, decision === "warn" ? message : undefined);
+      await reviewProctoringFlag(
+        flag.id,
+        decision,
+        decision === "warn" ? message : undefined,
+      );
       setMode("idle");
       onDone(decision);
     } catch (err) {
@@ -107,15 +133,28 @@ function ReviewControls({
   return (
     <div className="proctor-review">
       {mode === "idle" ? (
-        <div className="row-actions" role="group" aria-label={`Review ${label}`}>
-          <button type="button" onClick={() => decide("dismiss")} disabled={busy}>
+        <div
+          className="row-actions"
+          role="group"
+          aria-label={`Review ${label}`}
+        >
+          <button
+            type="button"
+            onClick={() => decide("dismiss")}
+            disabled={busy}
+          >
             Dismiss
           </button>
           <button type="button" onClick={() => setMode("warn")} disabled={busy}>
             Warn
           </button>
           {canRecommend ? (
-            <button type="button" className="button-danger" onClick={() => setMode("confirm")} disabled={busy}>
+            <button
+              type="button"
+              className="button-danger"
+              onClick={() => setMode("confirm")}
+              disabled={busy}
+            >
               Recommend invalidation
             </button>
           ) : null}
@@ -144,14 +183,20 @@ function ReviewControls({
               onChange={(event) => setMessage(event.target.value)}
             />
             <p id={`${messageId}-hint`} className="field-hint">
-              Short and polite, up to 300 characters. Leave it empty to send the standard message.
+              Short and polite, up to 300 characters. Leave it empty to send the
+              standard message.
             </p>
           </div>
           <div className="row-actions">
             <button type="submit" disabled={busy} aria-busy={busy}>
               Send warning
             </button>
-            <button type="button" className="button-quiet" onClick={() => setMode("idle")} disabled={busy}>
+            <button
+              type="button"
+              className="button-quiet"
+              onClick={() => setMode("idle")}
+              disabled={busy}
+            >
               Cancel
             </button>
           </div>
@@ -159,10 +204,14 @@ function ReviewControls({
       ) : null}
 
       {mode === "confirm" ? (
-        <div className="proctor-confirm" role="group" aria-labelledby={`confirm-${flag.id}`}>
+        <div
+          className="proctor-confirm"
+          role="group"
+          aria-labelledby={`confirm-${flag.id}`}
+        >
           <p id={`confirm-${flag.id}`}>
-            Recommend invalidation for this session? This only marks the session for a decision. It does not change the
-            attempt or the result.
+            Recommend invalidation for this session? This only marks the session
+            for a decision. It does not change the attempt or the result.
           </p>
           <div className="row-actions">
             <button
@@ -177,7 +226,12 @@ function ReviewControls({
             >
               Confirm recommendation
             </button>
-            <button type="button" className="button-quiet" onClick={() => setMode("idle")} disabled={busy}>
+            <button
+              type="button"
+              className="button-quiet"
+              onClick={() => setMode("idle")}
+              disabled={busy}
+            >
               Cancel
             </button>
           </div>
@@ -213,7 +267,9 @@ function FlagEntry({
     ? [
         detail.label ? `label ${detail.label}` : null,
         detail.count !== undefined ? `count ${detail.count}` : null,
-        detail.confidence !== undefined ? `confidence ${Math.round(detail.confidence * 100)}%` : null,
+        detail.confidence !== undefined
+          ? `confidence ${Math.round(detail.confidence * 100)}%`
+          : null,
       ].filter(Boolean)
     : [];
   return (
@@ -228,9 +284,16 @@ function FlagEntry({
         </span>
       </p>
       {flag.sustainedSeconds !== null ? (
-        <p className="field-hint">Raised after the condition lasted at least {flag.sustainedSeconds} seconds.</p>
+        <p className="field-hint">
+          Raised after the condition lasted at least {flag.sustainedSeconds}{" "}
+          seconds.
+        </p>
       ) : null}
-      {detailParts.length > 0 ? <p className="field-hint">Sent by the browser: {detailParts.join(", ")}</p> : null}
+      {detailParts.length > 0 ? (
+        <p className="field-hint">
+          Sent by the browser: {detailParts.join(", ")}
+        </p>
+      ) : null}
       <div className="proctor-flag-capture">
         {flag.evidenceId ? (
           <EvidenceImage
@@ -247,12 +310,19 @@ function FlagEntry({
       </div>
       {flag.review ? (
         <p className="proctor-decision">
-          Decision: {DECISION_LABELS[flag.review.decision]} by {roleLabel(flag.review.decidedByRole)}
-          {flag.review.decidedAt ? `, ${formatTime(flag.review.decidedAt)}` : ""}
+          Decision: {DECISION_LABELS[flag.review.decision]} by{" "}
+          {roleLabel(flag.review.decidedByRole)}
+          {flag.review.decidedAt
+            ? `, ${formatTime(flag.review.decidedAt)}`
+            : ""}
           {flag.review.note ? `. Note: ${flag.review.note}` : ""}
         </p>
       ) : canReview ? (
-        <ReviewControls flag={flag} canRecommend={canRecommend} onDone={(d) => onDecided(flag, d)} />
+        <ReviewControls
+          flag={flag}
+          canRecommend={canRecommend}
+          onDone={(d) => onDecided(flag, d)}
+        />
       ) : (
         <p className="field-hint">Not reviewed yet.</p>
       )}
@@ -301,8 +371,8 @@ function LockSection({
           : "The exam is not paused."}
       </p>
       <p className="field-hint">
-        {policyText}. Counted flags now: {lock.countedFlags}. The clock keeps running while paused, and unlocking
-        starts the count again from zero.
+        {policyText}. Counted flags now: {lock.countedFlags}. The clock keeps
+        running while paused, and unlocking starts the count again from zero.
       </p>
       {lock.paused && canUnlock ? (
         <button type="button" onClick={() => void unlock()} disabled={busy}>
@@ -343,7 +413,11 @@ function SessionPanel({
     queryFn: ({ signal }) => listSessionSnapshots(id, signal),
     refetchInterval: PROCTORING_REFRESH_MS,
   });
-  const snapshotState = snapshots.isError ? "error" : snapshots.isPending ? "loading" : "ready";
+  const snapshotState = snapshots.isError
+    ? "error"
+    : snapshots.isPending
+      ? "loading"
+      : "ready";
   const snapshotRows = snapshots.data ?? [];
   const byId = new Map(snapshotRows.map((row) => [row.id, row]));
 
@@ -352,15 +426,21 @@ function SessionPanel({
   }, [id]);
 
   function decided(flag: Flag, decision: Decision) {
-    setNotice(`Decision saved for ${typeLabel(flag.type).toLowerCase()}: ${DECISION_LABELS[decision]}.`);
-    void queryClient.invalidateQueries({ queryKey: ["proctoring-session", id] });
+    setNotice(
+      `Decision saved for ${typeLabel(flag.type).toLowerCase()}: ${DECISION_LABELS[decision]}.`,
+    );
+    void queryClient.invalidateQueries({
+      queryKey: ["proctoring-session", id],
+    });
     void queryClient.invalidateQueries({ queryKey: ["proctoring-sessions"] });
   }
 
   const data = detail.data;
   function unlocked() {
     setNotice("The exam was unlocked. The candidate can carry on.");
-    void queryClient.invalidateQueries({ queryKey: ["proctoring-session", id] });
+    void queryClient.invalidateQueries({
+      queryKey: ["proctoring-session", id],
+    });
     void queryClient.invalidateQueries({ queryKey: ["proctoring-sessions"] });
   }
   const headingId = `proctoring-session-${id}`;
@@ -375,7 +455,9 @@ function SessionPanel({
         if (event.key === "Escape" && !event.defaultPrevented) onClose();
       }}
     >
-      <h2 id={headingId}>{data ? `Session of ${candidateLabel(data)}` : "Session"}</h2>
+      <h2 id={headingId}>
+        {data ? `Session of ${candidateLabel(data)}` : "Session"}
+      </h2>
       <button type="button" className="button-quiet" onClick={onClose}>
         Close session
       </button>{" "}
@@ -383,7 +465,6 @@ function SessionPanel({
       <p role="status" className="proctor-notice">
         {notice}
       </p>
-
       {detail.isPending ? <p role="status">Loading session…</p> : null}
       {detail.isError ? (
         <div className="form-error" role="alert">
@@ -393,7 +474,6 @@ function SessionPanel({
           </button>
         </div>
       ) : null}
-
       {data ? (
         <>
           <dl className="snapshot-list">
@@ -425,10 +505,16 @@ function SessionPanel({
             </div>
           </dl>
           {data.lock ? (
-            <LockSection sessionId={id} lock={data.lock} canUnlock={canReview} onUnlocked={unlocked} />
+            <LockSection
+              sessionId={id}
+              lock={data.lock}
+              canUnlock={canReview}
+              onUnlocked={unlocked}
+            />
           ) : null}
           <p className="field-hint">
-            Flags only record what the browser saw. Nothing is decided automatically; each flag waits for a person.
+            Flags only record what the browser saw. Nothing is decided
+            automatically; each flag waits for a person.
           </p>
 
           <h3>Flag timeline</h3>
@@ -440,7 +526,9 @@ function SessionPanel({
                 <FlagEntry
                   key={flag.id}
                   flag={flag}
-                  evidence={flag.evidenceId ? byId.get(flag.evidenceId) : undefined}
+                  evidence={
+                    flag.evidenceId ? byId.get(flag.evidenceId) : undefined
+                  }
                   detailsState={snapshotState}
                   canReview={canReview}
                   canRecommend={canRecommend}
@@ -451,13 +539,22 @@ function SessionPanel({
           )}
 
           <SnapshotStrip
-            rows={snapshotRows.filter((row) => !data.flags.some((f) => f.evidenceId === row.id))}
+            rows={snapshotRows.filter(
+              (row) => !data.flags.some((f) => f.evidenceId === row.id),
+            )}
             state={snapshotState}
             error={snapshots.error}
             onRetry={() => void snapshots.refetch()}
           />
 
-          <SessionVideoPanel sessionId={data.id} />
+          <SessionVideoPanel
+            sessionId={data.id}
+            flags={data.flags.map((f) => ({
+              id: f.id,
+              type: f.type,
+              capturedAt: f.capturedAt,
+            }))}
+          />
 
           {data.warnings.length > 0 ? (
             <>
@@ -465,7 +562,10 @@ function SessionPanel({
               <ul>
                 {data.warnings.map((w) => (
                   <li key={w.id}>
-                    <time dateTime={w.createdAt}>{formatTime(w.createdAt)}</time>: {w.message}
+                    <time dateTime={w.createdAt}>
+                      {formatTime(w.createdAt)}
+                    </time>
+                    : {w.message}
                   </li>
                 ))}
               </ul>
@@ -506,9 +606,14 @@ export function ProctoringPage() {
     <div className="audit-page">
       <h1>Proctoring</h1>
       <p>
-        Proctored online attempts and the flags raised during them. The list refreshes every 10 seconds.
+        Proctored online attempts and the flags raised during them. The list
+        refreshes every 10 seconds.
         {canReview ? " Review each flag: dismiss it, warn the candidate" : ""}
-        {canReview && canRecommend ? ", or recommend invalidation." : canReview ? "." : ""}
+        {canReview && canRecommend
+          ? ", or recommend invalidation."
+          : canReview
+            ? "."
+            : ""}
         {canReview ? "" : " Your access is read only."}
       </p>
 
@@ -529,7 +634,9 @@ export function ProctoringPage() {
             <input
               id="pr-batch"
               value={draft.batchId}
-              onChange={(event) => setDraft({ ...draft, batchId: event.target.value })}
+              onChange={(event) =>
+                setDraft({ ...draft, batchId: event.target.value })
+              }
               autoComplete="off"
             />
           </div>
@@ -538,7 +645,9 @@ export function ProctoringPage() {
             <select
               id="pr-status"
               value={draft.status}
-              onChange={(event) => setDraft({ ...draft, status: event.target.value })}
+              onChange={(event) =>
+                setDraft({ ...draft, status: event.target.value })
+              }
             >
               <option value="">Any status</option>
               {SESSION_STATUSES.map((s) => (
@@ -553,7 +662,9 @@ export function ProctoringPage() {
             <select
               id="pr-severity"
               value={draft.minSeverity}
-              onChange={(event) => setDraft({ ...draft, minSeverity: event.target.value })}
+              onChange={(event) =>
+                setDraft({ ...draft, minSeverity: event.target.value })
+              }
             >
               <option value="">Any, including no flags</option>
               {SEVERITIES.map((s) => (
@@ -600,7 +711,11 @@ export function ProctoringPage() {
       </p>
 
       {result && result.items.length === 0 ? (
-        <p>{active ? "No sessions match these filters." : "No proctoring sessions yet."}</p>
+        <p>
+          {active
+            ? "No sessions match these filters."
+            : "No proctoring sessions yet."}
+        </p>
       ) : null}
 
       {result && result.items.length > 0 ? (
