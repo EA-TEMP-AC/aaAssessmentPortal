@@ -222,7 +222,7 @@ Implement in B-02. No magic numbers in feature code.
 | `PROCTOR_FLAG_COOLDOWN_SECONDS` | `15` | Project (P-01). Seconds the browser waits before sending a second flag of the same type (`config.flagCooldownSeconds`). Not enforced by the server |
 | `PROCTOR_SUSTAINED_SECONDS` | `{ face_not_present: 2, camera_blocked: 2, camera_frozen: 2, looking_away: 2, voice_detected: 2 }` | Project (P-01, P-05). How long the condition must last before the browser raises the flag (`config.sustainedSeconds`) |
 | `PROCTOR_FEED_LOST_INTERVALS` | `3` | Project (P-01). No heartbeat for this many snapshot intervals (90 s) shows the session as `feed_lost`. Open Q621 |
-| `PROCTOR_FLAG_SEVERITY` | table | Project (P-04). low: `tab_hidden`, `fullscreen_exit`, `window_blur`, `permission_revoked`, `object_detected`; medium: `face_not_present`, `id_unreadable`, `looking_away`, `voice_detected`; high: `multiple_faces`, `person_detected`, `phone_detected`, `camera_blocked`, `camera_frozen`, `face_mismatch`, `id_mismatch`, `screen_share_stopped`. Set by the server, never by the client |
+| `PROCTOR_FLAG_SEVERITY` | table | Project (P-04). low: `tab_hidden`, `fullscreen_exit`, `window_blur`, `permission_revoked`, `object_detected`; medium: `face_not_present`, `id_unreadable`, `looking_away`, `voice_detected`; high: `multiple_faces`, `person_detected`, `phone_detected`, `camera_blocked`, `camera_frozen`, `face_mismatch`, `id_mismatch`, `screen_share_stopped`; medium also `recording_failed`. Set by the server, never by the client |
 
 ### 2.1 Working-day counting convention
 
@@ -321,6 +321,17 @@ Stable person across batches.
 | active | bool | Y | |
 
 Indexes: `{ externalRef: 1 }` sparse unique; `{ name: 1 }`.
+
+### 3.4b `examVideoChunks` (X-27)
+
+| Field | Type | Req | Notes |
+|---|---|---|---|
+| sessionId, attemptId, batchId, abId | ObjectId | Y | the session the piece belongs to |
+| track | `camera` \| `screen` | Y | |
+| seq | integer | Y | 0-based place of the piece; unique with `sessionId` and `track` |
+| size, sha256 | number, string | Y | of the piece |
+| storageKey | string | Y | `<sessionId>/<track>-<seq>.webm` under `EXAM_VIDEO_DIR` (default `server/var/exam-video`); the file is on the server disk |
+| receivedAt, expiresAt | date | Y | `expiresAt` is 90 days after `receivedAt`; the piece and file are deleted after it |
 
 ### 3.4a `questionImages` (X-25)
 
@@ -438,6 +449,9 @@ Indexes: `{ code: 1 }` unique; `{ sector: 1 }`.
 | detectLookingAway | boolean | `true` | X-16. Off: the browser does not check for the `looking_away` flag in this batch |
 | detectVoice | boolean | `true` | X-16. Off: the browser does not check for the `voice_detected` flag and does not ask for the microphone |
 | skipPaperApproval (X-22) | boolean | `false` | Cannot be turned on while the batch has a `schemeId` (`BATCH_MOCK_NOT_ALLOWED`). Shown as `mockTest` on batch responses |
+| recordVideo | boolean | `false` | X-27. Records the camera and shared screen; needs `requireScreenShare` |
+| videoFailureAction | `continue` \| `require` | `continue` | X-27. `require` blocks the start in a browser that cannot record |
+| videoVisibleTo | list of roles | `["proctor"]` | X-27. Roles besides aa_admin that may watch the video (batch scope still applies) |
 | requireScreenShare | boolean | `false` | X-21. On: the candidate must share the whole screen on the check screen; `screen_share_stopped` (high) is raised if sharing ends. No screen image is kept |
 | imageCapture.intervalSeconds | integer 10 to 120 | `PROCTOR_SNAPSHOT_INTERVAL_SECONDS` (30) | Becomes `config.snapshotIntervalSeconds` of a new proctoring session |
 | imageCapture.atStartAndEnd | bool | true | Delivered as `config.snapshotAtStartAndEnd`; the engine does not act on it yet (Q807) |
@@ -1039,7 +1053,7 @@ Indexes: `{ attemptId: 1 }` unique; `{ batchId: 1, createdAt: -1 }`; `{ abId: 1,
 |---|---|---|---|
 | sessionId, attemptId, batchId, abId | ObjectId | Y | |
 | clientEventId | string | Y | Max 200; unique per session |
-| type | enum | Y | `tab_hidden`, `fullscreen_exit`, `window_blur`, `permission_revoked`, `object_detected`, `face_not_present`, `multiple_faces`, `person_detected`, `phone_detected`, `camera_blocked`, `camera_frozen`, `face_mismatch`, `id_mismatch`, `id_unreadable`, `looking_away`, `voice_detected`, `screen_share_stopped` |
+| type | enum | Y | `tab_hidden`, `fullscreen_exit`, `window_blur`, `permission_revoked`, `object_detected`, `face_not_present`, `multiple_faces`, `person_detected`, `phone_detected`, `camera_blocked`, `camera_frozen`, `face_mismatch`, `id_mismatch`, `id_unreadable`, `looking_away`, `voice_detected`, `screen_share_stopped`, `recording_failed` |
 | severity | enum | Y | `low`, `medium`, `high`; set by the server from `PROCTOR_FLAG_SEVERITY` (§2) |
 | capturedAt | Date | Y | Device clock, as sent |
 | receivedAt | Date | Y | Server clock |

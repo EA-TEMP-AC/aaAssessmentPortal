@@ -27,6 +27,9 @@ export type AvailableAssessment = {
   /** X-07: the batch records the candidate location with flag photos. */
   captureLocation: boolean;
   requireScreenShare: boolean;
+  /** X-27: the camera and the shared screen are recorded for the whole exam. */
+  recordVideo: boolean;
+  videoFailureAction: "continue" | "require";
   paperId: string;
   paperName: string;
   language: string | null;
@@ -101,6 +104,8 @@ export function parseAvailableAssessment(value: unknown): AvailableAssessment {
     assessmentEndDate: str(value.assessmentEndDate),
     captureLocation: value.captureLocation === true,
     requireScreenShare: value.requireScreenShare === true,
+    recordVideo: value.recordVideo === true,
+    videoFailureAction: value.videoFailureAction === "require" ? "require" : "continue",
     paperId,
     paperName: str(value.paperName) ?? str(value.paperCode) ?? paperId,
     language: str(value.language),

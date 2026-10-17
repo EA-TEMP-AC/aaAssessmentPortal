@@ -23,6 +23,7 @@ export const PROCTOR_FLAG_TYPES = [
   "looking_away",
   "voice_detected",
   "screen_share_stopped",
+  "recording_failed",
 ] as const;
 
 export type ProctorFlagType =
@@ -42,7 +43,8 @@ export type ProctorFlagType =
   | "id_unreadable"
   | "looking_away"
   | "voice_detected"
-  | "screen_share_stopped";
+  | "screen_share_stopped"
+  | "recording_failed";
 
 export interface ProctorConfig {
   snapshotIntervalSeconds: number;
@@ -53,6 +55,10 @@ export interface ProctorConfig {
   flagSeverity?: Record<string, string>;
   /** X-16: flag types switched off for this batch. The engine does not check for them. */
   disabledFlags?: string[];
+  /** X-27: record the camera and the shared screen and send the pieces. */
+  recordVideo?: boolean;
+  /** X-27: how often the browser sends a piece, in seconds. */
+  videoChunkSeconds?: number;
 }
 
 export type ProctorStatus = {

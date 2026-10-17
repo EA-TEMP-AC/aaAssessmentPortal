@@ -246,10 +246,68 @@ export function SettingsFields({
         />
         <Toggle
           label="Require screen sharing"
-          help="The candidate must share the whole screen before the exam starts. A high flag is recorded if sharing stops. The screen is not recorded and no picture of it is sent."
+          help="The candidate must share the whole screen before the exam starts. A high flag is recorded if sharing stops. On its own, nothing from the screen is recorded or sent."
           checked={draft.requireScreenShare}
-          onChange={(v) => set("requireScreenShare", v)}
+          onChange={(v) => {
+            set("requireScreenShare", v);
+            if (!v && draft.recordVideo) set("recordVideo", false);
+          }}
         />
+        <Toggle
+          label="Record exam video"
+          help="Records the candidate's camera and shared screen for the whole exam and keeps them on the server for 90 days, then deletes them. Needs screen sharing, which is turned on with it."
+          checked={draft.recordVideo}
+          onChange={(v) => {
+            set("recordVideo", v);
+            if (v) set("requireScreenShare", true);
+          }}
+        />
+        {problems.recordVideo ? (
+          <p role="alert" className="form-error">
+            {problems.recordVideo}
+          </p>
+        ) : null}
+        {draft.recordVideo ? (
+          <>
+            <div className="field">
+              <label htmlFor={`${ids.after}-videofail`}>If the video cannot be recorded</label>
+              <select
+                id={`${ids.after}-videofail`}
+                value={draft.videoFailureAction}
+                onChange={(event) =>
+                  set("videoFailureAction", event.target.value === "require" ? "require" : "continue")
+                }
+              >
+                <option value="continue">Let the exam continue and raise a flag</option>
+                <option value="require">Do not let the candidate start until recording works</option>
+              </select>
+            </div>
+            <fieldset className="bare-fieldset">
+              <legend>Who can watch the recording</legend>
+              <p className="field-hint">
+                The AA admin always can. Others only for batches they belong to, and every look is recorded in the
+                access log.
+              </p>
+              {LOCATION_ROLES.map((role) => (
+                <label key={role} className="check-label">
+                  <input
+                    type="checkbox"
+                    checked={draft.videoVisibleTo.includes(role)}
+                    onChange={(event) =>
+                      set(
+                        "videoVisibleTo",
+                        event.target.checked
+                          ? [...draft.videoVisibleTo, role]
+                          : draft.videoVisibleTo.filter((r) => r !== role),
+                      )
+                    }
+                  />{" "}
+                  {LOCATION_ROLE_LABELS[role]}
+                </label>
+              ))}
+            </fieldset>
+          </>
+        ) : null}
       </Group>
 
       <Group title="Candidate pop-up">

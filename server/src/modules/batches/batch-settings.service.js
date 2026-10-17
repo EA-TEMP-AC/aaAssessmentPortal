@@ -53,6 +53,12 @@ export async function updateBatchSettings(user, id, patch) {
       "candidateInfoPopup.fields": ["Choose at least one field when the pop-up is on"],
     });
   }
+  // X-27: recording the video records the shared screen, so screen sharing must be on.
+  if (after.recordVideo === true && after.requireScreenShare !== true) {
+    throw validationError("Request validation failed", {
+      recordVideo: ["Turn on screen sharing to record the exam video"],
+    });
+  }
   // X-22: a batch under a scheme is a real assessment; it cannot be switched to a mock test.
   if (after.skipPaperApproval === true && before.skipPaperApproval !== true && existing.schemeId) {
     throw new AppError(

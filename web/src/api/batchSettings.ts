@@ -50,6 +50,8 @@ export const LOCATION_ROLE_LABELS: Record<LocationRole, string> = {
   ncvet_viewer: "NCVET viewer",
 };
 
+export type VideoFailureAction = "continue" | "require";
+
 export type BatchSettings = {
   shuffleQuestions: boolean;
   shuffleOptions: boolean;
@@ -74,6 +76,12 @@ export type BatchSettings = {
   /** X-16: raise the voice-heard flag from the microphone loudness. */
   detectVoice: boolean;
   requireScreenShare: boolean;
+  /** X-27: record the camera and the shared screen for the whole exam (needs screen sharing). */
+  recordVideo: boolean;
+  /** X-27: when recording fails, `continue` flags it; `require` also stops the candidate starting. */
+  videoFailureAction: VideoFailureAction;
+  /** X-27: roles besides aa_admin that may watch the recording. */
+  videoVisibleTo: LocationRole[];
   /** X-12: roles besides aa_admin that may see the coordinates. */
   locationVisibleTo: LocationRole[];
 };
@@ -106,6 +114,9 @@ export const DEFAULT_BATCH_SETTINGS: BatchSettings = {
   detectLookingAway: true,
   detectVoice: true,
   requireScreenShare: false,
+  recordVideo: false,
+  videoFailureAction: "continue",
+  videoVisibleTo: ["proctor"],
   locationVisibleTo: ["tp", "proctor"],
 };
 
@@ -181,6 +192,11 @@ export function parseBatchSettings(value: unknown): BatchSettings {
     detectLookingAway: bool(root.detectLookingAway, d.detectLookingAway),
     detectVoice: bool(root.detectVoice, d.detectVoice),
     requireScreenShare: bool(root.requireScreenShare, d.requireScreenShare),
+    recordVideo: bool(root.recordVideo, d.recordVideo),
+    videoFailureAction: root.videoFailureAction === "require" ? "require" : "continue",
+    videoVisibleTo: Array.isArray(root.videoVisibleTo)
+      ? LOCATION_ROLES.filter((r) => (root.videoVisibleTo as unknown[]).includes(r))
+      : d.videoVisibleTo,
     locationVisibleTo: Array.isArray(root.locationVisibleTo)
       ? LOCATION_ROLES.filter((r) => (root.locationVisibleTo as unknown[]).includes(r))
       : d.locationVisibleTo,

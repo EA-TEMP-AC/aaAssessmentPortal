@@ -39,6 +39,7 @@ export const FLAG_TYPE_LABELS: Record<string, string> = {
   looking_away: "Looking away from the screen",
   voice_detected: "Voice heard",
   screen_share_stopped: "Screen sharing stopped",
+  recording_failed: "Video recording failed",
 };
 
 export const DECISION_LABELS: Record<Decision, string> = {
@@ -458,4 +459,46 @@ export async function getFlagCapture(
     location,
     question: parseFlagQuestion(body.question),
   };
+}
+
+/** X-27: what exam video exists for a session. No video bytes. */
+export type SessionVideo = {
+  sessionId: string;
+  recordVideo: boolean;
+  retentionDays: number;
+  expiresAt: string | null;
+  tracks: Record<"camera" | "screen", { pieces: number; bytes: number; complete: boolean }>;
+};
+
+export async function getSessionVideo(sessionId: string, signal?: AbortSignal): Promise<SessionVideo> {
+  const body = await apiRequest<unknown>(`/proctoring/sessions/${encodeURIComponent(sessionId)}/video`, { signal });
+  if (!isRecord(body) || !isRecord(body.tracks)) throw bad("Session video");
+  const track = (value: unknown) =>
+    isRecord(value)
+      ? {
+          pieces: typeof value.pieces === "number" ? value.pieces : 0,
+          bytes: typeof value.bytes === "number" ? value.bytes : 0,
+          complete: value.complete === true,
+        }
+      : { pieces: 0, bytes: 0, complete: false };
+  return {
+    sessionId,
+    recordVideo: body.recordVideo === true,
+    retentionDays: typeof body.retentionDays === "number" ? body.retentionDays : 90,
+    expiresAt: typeof body.expiresAt === "string" ? body.expiresAt : null,
+    tracks: { camera: track(body.tracks.camera), screen: track(body.tracks.screen) },
+  };
+}
+
+/** X-27: one track as a WebM file. The server logs the look. */
+export async function fetchSessionVideoTrack(
+  sessionId: string,
+  track: "camera" | "screen",
+  signal?: AbortSignal,
+): Promise<Blob> {
+  const response = await apiRequest<Response>(
+    `/proctoring/sessions/${encodeURIComponent(sessionId)}/video/${track}`,
+    { raw: true, signal },
+  );
+  return response.blob();
 }

@@ -21,6 +21,7 @@ export const FLAG_NOTICE_TEXT: Record<ProctorFlagType, string> = {
   id_unreadable: "Your ID card photo could not be read. You can carry on with the exam.",
   looking_away: "Please keep your face towards the screen while you work.",
   voice_detected: "Please stay quiet during the exam.",
+  recording_failed: "The exam video could not be recorded. A flag has been recorded; please tell your proctor.",
   screen_share_stopped: "Screen sharing has stopped. A flag has been recorded; please tell your proctor.",
 };
 

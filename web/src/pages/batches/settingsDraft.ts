@@ -11,6 +11,7 @@ import {
   type BatchSettingsPatch,
   type InfoField,
   type LocationRole,
+  type VideoFailureAction,
 } from "../../api/batchSettings";
 
 /** The form's working copy of the batch settings, and the rules around it (task B-20). */
@@ -23,6 +24,9 @@ export type Draft = {
   questionsMandatory: boolean;
   extendOnUnlock: boolean;
   locationVisibleTo: LocationRole[];
+  recordVideo: boolean;
+  videoFailureAction: VideoFailureAction;
+  videoVisibleTo: LocationRole[];
   action: "record" | "pause";
   pauseAfterFlags: string;
   countMedium: boolean;
@@ -38,7 +42,7 @@ export type Draft = {
 };
 
 export type Problems = Partial<
-  Record<"pauseAfterFlags" | "intervalSeconds" | "popupFields", string>
+  Record<"pauseAfterFlags" | "intervalSeconds" | "popupFields" | "recordVideo", string>
 >;
 
 export function toDraft(s: BatchSettings): Draft {
@@ -50,6 +54,9 @@ export function toDraft(s: BatchSettings): Draft {
     questionsMandatory: s.questionsMandatory,
     extendOnUnlock: s.flagPolicy.extendOnUnlock,
     locationVisibleTo: [...s.locationVisibleTo],
+    recordVideo: s.recordVideo,
+    videoFailureAction: s.videoFailureAction,
+    videoVisibleTo: [...s.videoVisibleTo],
     action: s.flagPolicy.action,
     pauseAfterFlags: String(s.flagPolicy.pauseAfterFlags),
     countMedium: s.flagPolicy.countSeverities.includes("medium"),
@@ -87,6 +94,9 @@ export function validateDraft(draft: Draft): Problems {
   if (draft.popupEnabled && draft.popupFields.length === 0) {
     problems.popupFields = "Choose at least one field, or turn the pop-up off.";
   }
+  if (draft.recordVideo && !draft.requireScreenShare) {
+    problems.recordVideo = "Turn on screen sharing to record the exam video.";
+  }
   return problems;
 }
 
@@ -107,11 +117,15 @@ export function buildPatch(
     "detectLookingAway",
     "detectVoice",
     "requireScreenShare",
+    "recordVideo",
   ] as const) {
     if (draft[key] !== saved[key]) patch[key] = draft[key];
   }
   const viewers = LOCATION_ROLES.filter((r) => draft.locationVisibleTo.includes(r));
   if (viewers.join() !== saved.locationVisibleTo.join()) patch.locationVisibleTo = viewers;
+  if (draft.videoFailureAction !== saved.videoFailureAction) patch.videoFailureAction = draft.videoFailureAction;
+  const watchers = LOCATION_ROLES.filter((r) => draft.videoVisibleTo.includes(r));
+  if (watchers.join() !== saved.videoVisibleTo.join()) patch.videoVisibleTo = watchers;
   const policy: NonNullable<BatchSettingsPatch["flagPolicy"]> = {};
   if (draft.action !== saved.flagPolicy.action) policy.action = draft.action;
   const after = Number(draft.pauseAfterFlags);
@@ -221,6 +235,18 @@ export function describeChanges(saved: BatchSettings, draft: Draft): string[] {
   flip("Detect looking away", saved.detectLookingAway, draft.detectLookingAway);
   flip("Detect voice", saved.detectVoice, draft.detectVoice);
   flip("Require screen sharing", saved.requireScreenShare, draft.requireScreenShare);
+  flip("Record exam video", saved.recordVideo, draft.recordVideo);
+  if (draft.videoFailureAction !== saved.videoFailureAction) {
+    lines.push(
+      `If recording fails: ${draft.videoFailureAction === "require" ? "the candidate cannot start" : "the exam continues and a flag is raised"}`,
+    );
+  }
+  const watchers = LOCATION_ROLES.filter((r) => draft.videoVisibleTo.includes(r));
+  if (watchers.join() !== saved.videoVisibleTo.join()) {
+    lines.push(
+      `Who can watch the video: AA admin${watchers.map((r) => `, ${LOCATION_ROLE_LABELS[r]}`).join("")}`,
+    );
+  }
   const viewers = LOCATION_ROLES.filter((r) => draft.locationVisibleTo.includes(r));
   if (viewers.join() !== saved.locationVisibleTo.join()) {
     lines.push(

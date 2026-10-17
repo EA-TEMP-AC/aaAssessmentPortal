@@ -67,6 +67,8 @@ const envSchema = z.object({
   EVIDENCE_STORAGE_DRIVER: z.preprocess(emptyToUndefined, z.enum(["local", "s3"]).optional()),
   /** Directory for the local driver. Defaults to `var/evidence` under the server folder. */
   EVIDENCE_LOCAL_DIR: optionalString,
+  /** X-27: folder for exam video pieces on the server disk. Defaults to `var/exam-video`. */
+  EXAM_VIDEO_DIR: optionalString,
   EVIDENCE_S3_ENDPOINT: z.preprocess(emptyToUndefined, z.string().url().optional()),
   EVIDENCE_S3_REGION: optionalString,
   EVIDENCE_S3_BUCKET: optionalString,

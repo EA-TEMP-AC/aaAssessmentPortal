@@ -384,6 +384,8 @@ export function ExamWindowPage({
       heading={item.paperName}
       captureLocation={item.captureLocation}
       requireScreenShare={item.requireScreenShare}
+      recordVideo={item.recordVideo}
+      videoFailureAction={item.videoFailureAction}
       starting={starting}
       startError={startError}
       frameCheck={frameCheck}

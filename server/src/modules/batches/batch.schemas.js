@@ -10,6 +10,7 @@ import {
   IMAGE_INTERVAL_MAX_SECONDS,
   IMAGE_INTERVAL_MIN_SECONDS,
   LOCATION_VIEWER_ROLES,
+  VIDEO_FAILURE_ACTIONS,
 } from "../../config/batch-settings.js";
 import { assertNoNationalIdKeys } from "../question-bank/question-bank.schemas.js";
 import { BATCH_MODES, BATCH_STATUSES, BATCH_TYPES } from "./batch-transitions.js";
@@ -226,6 +227,12 @@ export const batchSettingsBodySchema = guard(
       requireScreenShare: z.boolean(),
       detectLookingAway: z.boolean(),
       detectVoice: z.boolean(),
+      recordVideo: z.boolean(),
+      videoFailureAction: z.enum(VIDEO_FAILURE_ACTIONS),
+      videoVisibleTo: z
+        .array(z.enum(LOCATION_VIEWER_ROLES))
+        .max(LOCATION_VIEWER_ROLES.length)
+        .refine((list) => new Set(list).size === list.length, "No repeated roles"),
       locationVisibleTo: z
         .array(z.enum(LOCATION_VIEWER_ROLES))
         .max(LOCATION_VIEWER_ROLES.length)

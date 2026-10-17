@@ -18,6 +18,8 @@ export const LOCATION_VIEWER_ROLES = Object.freeze([
   "ab_reviewer",
   "ncvet_viewer",
 ]);
+/** X-27: what happens when the exam video cannot be recorded. `continue` flags it; `require` also blocks the start. */
+export const VIDEO_FAILURE_ACTIONS = Object.freeze(["continue", "require"]);
 export const IMAGE_INTERVAL_MIN_SECONDS = 10;
 export const IMAGE_INTERVAL_MAX_SECONDS = 120;
 /** The only personal fields the pop-up can ask for. There is deliberately no national ID field. */
@@ -58,6 +60,11 @@ export function defaultBatchSettings() {
     requireScreenShare: false,
     detectLookingAway: true,
     detectVoice: true,
+    // X-27: record the camera and the shared screen for the whole exam (needs requireScreenShare).
+    recordVideo: false,
+    videoFailureAction: "continue",
+    // X-27: aa_admin always can watch; these roles too, for batches in their own scope.
+    videoVisibleTo: ["proctor"],
     // X-12: aa_admin always sees it; these roles may too (the batch's own people only).
     locationVisibleTo: ["tp", "proctor"],
   };
@@ -99,6 +106,11 @@ export function resolveBatchSettings(stored) {
     requireScreenShare: stored.requireScreenShare ?? base.requireScreenShare,
     detectLookingAway: stored.detectLookingAway ?? base.detectLookingAway,
     detectVoice: stored.detectVoice ?? base.detectVoice,
+    recordVideo: stored.recordVideo ?? base.recordVideo,
+    videoFailureAction: stored.videoFailureAction ?? base.videoFailureAction,
+    videoVisibleTo: stored.videoVisibleTo
+      ? LOCATION_VIEWER_ROLES.filter((r) => stored.videoVisibleTo.includes(r))
+      : base.videoVisibleTo,
     locationVisibleTo: stored.locationVisibleTo
       ? LOCATION_VIEWER_ROLES.filter((r) => stored.locationVisibleTo.includes(r))
       : base.locationVisibleTo,

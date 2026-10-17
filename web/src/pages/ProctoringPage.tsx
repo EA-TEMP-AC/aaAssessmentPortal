@@ -29,6 +29,7 @@ import { EvidenceImage } from "./proctoring/EvidenceImage";
 import { FlagCaptureDetails } from "./proctoring/FlagCaptureDetails";
 import { formatTime } from "./proctoring/format";
 import { SnapshotStrip } from "./proctoring/SnapshotStrip";
+import { SessionVideoPanel } from "./proctoring/SessionVideoPanel";
 
 /** The list and the open session refresh this often (task P-01). */
 export const PROCTORING_REFRESH_MS = 10_000;
@@ -455,6 +456,8 @@ function SessionPanel({
             error={snapshots.error}
             onRetry={() => void snapshots.refetch()}
           />
+
+          <SessionVideoPanel sessionId={data.id} />
 
           {data.warnings.length > 0 ? (
             <>

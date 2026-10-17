@@ -3,7 +3,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { jsonResponse } from "../test/fixtures";
 import { stubFetch } from "../test/examFixtures";
 import { fakeFaceChecks, makeVideosReady } from "../test/faceFixtures";
-import { PrecheckScreen } from "./PrecheckScreen";
+import { PrecheckScreen, VIDEO_NOTICE } from "./PrecheckScreen";
 
 beforeEach(() => {
   Object.defineProperty(navigator, "mediaDevices", { value: { getUserMedia: vi.fn() }, configurable: true });
@@ -11,11 +11,12 @@ beforeEach(() => {
   stubFetch(() => jsonResponse(200, { status: "ok" }));
 });
 
-function show(requireScreenShare: boolean | undefined) {
+function show(requireScreenShare: boolean | undefined, recordVideo = false) {
   render(
     <PrecheckScreen
       heading="Batch 1"
       requireScreenShare={requireScreenShare}
+      recordVideo={recordVideo}
       starting={false}
       startError={null}
       onStart={() => {}}
@@ -36,4 +37,14 @@ it("shows no screen check when the batch does not require it", () => {
   expect(screen.queryByText("Screen sharing")).not.toBeInTheDocument();
   show(undefined);
   expect(screen.queryByText("Screen sharing")).not.toBeInTheDocument();
+});
+
+it("tells the candidate the camera and screen are recorded, only when the batch records (X-27)", () => {
+  show(true, true);
+  expect(screen.getByText(VIDEO_NOTICE)).toBeInTheDocument();
+});
+
+it("says nothing about recording when the batch does not record", () => {
+  show(true, false);
+  expect(screen.queryByText(VIDEO_NOTICE)).not.toBeInTheDocument();
 });

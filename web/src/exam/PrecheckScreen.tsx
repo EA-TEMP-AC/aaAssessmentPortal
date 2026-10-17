@@ -28,6 +28,10 @@ import {
 } from "../proctoring/face";
 import type { FaceStart } from "./faceEvidence";
 import { holdScreen, releaseHeldScreen, requestScreen } from "./screenShare";
+import { recordingSupported } from "../proctoring/videoRecorder";
+
+export const VIDEO_NOTICE =
+  "This exam records your camera and your shared screen. The recording is kept for 90 days and can be watched only by the people your exam centre allows.";
 
 export type FrameCheckOptions = {
   sample?: (video: HTMLVideoElement) => Uint8ClampedArray | null;
@@ -81,6 +85,10 @@ type Props = {
   captureLocation?: boolean;
   /** X-21: the batch requires the candidate to share the whole screen. */
   requireScreenShare?: boolean;
+  /** X-27: the camera and the shared screen are recorded. */
+  recordVideo?: boolean;
+  /** X-27: `require` stops the candidate starting when this browser cannot record. */
+  videoFailureAction?: "continue" | "require";
   starting: boolean;
   startError: string | null;
   /** Gets the live camera stream. The exam keeps it for proctoring and stops it at the end. */
@@ -126,6 +134,8 @@ export function PrecheckScreen({
   heading,
   captureLocation,
   requireScreenShare = false,
+  recordVideo = false,
+  videoFailureAction = "continue",
   starting,
   startError,
   onStart,
@@ -509,6 +519,9 @@ export function PrecheckScreen({
     { ok: camera.state === "passed", todo: "camera access" },
     { ok: !networkBusy && networkOk, todo: "network speed" },
     ...(requireScreenShare ? [{ ok: screen === "ok", todo: "screen sharing" }] : []),
+    ...(recordVideo && videoFailureAction === "require"
+      ? [{ ok: recordingSupported(), todo: "use a browser that can record video (a recent Chrome or Edge)" }]
+      : []),
   ];
   const step1Ok = required.every((row) => row.ok);
   const step1Todo = required.filter((row) => !row.ok).map((row) => row.todo);
@@ -873,9 +886,11 @@ export function PrecheckScreen({
               record is checked. The comparison happens in your browser.
             </li>
             <li>
-              Nothing is sent except flags and a few photos, including the photo
-              of your ID card and your selfie.
+              {recordVideo ? "Apart from the recording below, nothing" : "Nothing"} is
+              sent except flags and a few photos, including the photo of your ID
+              card and your selfie.
             </li>
+            {recordVideo ? <li>{VIDEO_NOTICE}</li> : null}
             {captureLocation ? (
               <li>
                 {LOCATION_NOTICE} Your browser asks for permission first. If you

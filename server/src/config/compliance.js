@@ -126,6 +126,14 @@ export const compliance = Object.freeze({
    */
   PROCTOR_FEED_LOST_INTERVALS: 3,
   /**
+   * project. X-27. Exam video (camera and shared screen) is deleted this many days after it was
+   * received (DPDP Act: no longer than needed; the human chose 90 on 2026-10-17). A piece is at
+   * most EXAM_VIDEO_CHUNK_MAX_BYTES; the browser sends one about every EXAM_VIDEO_CHUNK_SECONDS.
+   */
+  EXAM_VIDEO_RETENTION_DAYS: 90,
+  EXAM_VIDEO_CHUNK_SECONDS: 10,
+  EXAM_VIDEO_CHUNK_MAX_BYTES: 20 * 1024 * 1024,
+  /**
    * project. P-04. Severity of each flag type, set by the server. A flag never changes the
    * attempt or the result; a person reviews it (P-08).
    */
@@ -147,5 +155,6 @@ export const compliance = Object.freeze({
     looking_away: "medium",
     voice_detected: "medium",
     screen_share_stopped: "high",
+    recording_failed: "medium",
   }),
 });

@@ -1,4 +1,4 @@
-import { Router } from "express";
+import express, { Router } from "express";
 import { asyncHandler } from "../../lib/async-handler.js";
 import { requireAuth } from "../../middleware/require-auth.js";
 import { recordAccess } from "../audit/access-log.service.js";
@@ -30,6 +30,27 @@ import {
   reviewFlag,
   unlockSession,
 } from "./proctoring.service.js";
+import { compliance } from "../../config/compliance.js";
+import { VIDEO_MAX_PIECES, listVideo, openVideoTrack, saveVideoPiece } from "./video.service.js";
+import { z } from "zod";
+import { pipeline } from "node:stream/promises";
+
+const videoParams = z
+  .object({
+    id: z.string().regex(/^[a-fA-F0-9]{24}$/, "Invalid id"),
+    track: z.enum(["camera", "screen"]),
+    seq: z.coerce
+      .number()
+      .int()
+      .min(0)
+      .max(VIDEO_MAX_PIECES - 1),
+  })
+  .strict();
+const videoTrackParams = videoParams.omit({ seq: true });
+const videoParser = express.raw({
+  type: ["video/webm", "application/octet-stream"],
+  limit: compliance.EXAM_VIDEO_CHUNK_MAX_BYTES,
+});
 
 export const proctoringRouter = Router();
 
@@ -214,5 +235,59 @@ proctoringRouter.get(
       }
     }
     res.status(200).json(body);
+  }),
+);
+
+/**
+ * POST /api/v1/proctoring/sessions/:id/video/:track/:seq (X-27). The body is one WebM piece of
+ * the camera or the shared screen. Only the candidate of the session; only when the batch
+ * records video. Sending the same piece again is `200`.
+ */
+proctoringRouter.post(
+  "/sessions/:id/video/:track/:seq",
+  requireRoles(...PROCTORING_CANDIDATE_ROLES),
+  videoParser,
+  asyncHandler(async (req, res) => {
+    const { id, track, seq } = videoParams.parse(req.params);
+    const saved = await saveVideoPiece(req.user, id, { track, seq }, req.body);
+    req.audit = {
+      action: saved.replayed ? "exam_video.replay" : "exam_video.piece",
+      entity: "proctoringSession",
+      entityId: saved.session._id,
+      abId: saved.session.abId,
+      batchId: saved.session.batchId,
+      omitRequestBody: true,
+      after: { track, seq, size: saved.size },
+    };
+    res
+      .status(saved.replayed ? 200 : 201)
+      .json({ track, seq, size: saved.size, replayed: saved.replayed });
+  }),
+);
+
+/** GET /api/v1/proctoring/sessions/:id/video (X-27). What was recorded; no video bytes. */
+proctoringRouter.get(
+  "/sessions/:id/video",
+  requireRoles(...PROCTORING_CAPTURE_READ_ROLES),
+  asyncHandler(async (req, res) => {
+    const { id } = idParamSchema.parse(req.params);
+    res.status(200).json(await listVideo(req.user, id));
+  }),
+);
+
+/** GET /api/v1/proctoring/sessions/:id/video/:track (X-27). The track as one WebM file; the look is logged. */
+proctoringRouter.get(
+  "/sessions/:id/video/:track",
+  requireRoles(...PROCTORING_CAPTURE_READ_ROLES),
+  asyncHandler(async (req, res) => {
+    const { id, track } = videoTrackParams.parse(req.params);
+    const stream = await openVideoTrack(req, id, track);
+    res.set({
+      "Content-Type": "video/webm",
+      "Cache-Control": "private, no-store",
+      "X-Content-Type-Options": "nosniff",
+    });
+    res.status(200);
+    await pipeline(stream, res);
   }),
 );

@@ -6,6 +6,7 @@ import { assertEvidenceStorageConfig } from "./modules/evidence/storage/storage.
 import { ensureCandidateIndexes } from "./models/candidate.model.js";
 import { startSlaBreachScheduler } from "./modules/batches/sla-breach-job.js";
 import { startAttemptSweepScheduler } from "./modules/attempts/attempt-sweep-job.js";
+import { startExamVideoCleanup } from "./modules/proctoring/video.service.js";
 import { startReviewReminderScheduler } from "./modules/question-bank/review-reminder-job.js";
 import { startEmailWorker } from "./modules/email/email-worker.js";
 import { smtpIsConfigured } from "./modules/email/email-transport.js";
@@ -35,6 +36,8 @@ async function main() {
       console.log("Question review reminder job scheduled");
       startAttemptSweepScheduler({ runOnStart: true });
       console.log("Attempt sweep job scheduled");
+      startExamVideoCleanup();
+      console.log("Exam video cleanup job scheduled");
     }
     if (smtpIsConfigured()) {
       startEmailWorker();

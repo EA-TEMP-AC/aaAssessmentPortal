@@ -8,6 +8,7 @@ import {
   IMAGE_INTERVAL_MAX_SECONDS,
   IMAGE_INTERVAL_MIN_SECONDS,
   LOCATION_VIEWER_ROLES,
+  VIDEO_FAILURE_ACTIONS,
 } from "../config/batch-settings.js";
 import { RATIO_CLASSES, RECOGNITION_CHECKS, SECTOR_NAMES, STATE_UTS } from "../config/annexure.js";
 import {
@@ -134,6 +135,12 @@ const batchSettingsSchema = new mongoose.Schema(
     detectLookingAway: { type: Boolean },
     detectVoice: { type: Boolean },
     locationVisibleTo: {
+      type: [{ type: String, enum: LOCATION_VIEWER_ROLES }],
+      default: undefined,
+    },
+    recordVideo: { type: Boolean },
+    videoFailureAction: { type: String, enum: VIDEO_FAILURE_ACTIONS },
+    videoVisibleTo: {
       type: [{ type: String, enum: LOCATION_VIEWER_ROLES }],
       default: undefined,
     },

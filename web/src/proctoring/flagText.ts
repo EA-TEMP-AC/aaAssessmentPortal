@@ -23,6 +23,7 @@ export const FLAG_NAMES: Record<string, string> = {
   looking_away: "Looking away from the screen",
   voice_detected: "Voice heard",
   screen_share_stopped: "Screen sharing stopped",
+  recording_failed: "Video recording failed",
 };
 
 /** Used when the server config has no severity for a type. Same values as compliance.js. */
@@ -44,6 +45,7 @@ export const DEFAULT_SEVERITY: Record<string, string> = {
   looking_away: "medium",
   voice_detected: "medium",
   screen_share_stopped: "high",
+  recording_failed: "medium",
 };
 
 export function flagName(type: string): string {
@@ -93,6 +95,8 @@ export function flagReason(type: string, sustained?: Record<string, number>): st
       return `Talking heard${forSeconds(n)}`;
     case "screen_share_stopped":
       return "Screen sharing was stopped during the exam";
+    case "recording_failed":
+      return "The exam video could not be recorded or sent";
     default:
       return type;
   }

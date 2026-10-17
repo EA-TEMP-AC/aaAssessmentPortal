@@ -500,6 +500,8 @@ export async function listAvailable(user) {
         captureLocation: batch.captureLocation === true,
         // X-21: the check screen asks the candidate to share the screen.
         requireScreenShare: resolveBatchSettings(batch.settings).requireScreenShare === true,
+        recordVideo: resolveBatchSettings(batch.settings).recordVideo === true,
+        videoFailureAction: resolveBatchSettings(batch.settings).videoFailureAction,
         paperId: idStr(paper._id),
         paperCode: shortCode(paper._id),
         paperName: paper.name || defaultPaperName(qual?.name, paper.rules?.language),

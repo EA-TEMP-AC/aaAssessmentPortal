@@ -45,6 +45,9 @@ export function proctoringConfig(settings = resolveBatchSettings(null)) {
     sustainedSeconds: { ...compliance.PROCTOR_SUSTAINED_SECONDS },
     // X-07: the browser draws the severity on the flag photo.
     flagSeverity: { ...compliance.PROCTOR_FLAG_SEVERITY },
+    // X-27: the browser records the camera and the shared screen and sends the pieces.
+    recordVideo: settings.recordVideo === true,
+    videoChunkSeconds: compliance.EXAM_VIDEO_CHUNK_SECONDS,
     // X-16: flag types the browser must not check for this batch.
     disabledFlags: [
       ...(settings.detectLookingAway === false ? ["looking_away"] : []),
@@ -263,7 +266,7 @@ export async function createSession(user, { attemptId }, now = new Date()) {
   };
 }
 
-async function loadOwnSession(user, id) {
+export async function loadOwnSession(user, id) {
   const session = await ProctoringSession.findById(id).lean();
   if (!session) throw notFound();
   if (!ownsSession(user, session)) throw forbidden();
@@ -521,7 +524,7 @@ export async function loadSnapshotSession(user, sessionId, batchId) {
 
 /* ----------------------------------------------------------------- staff */
 
-async function loadReadableSession(user, id) {
+export async function loadReadableSession(user, id) {
   const session = await ProctoringSession.findById(id).lean();
   if (!session) throw notFound();
   const batch = await Batch.findById(session.batchId)

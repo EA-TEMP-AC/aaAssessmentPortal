@@ -203,8 +203,11 @@ describe("Proctoring API (server/src/modules/proctoring)", () => {
           snapshotAtStartAndEnd: true,
           detectionIntervalMs: 1000,
           flagCooldownSeconds: 15,
-          sustainedSeconds: { face_not_present: 2, camera_blocked: 2, camera_frozen: 8 },
+          sustainedSeconds: { ...compliance.PROCTOR_SUSTAINED_SECONDS },
           flagSeverity: compliance.PROCTOR_FLAG_SEVERITY,
+          recordVideo: false,
+          videoChunkSeconds: compliance.EXAM_VIDEO_CHUNK_SECONDS,
+          disabledFlags: [],
         },
         captureLocation: false,
       });
@@ -335,6 +338,7 @@ describe("Proctoring API (server/src/modules/proctoring)", () => {
         looking_away: "medium",
         voice_detected: "medium",
         screen_share_stopped: "high",
+        recording_failed: "medium",
       };
       // The test table, the model enum and the server table must list the same types.
       expect(Object.keys(expected).sort()).toEqual([...PROCTORING_FLAG_TYPES].sort());

@@ -91,6 +91,15 @@ export function parseProctorConfig(value: unknown): ProctorConfig {
       ? { snapshotAtStartAndEnd: value.snapshotAtStartAndEnd }
       : {}),
     ...(Object.keys(flagSeverity).length > 0 ? { flagSeverity } : {}),
+    // X-16: flag types the batch switched off. Kept as sent; only strings count.
+    ...(Array.isArray(value.disabledFlags)
+      ? { disabledFlags: value.disabledFlags.filter((t): t is string => typeof t === "string") }
+      : {}),
+    // X-27
+    ...(value.recordVideo === true ? { recordVideo: true } : {}),
+    ...(typeof value.videoChunkSeconds === "number" && value.videoChunkSeconds > 0
+      ? { videoChunkSeconds: value.videoChunkSeconds }
+      : {}),
   };
 }
 
@@ -123,6 +132,19 @@ export async function sendHeartbeat(
     },
   );
   return { paused: isRecord(body) && body.paused === true };
+}
+
+/** X-27: one WebM piece of the camera or the shared screen. Sending a piece again is safe. */
+export async function uploadVideoPiece(
+  sessionId: string,
+  track: "camera" | "screen",
+  seq: number,
+  piece: Blob,
+): Promise<void> {
+  await apiRequest<unknown>(
+    `/proctoring/sessions/${encodeURIComponent(sessionId)}/video/${track}/${seq}`,
+    { method: "POST", headers: { "Content-Type": "video/webm" }, body: piece },
+  );
 }
 
 export async function listWarnings(

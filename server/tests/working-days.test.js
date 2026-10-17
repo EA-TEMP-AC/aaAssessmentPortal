@@ -93,6 +93,7 @@ describe("compliance constants", () => {
         looking_away: "medium",
         voice_detected: "medium",
         screen_share_stopped: "high",
+        recording_failed: "medium",
       },
     });
     expect(Object.isFrozen(compliance)).toBe(true);

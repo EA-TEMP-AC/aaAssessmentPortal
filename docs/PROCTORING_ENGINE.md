@@ -44,6 +44,7 @@ be swapped for another model (for example YOLO) without touching the rules. Test
 | `multiple_faces` | Two or more faces |
 | `person_detected` | Two or more people (the candidate is one) |
 | `looking_away` | X-14. Exactly one face whose head is turned sideways: the nose is off the middle of the eyes by at least `lookAwayTurn` (0.45) of the eye distance, for `sustainedSeconds.looking_away` (2). Sideways only; looking down or up is not measured |
+| `recording_failed` | X-27. The exam video (camera or shared screen) could not be recorded or a piece could not be sent after three retries. Raised once per exam, medium. Only for batches with `recordVideo` |
 | `screen_share_stopped` | X-21. The track of the screen the candidate shared on the check screen ended (they stopped sharing). Raised at once, once. Only for batches with `requireScreenShare`. No screen image is read |
 | `voice_detected` | X-14. The microphone is louder than `voiceLevel` (0.06) and at least 3 times the room's quiet level, for `sustainedSeconds.voice_detected` (2). Only a loudness number is read: no recording, no words, and it cannot tell whose voice it is. Needs the microphone to be allowed in the exam window |
 | `phone_detected` | A "cell phone" |

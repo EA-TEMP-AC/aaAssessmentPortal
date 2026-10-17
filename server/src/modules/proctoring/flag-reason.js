@@ -21,6 +21,7 @@ const REASONS = {
   id_mismatch: () => "ID card photo did not match the selfie",
   id_unreadable: () => "ID card photo could not be read",
   looking_away: (n) => `Head turned away from the screen${forSeconds(n)}`,
+  recording_failed: () => "The exam video could not be recorded or sent",
   screen_share_stopped: () => "Screen sharing was stopped during the exam",
   voice_detected: (n) => `Talking heard${forSeconds(n)}`,
 };

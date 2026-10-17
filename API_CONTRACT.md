@@ -1766,14 +1766,14 @@ Role: `candidate`, own session.
 | Field | Required | Rule |
 |---|---|---|
 | `clientEventId` | yes | 1 to 200 characters; idempotency key within the session |
-| `type` | yes | `tab_hidden`, `fullscreen_exit`, `window_blur`, `permission_revoked`, `object_detected`, `face_not_present`, `multiple_faces`, `person_detected`, `phone_detected`, `camera_blocked`, `camera_frozen`, `face_mismatch`, `id_mismatch`, `id_unreadable`, `looking_away`, `voice_detected`, `screen_share_stopped` |
+| `type` | yes | `tab_hidden`, `fullscreen_exit`, `window_blur`, `permission_revoked`, `object_detected`, `face_not_present`, `multiple_faces`, `person_detected`, `phone_detected`, `camera_blocked`, `camera_frozen`, `face_mismatch`, `id_mismatch`, `id_unreadable`, `looking_away`, `voice_detected`, `screen_share_stopped`, `recording_failed` |
 | `capturedAt` | yes | ISO-8601 with `Z` or an offset; device clock, stored as sent |
 | `detail` | no | Only `label` (1 to 60 letters, digits, spaces, `_`, `-`), `count` (integer 0 to 100), `confidence` (0 to 1). Never an image, a name or other personal data; any other key is `400` |
 | `evidenceId` | no | A `proctor_snapshot` evidence row of this session, else `400` |
 | `questionId` | no | X-23. The id of the question on screen; must be a question of the attempt, else `400`. The server stores its place (`questionNumber`, 1-based, in the attempt's own order) and the answer saved at that moment. Not part of the replay check |
 | `location` | no | X-07. `{ latitude (-90 to 90), longitude (-180 to 180), accuracy (metres, 0 to 1000000, optional) }`, no other key. Kept only when the batch has `captureLocation` on; otherwise it is dropped and the flag has `locationStatus: "not_shared"`. Not part of the replay check: a resend with a different `location` returns the stored flag |
 
-The **server** sets `severity` (a `severity` key in the body is `400`): low `tab_hidden`, `fullscreen_exit`, `window_blur`, `permission_revoked`, `object_detected`; medium `face_not_present`, `id_unreadable`, `looking_away`, `voice_detected`; high `multiple_faces`, `person_detected`, `phone_detected`, `camera_blocked`, `camera_frozen`, `face_mismatch`, `id_mismatch`, `screen_share_stopped`.
+The **server** sets `severity` (a `severity` key in the body is `400`): low `tab_hidden`, `fullscreen_exit`, `window_blur`, `permission_revoked`, `object_detected`; medium `face_not_present`, `id_unreadable`, `looking_away`, `voice_detected`; high `multiple_faces`, `person_detected`, `phone_detected`, `camera_blocked`, `camera_frozen`, `face_mismatch`, `id_mismatch`, `screen_share_stopped`; medium also `recording_failed`.
 
 `201` new, `200` replay: `{ paused, id, sessionId, clientEventId, type, severity, capturedAt, receivedAt, evidenceId, replayed }` (`paused`: B-20, true when this flag made the batch's flag policy pause the attempt, or it already was). The same `clientEventId` with a different `type`, `capturedAt`, `detail` or `evidenceId` is `409 CONFLICT_IDEMPOTENT`. The server does not enforce the cooldown.
 Audit: `proctoring.flag` or `proctoring.flag_replay` (session, type, severity, time, evidence id; no request body).
@@ -1785,6 +1785,16 @@ When the engine raises a flag it takes a camera photo at that moment, burns a ba
 The banner is drawn in the browser and can be forged, so the server keeps the facts itself: the flag row holds `type`, `severity` (server table), `capturedAt` (browser clock), `receivedAt` (server clock) and, when allowed, the encrypted coordinates. The reason line is built by the server from the type and `PROCTOR_SUSTAINED_SECONDS` (`server/src/modules/proctoring/flag-reason.js`), not read from the picture.
 
 X-23: the capture response also has `question`: `null` when the flag has no question, else `{ number, text, options[{key,text}], answer }`. `text` and `options` are `null` except for `aa_admin` and `proctor`; `number` and `answer` (the saved answer, an option key for a choice question) go to every role in scope.
+
+### Exam video (X-27)
+
+Batch settings `recordVideo` (default `false`), `videoFailureAction` (`continue` default, or `require`) and `videoVisibleTo` (list from `tp`, `assessor`, `proctor`, `ab_reviewer`, `ncvet_viewer`, default `["proctor"]`; `aa_admin` always). Turning `recordVideo` on needs `requireScreenShare` on, and turning sharing off while recording is on: `400 VALIDATION_ERROR`. The proctoring session `config` carries `recordVideo` and `videoChunkSeconds` (10); `GET /attempts/available` items carry `recordVideo` and `videoFailureAction`. With `require` the check screen will not let the candidate start in a browser that cannot record; with `continue` the exam goes on and a `recording_failed` flag (medium) is raised once if recording or sending fails.
+
+- `POST /proctoring/sessions/:id/video/:track/:seq`: `track` is `camera` or `screen`, `seq` 0 to 5999. Body: one WebM piece (`Content-Type: video/webm`, at most 20 MB). Only the candidate of the session; `409 VIDEO_NOT_ENABLED` when the batch does not record; the first piece must start with the WebM header (`400`); sending the same piece again is `200`, a different piece in the same place `409 VIDEO_PIECE_CONFLICT`. `201 { track, seq, size, replayed }`.
+- `GET /proctoring/sessions/:id/video`: `aa_admin` and the roles in `videoVisibleTo`, inside their batch scope (`403` otherwise). `{ sessionId, recordVideo, retentionDays, expiresAt, tracks: { camera|screen: { pieces, bytes, firstReceivedAt, lastReceivedAt, complete } } }`. No video bytes.
+- `GET /proctoring/sessions/:id/video/:track`: the same people. The pieces joined in order as one `video/webm` stream (`404` when nothing was recorded). The look is written to the access log first (`subjectType proctoringSession`, field `exam_video_<track>`).
+
+Pieces are deleted 90 days after they arrive (`EXAM_VIDEO_RETENTION_DAYS`) by a job that runs every 6 hours; each run that removes pieces writes one audit row `exam_video.expire` with the count. Piece audit rows (`exam_video.piece`) hold the track, number and size only.
 
 ### GET /api/v1/proctoring/flags/:id/capture
 X-07. What the server saved about one flag photo, to show beside the picture. Roles: `aa_admin`, `proctor`, `assessor`, `ab_reviewer`, `ncvet_viewer` and `tp`, scoped like the session (the proctor and assessor of the batch, the awarding body's reviewer, the batch's training partner); anything else or outside scope `403`, unknown flag `404`.
@@ -1906,7 +1916,7 @@ No body. Any `2xx`. Sent every 15 seconds while the exam is open.
 ### GET /api/v1/proctoring/sessions/:id/warnings
 Returns `{ items: [{ id, message, createdAt }] }`. Polled every 15 seconds; each new `id` is shown once to the candidate, who must acknowledge it (the acknowledgement is not sent yet).
 
-Flag types the engine raises (`web/src/exam/proctorBridge.ts`): `tab_hidden`, `fullscreen_exit`, `window_blur`, `permission_revoked`, `object_detected`, `face_not_present`, `multiple_faces`, `person_detected`, `phone_detected`, `camera_blocked`, `camera_frozen`, `face_mismatch`, `id_mismatch`, `id_unreadable`, `looking_away`, `voice_detected`, `screen_share_stopped` (P-09, X-21). No video is uploaded; only flags and occasional snapshots, plus, at Start, the ID card photo (`id_proof`) and the selfie (`proctor_snapshot`). Face flags only ask a person to look; they never block or fail a candidate. The `detail` of a face flag is `{ label: "distance_<hundredths>", count: <samples> }` (docs/PROCTORING_ENGINE.md); no descriptor or image data is ever sent.
+Flag types the engine raises (`web/src/exam/proctorBridge.ts`): `tab_hidden`, `fullscreen_exit`, `window_blur`, `permission_revoked`, `object_detected`, `face_not_present`, `multiple_faces`, `person_detected`, `phone_detected`, `camera_blocked`, `camera_frozen`, `face_mismatch`, `id_mismatch`, `id_unreadable`, `looking_away`, `voice_detected`, `screen_share_stopped`, `recording_failed` (P-09, X-21, X-27). No video is uploaded; only flags and occasional snapshots, plus, at Start, the ID card photo (`id_proof`) and the selfie (`proctor_snapshot`). Face flags only ask a person to look; they never block or fail a candidate. The `detail` of a face flag is `{ label: "distance_<hundredths>", count: <samples> }` (docs/PROCTORING_ENGINE.md); no descriptor or image data is ever sent.
 
 
 ## Reports (task X-09)

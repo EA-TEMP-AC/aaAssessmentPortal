@@ -23,6 +23,7 @@ describe("engine contract", () => {
         "looking_away",
         "voice_detected",
         "screen_share_stopped",
+      "recording_failed",
       ].sort(),
     );
     expectTypeOf<(typeof PROCTOR_FLAG_TYPES)[number]>().toEqualTypeOf<ProctorFlagType>();

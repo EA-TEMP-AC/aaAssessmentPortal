@@ -4,9 +4,11 @@ import {
   createProctoringSession,
   listWarnings,
   sendHeartbeat,
+  uploadVideoPiece,
   type ProctorWarning,
 } from "../api/proctoringSession";
 import { createTransport } from "../proctoring/transport";
+import { startVideoRecorder, type VideoRecorder } from "../proctoring/videoRecorder";
 import {
   FACE_EVIDENCE_NOTICE,
   submitFaceEvidence,
@@ -81,6 +83,7 @@ export function useProctoring({
   const faceTransport = useRef<ReturnType<typeof createTransport> | null>(null);
   const micStream = useRef<MediaStream | null>(null);
   const screenStream = useRef<MediaStream | null>(null);
+  const recorder = useRef<VideoRecorder | null>(null);
   const questionIdRef = useRef(getQuestionId);
   questionIdRef.current = getQuestionId;
 
@@ -106,8 +109,13 @@ export function useProctoring({
     engine.current = null;
     micStream.current?.getTracks().forEach((t) => t.stop());
     micStream.current = null;
-    stopScreen(screenStream.current);
+    // X-27: the last piece is sent before the tracks are stopped.
+    const closing = recorder.current;
+    recorder.current = null;
+    const screenToStop = screenStream.current;
     screenStream.current = null;
+    if (closing) void closing.stop().finally(() => stopScreen(screenToStop));
+    else stopScreen(screenToStop);
     faceTransport.current?.dispose();
     faceTransport.current = null;
     setStatus({ state: "stopped" });
@@ -231,6 +239,30 @@ export function useProctoring({
             if (live && !stopped.current) setStatus(s);
           },
         });
+        // X-27: record the camera and the shared screen, when the batch asks for it.
+        if (session.config.recordVideo && live && !stopped.current) {
+          const flagSender = faceTransport.current ?? createTransport();
+          faceTransport.current = flagSender;
+          let failedOnce = false;
+          recorder.current = startVideoRecorder({
+            camera: stream,
+            audio: audioStream ?? null,
+            screen,
+            chunkSeconds: session.config.videoChunkSeconds ?? 10,
+            send: (track, seq, piece) => uploadVideoPiece(session.id, track, seq, piece),
+            onFailure: (track, reason) => {
+              if (failedOnce || !live || stopped.current) return;
+              failedOnce = true;
+              void flagSender.sendFlag(session.id, {
+                clientEventId: `video-${Date.now().toString(36)}`,
+                type: "recording_failed",
+                capturedAt: new Date().toISOString(),
+                detail: { label: `${track}: ${reason}`.slice(0, 60), count: 1, confidence: 1 },
+              });
+              setNotices((cur) => addNotice(cur, "recording_failed", Date.now(), cooldownMs.current));
+            },
+          });
+        }
       } catch {
         if (live && !stopped.current)
           setStatus({
