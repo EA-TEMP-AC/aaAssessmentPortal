@@ -16,6 +16,7 @@ import { batchQueryFilter, isInBatchScope } from "../../middleware/scope.js";
 import { Batch } from "../../models/batch.model.js";
 import { Candidate } from "../../models/candidate.model.js";
 import { Evidence } from "../../models/evidence.model.js";
+import { Question } from "../../models/question.model.js";
 import { recordAccess } from "../audit/access-log.service.js";
 import { stableStringify } from "../login-events/login-event.service.js";
 import { loadSnapshotSession } from "../proctoring/proctoring.service.js";
@@ -62,6 +63,8 @@ export function presentEvidence(doc, { replayed } = {}) {
     abId: String(doc.abId),
     candidateId: doc.candidateId ? String(doc.candidateId) : null,
     sessionId: doc.sessionId ? String(doc.sessionId) : null,
+    part: doc.part ?? null,
+    questionId: doc.questionId ? String(doc.questionId) : null,
     kind: doc.kind,
     contentType: doc.contentType,
     size: doc.size,
@@ -129,6 +132,8 @@ function payloadHash(user, batchId, fields, sha256) {
         deviceId: fields.deviceId ?? null,
         // Only present for snapshots, so the hash of older rows is unchanged.
         ...(fields.sessionId ? { sessionId: fields.sessionId.toLowerCase() } : {}),
+        ...(fields.part ? { part: fields.part } : {}),
+        ...(fields.questionId ? { questionId: fields.questionId.toLowerCase() } : {}),
         sha256,
       }),
     )
@@ -245,6 +250,12 @@ export async function createEvidence(user, batch, fields, file, context = {}) {
     ) {
       throw featureOff("Practical and viva video are switched off for this batch");
     }
+    if (fields.part === "practical" && !batchSettings.allowPracticalVideo) {
+      throw featureOff("Practical video is switched off for this batch");
+    }
+    if (fields.part === "viva" && !batchSettings.allowVivaVideo) {
+      throw featureOff("Viva video is switched off for this batch");
+    }
     if (fields.kind === "ojt_image" && !batchSettings.allowOjtImages) {
       throw featureOff("OJT pictures are switched off for this batch");
     }
@@ -304,6 +315,21 @@ export async function createEvidence(user, batch, fields, file, context = {}) {
     candidateId = candidate._id;
   }
 
+  if (fields.questionId) {
+    const question = await Question.findOne({
+      _id: fields.questionId,
+      qualificationId: batch.qualificationId,
+      status: "approved",
+    })
+      .select("_id")
+      .lean();
+    if (!question) {
+      throw validationError("questionId is not an approved question of this batch", {
+        questionId: ["Not an approved question of this batch's qualification"],
+      });
+    }
+  }
+
   const storage = getEvidenceStorage();
   const storageKey = `evidence/${randomUUID()}.${EVIDENCE_EXTENSIONS[contentType]}`;
   await storage.put({
@@ -321,6 +347,8 @@ export async function createEvidence(user, batch, fields, file, context = {}) {
       abId: batch.abId,
       candidateId,
       sessionId: snapshotSession ? snapshotSession._id : null,
+      part: fields.part ?? null,
+      questionId: fields.questionId ?? null,
       kind: fields.kind,
       contentType,
       size,

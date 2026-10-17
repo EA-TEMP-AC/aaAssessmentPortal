@@ -15,7 +15,9 @@
     "ios": {
       "bundleIdentifier": "com.aa.assessor",
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "AA Assessor records your location when you sign in or out."
+        "NSLocationWhenInUseUsageDescription": "AA Assessor records your location when you sign in or out.",
+        "NSCameraUsageDescription": "AA Assessor records practical and viva videos with the camera.",
+        "NSMicrophoneUsageDescription": "AA Assessor records the sound of practical and viva videos."
       }
     },
     "plugins": [
@@ -23,6 +25,14 @@
         "expo-location",
         {
           "locationWhenInUsePermission": "AA Assessor records your location when you sign in or out."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "AA Assessor records practical and viva videos with the camera.",
+          "microphonePermission": "AA Assessor records the sound of practical and viva videos.",
+          "recordAudioAndroid": true
         }
       ],
       "expo-secure-store"

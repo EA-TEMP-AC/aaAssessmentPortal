@@ -51,6 +51,9 @@ const evidenceSchema = new mongoose.Schema(
     candidateId: { type: mongoose.Schema.Types.ObjectId, ref: "Candidate", default: null },
     /** P-01: the proctoring session of a `proctor_snapshot`. Null for every other kind. */
     sessionId: { type: mongoose.Schema.Types.ObjectId, ref: "ProctoringSession", default: null },
+    /** X-40: which part of the assessment a video belongs to, and the question asked (viva). */
+    part: { type: String, enum: ["practical", "viva", null], default: null },
+    questionId: { type: mongoose.Schema.Types.ObjectId, ref: "Question", default: null },
     kind: { type: String, required: true, enum: EVIDENCE_KINDS },
     contentType: { type: String, required: true, enum: EVIDENCE_CONTENT_TYPES },
     size: { type: Number, required: true, min: 1 },

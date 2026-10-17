@@ -24,6 +24,8 @@ export const uploadFieldsSchema = z
     capturedAt: z.string().datetime({ offset: true }),
     candidateId: optional(objectIdSchema),
     sessionId: optional(objectIdSchema),
+    part: optional(z.enum(["practical", "viva"])),
+    questionId: optional(objectIdSchema),
     deviceId: optional(z.string().trim().min(1).max(200)),
     latitude: numberField(-90, 90),
     longitude: numberField(-180, 180),
@@ -44,6 +46,13 @@ export const uploadFieldsSchema = z
       // P-09: id_proof may carry a sessionId (the candidate's own ID card photo). The service
       // requires it for a candidate and refuses it for staff.
       issue("sessionId", "sessionId is only allowed with kind 'proctor_snapshot' or 'id_proof'");
+    }
+    if (data.part !== undefined) {
+      if (data.kind !== "video") issue("part", "part is only allowed with kind 'video'");
+      if (data.candidateId === undefined) issue("candidateId", "candidateId is required with part");
+    }
+    if (data.questionId !== undefined && data.part === undefined) {
+      issue("questionId", "questionId needs part");
     }
     const hasCoords = data.latitude !== undefined || data.longitude !== undefined;
     if (data.locationStatus === "unavailable") {

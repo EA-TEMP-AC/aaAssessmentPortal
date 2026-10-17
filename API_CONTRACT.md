@@ -1411,7 +1411,13 @@ The browser screen is `/evidence` in the web app (V-02, no API change). Files li
 
 Read roles: `aa_admin`, `mis` and `ncvet_viewer` see every row; `ab_reviewer` sees rows of its own awarding body (no `abId` means no rows); `assessor` and `proctor` see only rows they uploaded. `candidate`, `tp` and `sme` get `403`. A row outside the caller's scope is `403`; an unknown id is `404`.
 
+### GET /assessor/batches/:id/viva-questions
+
+X-40. Assessor of the batch only. `{ items: [{ id, type: "viva"|"practical", nosId, pcId, stem, marks }] }`: approved, latest version, in the batch's assessment language, qualification of the batch. Reads are written to the access log (subject `question`).
+
 ### POST /batches/:id/evidence
+
+X-40: for `kind=video` the assessor can also send `part` (`practical` or `viva`; needs `candidateId`; `409 BATCH_FEATURE_OFF` when that part's switch is off) and `questionId` (needs `part`; must be an approved question of the batch's qualification). Both are returned on the evidence row.
 
 `multipart/form-data`. Roles: `aa_admin`, or the `assessor` or `proctor` assigned to the batch. Any other role, or another assessor or proctor, is `403`. Unknown batch `404`. A batch in `cancelled` or `rejected` is `409 INVALID_TRANSITION`; every other status accepts uploads.
 

@@ -28,6 +28,9 @@ import { AttendanceScreen } from "./screens/AttendanceScreen";
 import { BatchScreen } from "./screens/BatchScreen";
 import { ChecklistScreen } from "./screens/ChecklistScreen";
 import { CredentialsScreen } from "./screens/CredentialsScreen";
+import { VideoScreen } from "./screens/VideoScreen";
+import { createVideoApi } from "./api/videoApi";
+import { createVideoQueue } from "./storage/videoQueue";
 import { LoginScreen } from "./screens/LoginScreen";
 import { PasswordChangeScreen } from "./screens/PasswordChangeScreen";
 import { StatusScreen } from "./screens/StatusScreen";
@@ -55,12 +58,13 @@ const EMPTY_SNAPSHOT: QueueSnapshot = {
   retryMessage: null,
 };
 
-type Tab = "batch" | "attendance" | "logins" | "checklist" | "tracking" | "status";
+type Tab = "batch" | "attendance" | "logins" | "video" | "checklist" | "tracking" | "status";
 
 const TAB_LABELS: Record<Tab, string> = {
   batch: "Batch",
   attendance: "Attendance",
   logins: "Logins",
+  video: "Video",
   checklist: "Checklist",
   tracking: "Tracking",
   status: "Session",
@@ -69,7 +73,7 @@ const TAB_LABELS: Record<Tab, string> = {
 /** Students and proctors record location (M-03). Attendance and checklist are the assessor's. */
 function tabsForRole(role: string): Tab[] {
   if (isTrackingRole(role)) return ["batch", "tracking", "status"];
-  return ["batch", "attendance", "logins", "checklist", "status"];
+  return ["batch", "attendance", "logins", "video", "checklist", "status"];
 }
 
 function messageFrom(err: unknown, fallback: string): string {
@@ -95,6 +99,8 @@ export default function FieldApp() {
     () => createBatchApi({ mode: env.loginEventsMode, baseUrl: env.apiBaseUrl }),
     [env.apiBaseUrl, env.loginEventsMode],
   );
+  const videoApi = useMemo(() => createVideoApi({ baseUrl: env.apiBaseUrl }), [env.apiBaseUrl]);
+  const videoQueue = useMemo(() => createVideoQueue(asyncStorageStore), []);
   const connectivity = useMemo(() => netInfoConnectivity(), []);
   const capture = useMemo(() => expoGpsCapture(), []);
 
@@ -620,6 +626,29 @@ export default function FieldApp() {
       } else {
         screenContent = (
           <CredentialsScreen assessorName={decision.session.user.name} roster={cachedBatch.roster} />
+        );
+      }
+    } else if (activeTab === "video") {
+      if (!cachedBatch) {
+        screenContent = (
+          <View style={styles.promptCard}>
+            <Text style={styles.promptTitle}>No Batch Downloaded</Text>
+            <Text style={styles.promptText}>Download your assigned batch first to record practical and viva videos.</Text>
+            <Pressable style={styles.tabSwitchButton} onPress={() => setTab("batch")}>
+              <Text style={styles.tabSwitchButtonText}>Go to Batch Screen</Text>
+            </Pressable>
+          </View>
+        );
+      } else {
+        screenContent = (
+          <VideoScreen
+            batchId={cachedBatch.batch.id}
+            roster={cachedBatch.roster}
+            videoApi={videoApi}
+            queue={videoQueue}
+            getAccessToken={() => decision.session.accessToken}
+            newId={() => Crypto.randomUUID()}
+          />
         );
       }
     } else if (activeTab === "checklist") {

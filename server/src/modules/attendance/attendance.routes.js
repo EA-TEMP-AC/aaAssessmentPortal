@@ -4,6 +4,8 @@ import { clientIp } from "../../lib/client-ip.js";
 import { requireAuth } from "../../middleware/require-auth.js";
 import { requireRoles } from "../../middleware/require-roles.js";
 import { ATTENDANCE_WRITE_ROLES, BATCH_READ_ROLES } from "../../models/roles.js";
+import { Question } from "../../models/question.model.js";
+import { recordAccess } from "../audit/access-log.service.js";
 import { loadReadableBatch } from "../batches/batch.service.js";
 import { listBatchLoginEvents } from "../login-events/login-event.service.js";
 import {
@@ -106,3 +108,41 @@ export function mountBatchChildReadRoutes(router) {
     }),
   );
 }
+
+/**
+ * X-40. The viva and practical questions the assessor asks and shows on screen while recording.
+ * Approved, newest version, in the batch's assessment language; the qualification of the batch only.
+ * Every read is logged against the questions.
+ */
+assessorFieldRouter.get(
+  "/batches/:id/viva-questions",
+  requireRoles(...ATTENDANCE_WRITE_ROLES),
+  asyncHandler(async (req, res) => {
+    const { id } = batchIdParamSchema.parse(req.params);
+    const batch = await loadReadableBatch(req.user, id);
+    const rows = await Question.find({
+      qualificationId: batch.qualificationId,
+      type: { $in: ["viva", "practical"] },
+      status: "approved",
+      isLatest: true,
+      language: batch.assessmentLanguage,
+    })
+      .sort({ type: 1, nosId: 1, pcId: 1, _id: 1 })
+      .lean();
+    const items = rows.map((q) => ({
+      id: String(q._id),
+      type: q.type,
+      nosId: q.nosId,
+      pcId: q.pcId,
+      stem: q.stem,
+      marks: q.marks,
+    }));
+    await recordAccess(req, {
+      subjectType: "question",
+      subjectIds: items.map((item) => item.id),
+      kind: "list",
+      fields: ["stem"],
+    });
+    await res.status(200).json({ items });
+  }),
+);

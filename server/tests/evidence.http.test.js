@@ -641,6 +641,37 @@ describe("evidence vault", () => {
       expectError(await send(), 409, "BATCH_FEATURE_OFF");
     });
 
+    it("tags a video with its part and student, and respects each part's switch (X-40)", async () => {
+      const w = await world();
+      const send = (part, extra = {}) =>
+        upload(w.assessorSession.token, w.batch._id, {
+          file: mp4(),
+          filename: "a.mp4",
+          type: "video/mp4",
+          fields: { kind: "video", part, candidateId: String(w.candidate._id), ...extra },
+        });
+      const ok = await send("practical");
+      expect(ok.status, JSON.stringify(ok.body)).toBe(201);
+      expect(ok.body.part).toBe("practical");
+      expect(ok.body.candidateId).toBe(String(w.candidate._id));
+      await Batch.updateOne(
+        { _id: w.batch._id },
+        { $set: { settings: { allowPracticalVideo: false, allowVivaVideo: true } } },
+      );
+      expectError(await send("practical"), 409, "BATCH_FEATURE_OFF");
+      expect((await send("viva")).status).toBe(201);
+      // A part needs a student, only a video has a part, and a question needs a part.
+      expectError(await send("viva", { candidateId: undefined }), 400, "VALIDATION_ERROR");
+      expectError(
+        await upload(w.assessorSession.token, w.batch._id, {
+          fields: { part: "viva", candidateId: String(w.candidate._id) },
+        }),
+        400,
+        "VALIDATION_ERROR",
+      );
+      expectError(await send("viva", { questionId: String(oid()) }), 400, "VALIDATION_ERROR");
+    });
+
     it("takes OJT pictures only when the batch switch is on, and never from a candidate", async () => {
       const w = await world();
       const send = (token = w.assessorSession.token) =>
