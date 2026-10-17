@@ -1,5 +1,16 @@
-import { useEffect, useId, useRef, useState, type MouseEvent, type ReactNode } from "react";
-import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type MouseEvent,
+  type ReactNode,
+} from "react";
+import {
+  keepPreviousData,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import {
   createUser,
   isUserPageSize,
@@ -19,10 +30,26 @@ import { useSession } from "../api/session";
 import { ROLE_LABELS, ROLES, type Role } from "../routing/access";
 import { canManageUser, rolesAssignableBy } from "./userAccess";
 
-const COLUMNS = ["Name", "Email", "Role", "Status", "Password change", "Actions"] as const;
+const COLUMNS = [
+  "Name",
+  "Email",
+  "Role",
+  "Status",
+  "Password change",
+  "Actions",
+] as const;
 const OBJECT_ID = /^[a-fA-F0-9]{24}$/;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const FIELD_ORDER = ["email", "name", "role", "password", "confirm", "linkedProfileId", "abId", "tpId"] as const;
+const FIELD_ORDER = [
+  "email",
+  "name",
+  "role",
+  "password",
+  "confirm",
+  "linkedProfileId",
+  "abId",
+  "tpId",
+] as const;
 
 type Banner = { id: number; message: string };
 
@@ -63,8 +90,11 @@ function filtersAreActive(filters: Filters): boolean {
 }
 
 function focusableElements(root: HTMLElement): HTMLElement[] {
-  const selector = "a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled])";
-  return [...root.querySelectorAll<HTMLElement>(selector)].filter((element) => !element.hasAttribute("disabled"));
+  const selector =
+    "a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled])";
+  return [...root.querySelectorAll<HTMLElement>(selector)].filter(
+    (element) => !element.hasAttribute("disabled"),
+  );
 }
 
 function Dialog({
@@ -159,7 +189,10 @@ function FormAlert({ error }: { error: FormError | null }) {
   );
 }
 
-function useFormErrorFocus(error: FormError | null, fields: { current: Partial<Record<string, HTMLElement | null>> }) {
+function useFormErrorFocus(
+  error: FormError | null,
+  fields: { current: Partial<Record<string, HTMLElement | null>> },
+) {
   useEffect(() => {
     if (!error || error.fields.length === 0) return;
     const first = FIELD_ORDER.find((key) => error.fields.includes(key));
@@ -168,7 +201,13 @@ function useFormErrorFocus(error: FormError | null, fields: { current: Partial<R
   }, [error, fields]);
 }
 
-function optionalId(value: string, label: string, field: string, messages: string[], fields: string[]): string | null {
+function optionalId(
+  value: string,
+  label: string,
+  field: string,
+  messages: string[],
+  fields: string[],
+): string | null {
   const trimmed = value.trim();
   if (!trimmed) return null;
   if (!OBJECT_ID.test(trimmed)) {
@@ -241,15 +280,24 @@ function UserForm({
     setFormError({ id: ++errorSeq.current, message, fields });
   }
 
-  function updateDraft<K extends keyof typeof draft>(key: K, value: (typeof draft)[K]) {
+  function updateDraft<K extends keyof typeof draft>(
+    key: K,
+    value: (typeof draft)[K],
+  ) {
     setDraft((current) => ({ ...current, [key]: value }));
     setFormError(null);
   }
 
-  const idHint = editing ? "24-character id. Leave blank to clear." : "Optional. 24-character id.";
+  const idHint = editing
+    ? "24-character id. Leave blank to clear."
+    : "Optional. 24-character id.";
 
   return (
-    <Dialog title={user ? `Edit ${user.name}` : "Create user"} busy={pending} onCancel={onCancel}>
+    <Dialog
+      title={user ? `Edit ${user.name}` : "Create user"}
+      busy={pending}
+      onCancel={onCancel}
+    >
       <form
         noValidate
         autoComplete="off"
@@ -280,8 +328,10 @@ function UserForm({
           }
           const passwordNode = fieldRefs.current.password;
           const confirmNode = fieldRefs.current.confirm;
-          const password = passwordNode instanceof HTMLInputElement ? passwordNode.value : "";
-          const confirm = confirmNode instanceof HTMLInputElement ? confirmNode.value : "";
+          const password =
+            passwordNode instanceof HTMLInputElement ? passwordNode.value : "";
+          const confirm =
+            confirmNode instanceof HTMLInputElement ? confirmNode.value : "";
           if (!editing) {
             if (password.length < 8 || password.length > 200) {
               messages.push("Enter a password of 8 to 200 characters.");
@@ -291,9 +341,27 @@ function UserForm({
               fields.push("confirm");
             }
           }
-          const linkedProfileId = optionalId(draft.linkedProfileId, "Linked profile id", "linkedProfileId", messages, fields);
-          const awardingBodyId = optionalId(draft.abId, "Awarding body id", "abId", messages, fields);
-          const trainingPartnerId = optionalId(draft.tpId, "Training partner id", "tpId", messages, fields);
+          const linkedProfileId = optionalId(
+            draft.linkedProfileId,
+            "Linked profile id",
+            "linkedProfileId",
+            messages,
+            fields,
+          );
+          const awardingBodyId = optionalId(
+            draft.abId,
+            "Awarding body id",
+            "abId",
+            messages,
+            fields,
+          );
+          const trainingPartnerId = optionalId(
+            draft.tpId,
+            "Training partner id",
+            "tpId",
+            messages,
+            fields,
+          );
           if (messages.length > 0 || !draft.role) {
             showError(messages.join(" "), fields);
             return;
@@ -326,8 +394,10 @@ function UserForm({
                   } satisfies CreateUserInput);
               await queryClient.invalidateQueries({ queryKey: ["users"] });
               if (!mounted.current) return;
-              if (passwordNode instanceof HTMLInputElement) passwordNode.value = "";
-              if (confirmNode instanceof HTMLInputElement) confirmNode.value = "";
+              if (passwordNode instanceof HTMLInputElement)
+                passwordNode.value = "";
+              if (confirmNode instanceof HTMLInputElement)
+                confirmNode.value = "";
               onSaved(
                 user
                   ? `Changes for ${saved.name} were saved.`
@@ -381,14 +451,18 @@ function UserForm({
               value={draft.role}
               aria-required="true"
               aria-invalid={formError?.fields.includes("role") || undefined}
-              onChange={(event) => updateDraft("role", event.target.value as Role | "")}
+              onChange={(event) =>
+                updateDraft("role", event.target.value as Role | "")
+              }
             >
               <option value="">Select a role</option>
-              {assignable.map((role) => (
-                <option key={role} value={role}>
-                  {ROLE_LABELS[role]}
-                </option>
-              ))}
+              {assignable
+                .filter((role) => role !== "ab_reviewer")
+                .map((role) => (
+                  <option key={role} value={role}>
+                    {ROLE_LABELS[role]}
+                  </option>
+                ))}
             </select>
           </div>
           {editing ? null : (
@@ -402,13 +476,15 @@ function UserForm({
                   type="password"
                   autoComplete="new-password"
                   aria-required="true"
-                  aria-invalid={formError?.fields.includes("password") || undefined}
+                  aria-invalid={
+                    formError?.fields.includes("password") || undefined
+                  }
                   aria-describedby={passwordHintId}
                   onChange={() => setFormError(null)}
                 />
                 <p id={passwordHintId} className="field-hint">
-                  8 to 200 characters. It is not shown again after you close this form. The user must change it the next
-                  time they sign in.
+                  8 to 200 characters. It is not shown again after you close
+                  this form. The user must change it the next time they sign in.
                 </p>
               </div>
               <div className="field">
@@ -420,7 +496,9 @@ function UserForm({
                   type="password"
                   autoComplete="new-password"
                   aria-required="true"
-                  aria-invalid={formError?.fields.includes("confirm") || undefined}
+                  aria-invalid={
+                    formError?.fields.includes("confirm") || undefined
+                  }
                   onChange={() => setFormError(null)}
                 />
               </div>
@@ -434,7 +512,9 @@ function UserForm({
                 type="checkbox"
                 checked={draft.active}
                 aria-describedby={activeHintId}
-                onChange={(event) => updateDraft("active", event.target.checked)}
+                onChange={(event) =>
+                  updateDraft("active", event.target.checked)
+                }
               />
               Active
             </label>
@@ -452,9 +532,13 @@ function UserForm({
               autoComplete="off"
               spellCheck={false}
               value={draft.linkedProfileId}
-              aria-invalid={formError?.fields.includes("linkedProfileId") || undefined}
+              aria-invalid={
+                formError?.fields.includes("linkedProfileId") || undefined
+              }
               aria-describedby={linkedHintId}
-              onChange={(event) => updateDraft("linkedProfileId", event.target.value)}
+              onChange={(event) =>
+                updateDraft("linkedProfileId", event.target.value)
+              }
             />
             <p id={linkedHintId} className="field-hint">
               {idHint}
@@ -500,7 +584,9 @@ function UserForm({
             <button type="button" data-dialog-cancel onClick={onCancel}>
               Cancel
             </button>
-            <button type="submit">{editing ? "Save changes" : "Create user"}</button>
+            <button type="submit">
+              {editing ? "Save changes" : "Create user"}
+            </button>
           </div>
         </fieldset>
       </form>
@@ -534,7 +620,12 @@ function ActiveConfirm({
   }, []);
 
   return (
-    <Dialog title={`${verb} ${user.name}?`} busy={pending} initialFocus="cancel" onCancel={onCancel}>
+    <Dialog
+      title={`${verb} ${user.name}?`}
+      busy={pending}
+      initialFocus="cancel"
+      onCancel={onCancel}
+    >
       <form
         noValidate
         onSubmit={(event) => {
@@ -547,17 +638,27 @@ function ActiveConfirm({
               const saved = await updateUser(user.id, { active: nextActive });
               await queryClient.invalidateQueries({ queryKey: ["users"] });
               if (!mounted.current) return;
-              onSaved(`${saved.name} is now ${saved.active ? "active" : "inactive"}.`);
+              onSaved(
+                `${saved.name} is now ${saved.active ? "active" : "inactive"}.`,
+              );
             } catch (error) {
               if (!mounted.current) return;
               setPending(false);
-              setFormError({ id: ++errorSeq.current, message: errorMessage(error), fields: [] });
+              setFormError({
+                id: ++errorSeq.current,
+                message: errorMessage(error),
+                fields: [],
+              });
             }
           })();
         }}
       >
         <fieldset disabled={pending} className="bare-fieldset">
-          <p>{nextActive ? "They will be able to sign in." : "They will not be able to sign in."}</p>
+          <p>
+            {nextActive
+              ? "They will be able to sign in."
+              : "They will not be able to sign in."}
+          </p>
           <FormAlert error={formError} />
           <div className="dialog-actions">
             <button type="button" data-dialog-cancel onClick={onCancel}>
@@ -594,7 +695,12 @@ function ResendCredentialsConfirm({
   }, []);
 
   return (
-    <Dialog title={`Resend credentials for ${user.name}?`} busy={pending} initialFocus="cancel" onCancel={onCancel}>
+    <Dialog
+      title={`Resend credentials for ${user.name}?`}
+      busy={pending}
+      initialFocus="cancel"
+      onCancel={onCancel}
+    >
       <form
         noValidate
         onSubmit={(event) => {
@@ -611,16 +717,21 @@ function ResendCredentialsConfirm({
             } catch (error) {
               if (!mounted.current) return;
               setPending(false);
-              setFormError({ id: ++errorSeq.current, message: errorMessage(error), fields: [] });
+              setFormError({
+                id: ++errorSeq.current,
+                message: errorMessage(error),
+                fields: [],
+              });
             }
           })();
         }}
       >
         <fieldset disabled={pending} className="bare-fieldset">
           <p>
-            A new temporary password will be generated and queued in an email to {user.email}. The temporary password is
-            never shown. Any active sessions for this user will be revoked and they must change their password on next
-            sign-in.
+            A new temporary password will be generated and queued in an email to{" "}
+            {user.email}. The temporary password is never shown. Any active
+            sessions for this user will be revoked and they must change their
+            password on next sign-in.
           </p>
           <FormAlert error={formError} />
           <div className="dialog-actions">
@@ -667,10 +778,19 @@ function PasswordResetDialog({
 
   useFormErrorFocus(formError, fieldRefs);
 
-  const submitLabel = mode === "email" ? "Queue reset email" : mode === "set" ? "Set password" : "Reset password";
+  const submitLabel =
+    mode === "email"
+      ? "Queue reset email"
+      : mode === "set"
+        ? "Set password"
+        : "Reset password";
 
   return (
-    <Dialog title={`Reset password for ${user.name}`} busy={pending} onCancel={onCancel}>
+    <Dialog
+      title={`Reset password for ${user.name}`}
+      busy={pending}
+      onCancel={onCancel}
+    >
       <form
         noValidate
         autoComplete="off"
@@ -679,13 +799,22 @@ function PasswordResetDialog({
           if (pending) return;
           const passwordNode = fieldRefs.current.password;
           const confirmNode = fieldRefs.current.confirm;
-          const password = passwordNode instanceof HTMLInputElement ? passwordNode.value : "";
-          const confirm = confirmNode instanceof HTMLInputElement ? confirmNode.value : "";
+          const password =
+            passwordNode instanceof HTMLInputElement ? passwordNode.value : "";
+          const confirm =
+            confirmNode instanceof HTMLInputElement ? confirmNode.value : "";
           if (mode === "") {
-            setFormError({ id: ++errorSeq.current, message: "Choose how to reset the password.", fields: [] });
+            setFormError({
+              id: ++errorSeq.current,
+              message: "Choose how to reset the password.",
+              fields: [],
+            });
             return;
           }
-          if (mode === "set" && (password.length < 8 || password.length > 200)) {
+          if (
+            mode === "set" &&
+            (password.length < 8 || password.length > 200)
+          ) {
             setFormError({
               id: ++errorSeq.current,
               message: "Enter a password of 8 to 200 characters.",
@@ -712,8 +841,10 @@ function PasswordResetDialog({
                   : await resetUserPassword(user.id, { newPassword: password });
               await queryClient.invalidateQueries({ queryKey: ["users"] });
               if (!mounted.current) return;
-              if (passwordNode instanceof HTMLInputElement) passwordNode.value = "";
-              if (confirmNode instanceof HTMLInputElement) confirmNode.value = "";
+              if (passwordNode instanceof HTMLInputElement)
+                passwordNode.value = "";
+              if (confirmNode instanceof HTMLInputElement)
+                confirmNode.value = "";
               if (result.kind === "email" && !result.emailQueued) {
                 onProblem(
                   `The password for ${user.name} was changed, but the reset email was not queued. It may not arrive. The temporary password is not shown. You can try sending it again.`,
@@ -728,7 +859,11 @@ function PasswordResetDialog({
             } catch (error) {
               if (!mounted.current) return;
               setPending(false);
-              setFormError({ id: ++errorSeq.current, message: errorMessage(error), fields: [] });
+              setFormError({
+                id: ++errorSeq.current,
+                message: errorMessage(error),
+                fields: [],
+              });
             }
           })();
         }}
@@ -761,8 +896,10 @@ function PasswordResetDialog({
                   setFormError(null);
                   const passwordNode = fieldRefs.current.password;
                   const confirmNode = fieldRefs.current.confirm;
-                  if (passwordNode instanceof HTMLInputElement) passwordNode.value = "";
-                  if (confirmNode instanceof HTMLInputElement) confirmNode.value = "";
+                  if (passwordNode instanceof HTMLInputElement)
+                    passwordNode.value = "";
+                  if (confirmNode instanceof HTMLInputElement)
+                    confirmNode.value = "";
                 }}
               />
               Send a reset email
@@ -781,13 +918,15 @@ function PasswordResetDialog({
                   type="password"
                   autoComplete="new-password"
                   aria-required="true"
-                  aria-invalid={formError?.fields.includes("password") || undefined}
+                  aria-invalid={
+                    formError?.fields.includes("password") || undefined
+                  }
                   aria-describedby={passwordHintId}
                   onChange={() => setFormError(null)}
                 />
                 <p id={passwordHintId} className="field-hint">
-                  8 to 200 characters. It is not shown again after you close this form. The user must change it the next
-                  time they sign in.
+                  8 to 200 characters. It is not shown again after you close
+                  this form. The user must change it the next time they sign in.
                 </p>
               </div>
               <div className="field">
@@ -801,7 +940,9 @@ function PasswordResetDialog({
                   type="password"
                   autoComplete="new-password"
                   aria-required="true"
-                  aria-invalid={formError?.fields.includes("confirm") || undefined}
+                  aria-invalid={
+                    formError?.fields.includes("confirm") || undefined
+                  }
                   onChange={() => setFormError(null)}
                 />
               </div>
@@ -809,8 +950,9 @@ function PasswordResetDialog({
           ) : null}
           {mode === "email" ? (
             <p id={modeHintId}>
-              A temporary password will be emailed to {user.email}. The email is queued and may arrive later. The
-              temporary password is not shown here. The user must change it the next time they sign in.
+              A temporary password will be emailed to {user.email}. The email is
+              queued and may arrive later. The temporary password is not shown
+              here. The user must change it the next time they sign in.
             </p>
           ) : null}
           <div className="dialog-actions">
@@ -878,8 +1020,14 @@ export function UsersPage() {
   if (!session || (actor !== "aa_admin" && actor !== "mis")) return null;
 
   const result = users.isError ? undefined : users.data;
-  const statusText = users.isFetching ? "Loading users." : result ? summary(result) : "";
-  const emptyMessage = filtersAreActive(applied) ? "No users match these filters." : "No users are available.";
+  const statusText = users.isFetching
+    ? "Loading users."
+    : result
+      ? summary(result)
+      : "";
+  const emptyMessage = filtersAreActive(applied)
+    ? "No users match these filters."
+    : "No users are available.";
   const hasNext = result ? result.page * result.pageSize < result.total : false;
 
   function openDialog(event: MouseEvent<HTMLButtonElement>, next: DialogState) {
@@ -913,25 +1061,44 @@ export function UsersPage() {
     <div className="users-page">
       <div ref={pageRef}>
         <h1>Users</h1>
-        <p>Create accounts, update them, and reset passwords. A password is not shown again after you close the form.</p>
+        <p>
+          Create accounts, update them, and reset passwords. A password is not
+          shown again after you close the form.
+        </p>
         {actor === "mis" ? (
           <p>
-            You can view AA admin accounts. You cannot create an AA admin, and you cannot edit, activate, deactivate, or
-            reset an existing AA admin.
+            You can view AA admin accounts. You cannot create an AA admin, and
+            you cannot edit, activate, deactivate, or reset an existing AA
+            admin.
           </p>
         ) : null}
         {notice ? (
-          <p key={notice.id} ref={noticeRef} tabIndex={-1} className="form-notice" role="status">
+          <p
+            key={notice.id}
+            ref={noticeRef}
+            tabIndex={-1}
+            className="form-notice"
+            role="status"
+          >
             {notice.message}
           </p>
         ) : null}
         {actionError ? (
-          <div key={actionError.id} ref={actionErrorRef} tabIndex={-1} className="form-error" role="alert">
+          <div
+            key={actionError.id}
+            ref={actionErrorRef}
+            tabIndex={-1}
+            className="form-error"
+            role="alert"
+          >
             <p>{actionError.message}</p>
           </div>
         ) : null}
         <p>
-          <button type="button" onClick={(event) => openDialog(event, { type: "create" })}>
+          <button
+            type="button"
+            onClick={(event) => openDialog(event, { type: "create" })}
+          >
             Create user
           </button>
         </p>
@@ -940,7 +1107,9 @@ export function UsersPage() {
           aria-label="Filter users"
           onSubmit={(event) => {
             event.preventDefault();
-            const pageSize = isUserPageSize(draft.pageSize) ? draft.pageSize : USER_PAGE_SIZE_DEFAULT;
+            const pageSize = isUserPageSize(draft.pageSize)
+              ? draft.pageSize
+              : USER_PAGE_SIZE_DEFAULT;
             const next = { ...draft, pageSize };
             setDraft(next);
             setApplied(next);
@@ -957,10 +1126,15 @@ export function UsersPage() {
                 id="users-filter-role"
                 name="role"
                 value={draft.role}
-                onChange={(event) => setDraft((current) => ({ ...current, role: event.target.value as Role | "" }))}
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    role: event.target.value as Role | "",
+                  }))
+                }
               >
                 <option value="">Any role</option>
-                {ROLES.map((role) => (
+                {ROLES.filter((role) => role !== "ab_reviewer").map((role) => (
                   <option key={role} value={role}>
                     {ROLE_LABELS[role]}
                   </option>
@@ -974,7 +1148,10 @@ export function UsersPage() {
                 name="active"
                 value={draft.active}
                 onChange={(event) =>
-                  setDraft((current) => ({ ...current, active: event.target.value as Filters["active"] }))
+                  setDraft((current) => ({
+                    ...current,
+                    active: event.target.value as Filters["active"],
+                  }))
                 }
               >
                 <option value="">Any status</option>
@@ -1063,26 +1240,43 @@ export function UsersPage() {
                           <td>{user.email}</td>
                           <td>{ROLE_LABELS[user.role]}</td>
                           <td>{user.active ? "Active" : "Inactive"}</td>
-                          <td>{user.mustChangePassword ? "Required" : "Not required"}</td>
+                          <td>
+                            {user.mustChangePassword
+                              ? "Required"
+                              : "Not required"}
+                          </td>
                           <td>
                             {manageable ? (
                               <div className="row-actions">
-                                <button type="button" className="button-quiet" onClick={(event) => openDialog(event, { type: "edit", user })}>
+                                <button
+                                  type="button"
+                                  className="button-quiet"
+                                  onClick={(event) =>
+                                    openDialog(event, { type: "edit", user })
+                                  }
+                                >
                                   Edit {user.name}
                                 </button>
                                 <button
                                   type="button"
                                   className="button-quiet"
                                   onClick={(event) =>
-                                    openDialog(event, { type: "active", user, nextActive: !user.active })
+                                    openDialog(event, {
+                                      type: "active",
+                                      user,
+                                      nextActive: !user.active,
+                                    })
                                   }
                                 >
-                                  {user.active ? "Deactivate" : "Activate"} {user.name}
+                                  {user.active ? "Deactivate" : "Activate"}{" "}
+                                  {user.name}
                                 </button>
                                 <button
                                   type="button"
                                   className="button-quiet"
-                                  onClick={(event) => openDialog(event, { type: "reset", user })}
+                                  onClick={(event) =>
+                                    openDialog(event, { type: "reset", user })
+                                  }
                                 >
                                   Reset password for {user.name}
                                 </button>
@@ -1091,7 +1285,12 @@ export function UsersPage() {
                                     type="button"
                                     className="button-quiet"
                                     disabled={!user.active}
-                                    onClick={(event) => openDialog(event, { type: "resendCredentials", user })}
+                                    onClick={(event) =>
+                                      openDialog(event, {
+                                        type: "resendCredentials",
+                                        user,
+                                      })
+                                    }
                                   >
                                     Resend credentials for {user.name}
                                   </button>
@@ -1116,7 +1315,11 @@ export function UsersPage() {
               >
                 Previous page
               </button>
-              <button type="button" onClick={() => setPage((current) => current + 1)} disabled={!hasNext || users.isFetching}>
+              <button
+                type="button"
+                onClick={() => setPage((current) => current + 1)}
+                disabled={!hasNext || users.isFetching}
+              >
                 Next page
               </button>
             </nav>
@@ -1124,18 +1327,44 @@ export function UsersPage() {
         ) : null}
       </div>
 
-      {dialog?.type === "create" ? <UserForm actor={actor} user={null} onCancel={cancelDialog} onSaved={showNotice} /> : null}
+      {dialog?.type === "create" ? (
+        <UserForm
+          actor={actor}
+          user={null}
+          onCancel={cancelDialog}
+          onSaved={showNotice}
+        />
+      ) : null}
       {dialog?.type === "edit" ? (
-        <UserForm actor={actor} user={dialog.user} onCancel={cancelDialog} onSaved={showNotice} />
+        <UserForm
+          actor={actor}
+          user={dialog.user}
+          onCancel={cancelDialog}
+          onSaved={showNotice}
+        />
       ) : null}
       {dialog?.type === "active" ? (
-        <ActiveConfirm user={dialog.user} nextActive={dialog.nextActive} onCancel={cancelDialog} onSaved={showNotice} />
+        <ActiveConfirm
+          user={dialog.user}
+          nextActive={dialog.nextActive}
+          onCancel={cancelDialog}
+          onSaved={showNotice}
+        />
       ) : null}
       {dialog?.type === "reset" ? (
-        <PasswordResetDialog user={dialog.user} onCancel={cancelDialog} onSaved={showNotice} onProblem={showProblem} />
+        <PasswordResetDialog
+          user={dialog.user}
+          onCancel={cancelDialog}
+          onSaved={showNotice}
+          onProblem={showProblem}
+        />
       ) : null}
       {dialog?.type === "resendCredentials" ? (
-        <ResendCredentialsConfirm user={dialog.user} onCancel={cancelDialog} onSaved={showNotice} />
+        <ResendCredentialsConfirm
+          user={dialog.user}
+          onCancel={cancelDialog}
+          onSaved={showNotice}
+        />
       ) : null}
     </div>
   );

@@ -17,13 +17,18 @@ import { ProctoringReportPage } from "./pages/ProctoringReportPage";
 import { ExamPage } from "./pages/ExamPage";
 import { ExamWindowGate, ExamWindowPage } from "./pages/ExamWindowPage";
 import { FaceMatchDemoPage } from "./pages/FaceMatchDemoPage";
+import { MasterEntryPage } from "./pages/MasterEntryPage";
 import { MasterDataPage } from "./pages/MasterDataPage";
 import { PapersPage } from "./pages/papers/PapersPage";
 import { QuestionBankPage } from "./pages/questionBank/QuestionBankPage";
 import { PublicSiteAdminPage } from "./pages/PublicSiteAdminPage";
 import { RecognitionPage } from "./pages/RecognitionPage";
 import { RegistryPage } from "./pages/RegistryPage";
-import { ProjectsPage, SchemesPage, SignatoriesPage } from "./pages/schemes/SchemeScreens";
+import {
+  ProjectsPage,
+  SchemesPage,
+  SignatoriesPage,
+} from "./pages/schemes/SchemeScreens";
 import { SettingsAccessPage } from "./pages/SettingsAccessPage";
 import { UsersPage } from "./pages/UsersPage";
 import { WorkingDaysPage } from "./pages/WorkingDaysPage";
@@ -44,8 +49,18 @@ import {
   SiteHomePage,
   TeamPage,
 } from "./site/pages";
-import { AuthBridge, GuestOnly, RequireAuth, RequireRole, RootRedirect } from "./routing/guards";
-import { ANSWER_SHEET_ROLES, EXAM_ROLES, PROCTORING_ROLES } from "./routing/access";
+import {
+  AuthBridge,
+  GuestOnly,
+  RequireAuth,
+  RequireRole,
+  RootRedirect,
+} from "./routing/guards";
+import {
+  ANSWER_SHEET_ROLES,
+  EXAM_ROLES,
+  PROCTORING_ROLES,
+} from "./routing/access";
 import { NAV_ITEMS } from "./routing/nav";
 import { createQueryClient } from "./queryClient";
 
@@ -65,36 +80,56 @@ export function AppRoutes() {
           <Route element={<AppLayout />}>
             {import.meta.env.DEV ? (
               <Route element={<RequireRole roles={["aa_admin"]} />}>
-                <Route path="/face-match-demo" element={<FaceMatchDemoPage />} />
+                <Route
+                  path="/face-match-demo"
+                  element={<FaceMatchDemoPage />}
+                />
               </Route>
             ) : null}
             <Route path="/home" element={<RoleHomePage />} />
             <Route element={<RequireRole roles={ANSWER_SHEET_ROLES} />}>
-              <Route path="/attempts/:attemptId/sheet" element={<AnswerSheetPage />} />
+              <Route
+                path="/attempts/:attemptId/sheet"
+                element={<AnswerSheetPage />}
+              />
             </Route>
             <Route element={<RequireRole roles={PROCTORING_ROLES} />}>
-              <Route path="/proctoring/report/:sessionId" element={<ProctoringReportPage />} />
+              <Route
+                path="/proctoring/report/:sessionId"
+                element={<ProctoringReportPage />}
+              />
             </Route>
             <Route path="/account/password" element={<ChangePasswordPage />} />
             {import.meta.env.DEV ? (
               <Route element={<RequireRole roles={["aa_admin"]} />}>
-                <Route path="/proctoring-demo" element={<ProctoringDemoPage />} />
+                <Route
+                  path="/proctoring-demo"
+                  element={<ProctoringDemoPage />}
+                />
               </Route>
             ) : null}
-            <Route path="/settings" element={<Navigate to="/settings/access" replace />} />
+            <Route
+              path="/settings"
+              element={<Navigate to="/settings/access" replace />}
+            />
             {sections.map((item) => (
-              <Route key={item.id} element={<RequireRole roles={item.accessRoles ?? item.roles} />}>
+              <Route
+                key={item.id}
+                element={<RequireRole roles={item.accessRoles ?? item.roles} />}
+              >
                 <Route
                   path={
                     item.id === "master-data"
                       ? "/master-data/*"
-                      : item.id === "batches"
-                        ? "/batches/*"
-                        : item.id === "registry"
-                          ? "/registry/*"
-                          : item.id === "papers"
-                            ? "/papers/*"
-                            : item.to
+                      : item.id === "master-entry"
+                        ? "/master-entry/*"
+                        : item.id === "batches"
+                          ? "/batches/*"
+                          : item.id === "registry"
+                            ? "/registry/*"
+                            : item.id === "papers"
+                              ? "/papers/*"
+                              : item.to
                   }
                   element={
                     item.id === "ab-queue" ? (
@@ -113,6 +148,8 @@ export function AppRoutes() {
                       <UsersPage />
                     ) : item.id === "registry" ? (
                       <RegistryPage />
+                    ) : item.id === "master-entry" ? (
+                      <MasterEntryPage />
                     ) : item.id === "master-data" ? (
                       <MasterDataPage />
                     ) : item.id === "schemes" ? (
@@ -136,7 +173,10 @@ export function AppRoutes() {
                     ) : item.id === "settings" ? (
                       <SettingsAccessPage />
                     ) : (
-                      <PlaceholderPage title={item.label} description={item.description} />
+                      <PlaceholderPage
+                        title={item.label}
+                        description={item.description}
+                      />
                     )
                   }
                 />
@@ -147,7 +187,10 @@ export function AppRoutes() {
         <Route element={<ExamWindowGate />}>
           <Route element={<RequireAuth />}>
             <Route element={<RequireRole roles={EXAM_ROLES} />}>
-              <Route path="/exam/window/:batchId/:paperId" element={<ExamWindowPage />} />
+              <Route
+                path="/exam/window/:batchId/:paperId"
+                element={<ExamWindowPage />}
+              />
             </Route>
           </Route>
         </Route>
@@ -175,7 +218,9 @@ export function App() {
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <BrowserRouter
+          future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+        >
           <AppRoutes />
         </BrowserRouter>
       </QueryClientProvider>

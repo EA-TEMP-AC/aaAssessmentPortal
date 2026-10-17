@@ -27,6 +27,8 @@ export type NavItem = {
   roles: readonly Role[];
   /** Who may open the page when it is wider than the navigation. Defaults to `roles`. */
   accessRoles?: readonly Role[];
+  /** Roles for which the link is left out of the menu, though the page still opens. */
+  menuHiddenFor?: readonly Role[];
 };
 
 export const NAV_ITEMS: readonly NavItem[] = [
@@ -41,7 +43,8 @@ export const NAV_ITEMS: readonly NavItem[] = [
     id: "batches",
     label: "Batches",
     to: "/batches",
-    description: "Filter batches, watch stored SLA due times, and take the actions your role and the current status allow.",
+    description:
+      "Filter batches, watch stored SLA due times, and take the actions your role and the current status allow.",
     roles: BATCH_ROLES,
   },
   {
@@ -51,6 +54,14 @@ export const NAV_ITEMS: readonly NavItem[] = [
     description: "Batches with a result waiting for validation or publication.",
     roles: ["ab_reviewer"],
     accessRoles: ["ab_reviewer", "aa_admin", "mis", "ncvet_viewer"],
+  },
+  {
+    id: "master-entry",
+    label: "Master entry",
+    to: "/master-entry",
+    description:
+      "Add awarding bodies, training partners, training centres, assessors, proctors and students in one place.",
+    roles: ["aa_admin", "mis"],
   },
   {
     id: "users",
@@ -63,15 +74,19 @@ export const NAV_ITEMS: readonly NavItem[] = [
     id: "registry",
     label: "Registry",
     to: "/registry",
-    description: "Assessor and proctor registry, including qualifications, languages, and ToA validity.",
+    description:
+      "Assessor and proctor registry, including qualifications, languages, and ToA validity.",
     roles: REGISTRY_ROLES,
+    menuHiddenFor: ["aa_admin", "mis"],
   },
   {
     id: "master-data",
     label: "Master data",
     to: "/master-data",
-    description: "Awarding bodies, training partners, centres, qualifications, and learners your account is allowed to read.",
+    description:
+      "Awarding bodies, training partners, centres, qualifications, and learners your account is allowed to read.",
     roles: MASTER_DATA_ROLES,
+    menuHiddenFor: ["aa_admin", "mis"],
   },
   {
     id: "schemes",
@@ -91,28 +106,32 @@ export const NAV_ITEMS: readonly NavItem[] = [
     id: "signatories",
     label: "Signatories",
     to: "/signatories",
-    description: "People authorised to sign for a scheme, a project, or the whole agency.",
+    description:
+      "People authorised to sign for a scheme, a project, or the whole agency.",
     roles: SCHEME_READ_ROLES,
   },
   {
     id: "recognition",
     label: "Recognition",
     to: "/recognition",
-    description: "Recognised sectors, states or PAN India, and the recognition dates.",
+    description:
+      "Recognised sectors, states or PAN India, and the recognition dates.",
     roles: RECOGNITION_ROLES,
   },
   {
     id: "question-bank",
     label: "Question bank",
     to: "/question-bank",
-    description: "Questions by qualification, NOS and PC: import, edit, send for review and approve.",
+    description:
+      "Questions by qualification, NOS and PC: import, edit, send for review and approve.",
     roles: QUESTION_BANK_ROLES,
   },
   {
     id: "papers",
     label: "Papers",
     to: "/papers",
-    description: "Generate test papers, send them for approval, and approve or send them back.",
+    description:
+      "Generate test papers, send them for approval, and approve or send them back.",
     roles: QUESTION_BANK_ROLES,
   },
   {
@@ -133,14 +152,16 @@ export const NAV_ITEMS: readonly NavItem[] = [
     id: "evidence",
     label: "Evidence",
     to: "/evidence",
-    description: "Photos, videos and documents uploaded for batches, with checksum and location details.",
+    description:
+      "Photos, videos and documents uploaded for batches, with checksum and location details.",
     roles: EVIDENCE_ROLES,
   },
   {
     id: "proctoring",
     label: "Proctoring",
     to: "/proctoring",
-    description: "Proctored online attempts, their flags and snapshots, and the review decisions.",
+    description:
+      "Proctored online attempts, their flags and snapshots, and the review decisions.",
     roles: PROCTORING_ROLES,
   },
   {
@@ -154,21 +175,24 @@ export const NAV_ITEMS: readonly NavItem[] = [
     id: "analytics",
     label: "Analytics",
     to: "/analytics",
-    description: "Batch, result and SLA figures by assessor, training partner, job role and state.",
+    description:
+      "Batch, result and SLA figures by assessor, training partner, job role and state.",
     roles: ANALYTICS_ROLES,
   },
   {
     id: "working-days",
     label: "Working days",
     to: "/working-days",
-    description: "Choose weekend days and record holidays. Changes do not rewrite due dates already stored on batches.",
+    description:
+      "Choose weekend days and record holidays. Changes do not rewrite due dates already stored on batches.",
     roles: WORKING_DAY_ROLES,
   },
   {
     id: "public-site",
     label: "Public site",
     to: "/admin/public-site",
-    description: "Content for the public website: team, people, sample papers, policies, documents and events.",
+    description:
+      "Content for the public website: team, people, sample papers, policies, documents and events.",
     roles: PUBLIC_SITE_ROLES,
   },
   {
@@ -182,12 +206,12 @@ export const NAV_ITEMS: readonly NavItem[] = [
 
 export function navItemsForRole(
   role: Role,
-  options?: { ncvetViewerCanSeeAbQueue?: boolean },
+  _options?: { ncvetViewerCanSeeAbQueue?: boolean },
 ): NavItem[] {
   return NAV_ITEMS.filter((item) => {
-    if (item.id === "ab-queue" && role === "ncvet_viewer") {
-      return Boolean(options?.ncvetViewerCanSeeAbQueue);
-    }
+    // The awarding body has no login and no review queue (senior's instruction, X-38).
+    if (item.id === "ab-queue") return false;
+    if (item.menuHiddenFor?.includes(role)) return false;
     return item.roles.includes(role);
   });
 }
