@@ -1264,7 +1264,7 @@ Response `200 OK`:
 Roles: `aa_admin`, `sme`.
 Accepts raw `.xlsx` binary buffer, base64 data (`{ fileBase64: "..." }`), or parsed row array.
 Powered by `exceljs`. Enforces security and validation limits:
-- Maximum file size: 5 MB (larger payloads rejected with `400 VALIDATION_ERROR`).
+- Maximum file size: 25 MB (X-26; larger payloads rejected with `400 FILE_TOO_LARGE`). Pictures placed on a question row (up to 3, PNG or JPEG, 1 MB each, left to right) are imported with the question; the `imageAlt` column holds one description per picture separated by `|`, required for every picture. A bad picture or a missing description is a row error.
 - Maximum row count: 5,000 rows (excluding header; larger workbooks rejected with `400 VALIDATION_ERROR`).
 - Accepted format: `.xlsx` only (binary payload verified for zip magic bytes `PK\x03\x04`).
 - Macros and external links forbidden: workbooks containing `vbaProject.bin`, macro-enabled sheets, or external target links are rejected with `400 VALIDATION_ERROR`.

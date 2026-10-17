@@ -46,7 +46,7 @@ const rawBufferParser = express.raw({
     "application/vnd.ms-excel",
     "application/octet-stream",
   ],
-  limit: "10mb",
+  limit: "26mb",
 });
 
 const imageParser = express.raw({

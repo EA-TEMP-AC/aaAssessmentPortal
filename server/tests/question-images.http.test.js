@@ -1,3 +1,4 @@
+import ExcelJS from "exceljs";
 import request from "supertest";
 import { createApp } from "../src/app.js";
 import { QuestionImage } from "../src/models/question-image.model.js";
@@ -63,6 +64,12 @@ const PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
   "base64",
 );
+// A JPEG with a few more bytes after the start marker, enough for a spreadsheet to hold.
+const JPEG_FULL = Buffer.concat([
+  Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 16]),
+  Buffer.from("JFIF\0\x01\x01\0\0\x01\0\x01\0\0"),
+  Buffer.from([0xff, 0xd9]),
+]);
 const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 16, 0x4a, 0x46, 0x49, 0x46, 0, 1]);
 
 const upload = (who, bytes, type = "image/png") =>
@@ -199,5 +206,77 @@ describe("Images in questions (X-25)", () => {
           .set(bearer(admin.token))
       ).status,
     ).toBe(404);
+  });
+
+  describe("Excel import with pictures (X-26)", () => {
+    const row = (stem, imageAlt) => ({
+      qualification: "QUAL-AUTO-01",
+      nos: "NOS-01",
+      pc: "PC-01",
+      type: "short_answer",
+      language: "en",
+      stem,
+      marks: 1,
+      imageAlt,
+    });
+
+    async function workbook(rows, pictures) {
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet("Questions");
+      const headers = Object.keys(rows[0]);
+      ws.addRow(headers);
+      for (const r of rows) ws.addRow(headers.map((h) => r[h] ?? ""));
+      for (const { sheetRow, bytes, col, extension } of pictures) {
+        const id = wb.addImage({ buffer: bytes, extension });
+        ws.addImage(id, {
+          tl: { col, row: sheetRow - 1 },
+          ext: { width: 20, height: 20 },
+        });
+      }
+      return Buffer.from(await wb.xlsx.writeBuffer());
+    }
+
+    const importFile = (buffer, query = "") =>
+      request(app)
+        .post(`/api/v1/question-bank/import${query}`)
+        .set(bearer(sme.token))
+        .set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        .send(buffer);
+
+    it("imports the pictures on a row with their descriptions, in left-to-right order", async () => {
+      const buffer = await workbook(
+        [row("With two pictures", "First | Second"), row("Without", "")],
+        [
+          { sheetRow: 2, bytes: JPEG_FULL, col: 12, extension: "jpeg" },
+          { sheetRow: 2, bytes: PNG, col: 10, extension: "png" },
+        ],
+      );
+      const res = await importFile(buffer);
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      expect(res.body.importedCount).toBe(2);
+      const withPictures = await Question.findOne({ stem: "With two pictures" }).lean();
+      expect(withPictures.images.map((i) => i.alt)).toEqual(["First", "Second"]);
+      expect(await QuestionImage.countDocuments()).toBe(2);
+      const without = await Question.findOne({ stem: "Without" }).lean();
+      expect(without.images).toEqual([]);
+    });
+
+    it("refuses a picture with no description, and saves nothing", async () => {
+      const buffer = await workbook(
+        [row("No description", "")],
+        [{ sheetRow: 2, bytes: PNG, col: 10, extension: "png" }],
+      );
+      const res = await importFile(buffer);
+      expect(res.body.success).toBe(false);
+      expect(JSON.stringify(res.body.errors)).toContain("needs a description");
+      expect(await Question.countDocuments()).toBe(0);
+      expect(await QuestionImage.countDocuments()).toBe(0);
+    });
+
+    it("refuses description text on a row with no picture", async () => {
+      const res = await importFile(await workbook([row("No picture", "Something")], []));
+      expect(res.body.success).toBe(false);
+      expect(JSON.stringify(res.body.errors)).toContain("no pictures");
+    });
   });
 });

@@ -2,7 +2,13 @@ import mongoose from "mongoose";
 import ExcelJS from "exceljs";
 import { AppError } from "../../lib/errors.js";
 import { Qualification } from "../../models/qualification.model.js";
-import { QuestionImage } from "../../models/question-image.model.js";
+import {
+  QUESTION_IMAGE_MAX_BYTES,
+  QUESTION_IMAGES_PER_QUESTION,
+  QuestionImage,
+} from "../../models/question-image.model.js";
+import { sniffContentType } from "../evidence/file-type.js";
+import { uploadQuestionImage } from "./question-image.service.js";
 import { Question, QUESTION_DIFFICULTIES, QUESTION_TYPES } from "../../models/question.model.js";
 import { compliance } from "../../config/compliance.js";
 import {
@@ -436,6 +442,7 @@ export const IMPORT_TEMPLATE_COLUMNS = Object.freeze([
   "optionF",
   "correctAnswer",
   "marks",
+  "imageAlt",
 ]);
 
 /** X-10: an empty .xlsx with the columns the import reads, and a notes sheet after the data sheet. */
@@ -457,6 +464,9 @@ export async function buildImportTemplate() {
     ["difficulty (optional): easy, medium or tough. marks: 0.5 or more."],
     [
       "MCQ rows need at least two of optionA to optionF and a correctAnswer (an option letter or its text).",
+    ],
+    [
+      "Pictures (optional): insert up to 3 PNG or JPEG pictures, 1 MB or less each, on the row of the question. Left to right is their order. Describe them in imageAlt, one description per picture, separated by |. A description is required for every picture.",
     ],
     ["Imported questions start as draft."],
   ].forEach((line) => notes.addRow(line));
@@ -626,6 +636,26 @@ async function validateImportRow(row, rowIndex) {
     }
   }
 
+  // X-26: pictures placed on the row. Each needs a description; the type comes from the bytes.
+  const pictures = Array.isArray(row.__pictures) ? row.__pictures : [];
+  const alts = String(row.imageAlt ?? "")
+    .split("|")
+    .map((text) => text.trim());
+  if (pictures.length > QUESTION_IMAGES_PER_QUESTION) {
+    errors.push(`At most ${QUESTION_IMAGES_PER_QUESTION} pictures per question`);
+  }
+  pictures.forEach((bytes, index) => {
+    const label = `Picture ${index + 1}`;
+    if (bytes.length > QUESTION_IMAGE_MAX_BYTES) errors.push(`${label} is larger than 1 MB`);
+    const kind = sniffContentType(bytes.subarray(0, 1024));
+    if (kind !== "image/png" && kind !== "image/jpeg") errors.push(`${label} must be PNG or JPEG`);
+    if (!alts[index]) errors.push(`${label} needs a description in imageAlt`);
+    else if (alts[index].length > 300) errors.push(`${label} description is over 300 characters`);
+  });
+  if (pictures.length === 0 && alts.some(Boolean)) {
+    errors.push("imageAlt is filled in but the row has no pictures");
+  }
+
   let resolved = null;
   if (qualRef && nosRef && pcRef) {
     try {
@@ -656,16 +686,33 @@ async function validateImportRow(row, rowIndex) {
             status: "draft",
             version: 1,
             isLatest: true,
+            pictures: pictures.map((bytes, index) => ({ bytes, alt: alts[index] })),
           }
         : null,
   };
 }
 
-export const MAX_IMPORT_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
+export const MAX_IMPORT_FILE_SIZE = 25 * 1024 * 1024; // 25 MB (X-26: pictures are inside the file)
 export const MAX_IMPORT_ROWS = 5000;
 
-function extractRowsFromExcelWorksheet(worksheet) {
+/** X-26: the pictures placed on each sheet row, left to right. Keys are 1-based sheet rows. */
+function picturesByRow(workbook, worksheet) {
+  const byRow = new Map();
+  for (const placed of worksheet.getImages?.() ?? []) {
+    const row = (placed.range?.tl?.nativeRow ?? -1) + 1;
+    const image = workbook.getImage(placed.imageId);
+    if (row < 2 || !image?.buffer) continue;
+    const list = byRow.get(row) ?? [];
+    list.push({ col: placed.range.tl.nativeCol ?? 0, buffer: Buffer.from(image.buffer) });
+    byRow.set(row, list);
+  }
+  for (const list of byRow.values()) list.sort((a, b) => a.col - b.col);
+  return byRow;
+}
+
+function extractRowsFromExcelWorksheet(worksheet, workbook = null) {
   if (!worksheet || worksheet.rowCount < 2) return [];
+  const pictures = workbook ? picturesByRow(workbook, worksheet) : new Map();
   const headerRow = worksheet.getRow(1);
   const headers = [];
   headerRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
@@ -706,6 +753,11 @@ function extractRowsFromExcelWorksheet(worksheet) {
       if (val !== "") hasValue = true;
       rowObj[header] = val;
     }
+    const placed = pictures.get(r);
+    if (placed) {
+      hasValue = true;
+      rowObj.__pictures = placed.map((p) => p.buffer);
+    }
     if (hasValue) {
       rows.push(rowObj);
     }
@@ -723,7 +775,7 @@ export async function importQuestions(user, { buffer, rows: inputRows, partial =
 
   if (buffer) {
     if (buffer.length > MAX_IMPORT_FILE_SIZE) {
-      throw new AppError(400, "FILE_TOO_LARGE", "File size exceeds the 5 MB limit");
+      throw new AppError(400, "FILE_TOO_LARGE", "File size exceeds the 25 MB limit");
     }
 
     // Only .xlsx accepted (ZIP package with PK\x03\x04 header)
@@ -773,7 +825,7 @@ export async function importQuestions(user, { buffer, rows: inputRows, partial =
       throw new AppError(400, "EMPTY_EXCEL_FILE", "Excel workbook contains no sheets");
     }
 
-    rows = extractRowsFromExcelWorksheet(worksheet);
+    rows = extractRowsFromExcelWorksheet(worksheet, workbook);
   }
 
   if (!Array.isArray(rows) || rows.length === 0) {
@@ -811,8 +863,15 @@ export async function importQuestions(user, { buffer, rows: inputRows, partial =
 
   const inserted = [];
   for (const item of valid) {
+    const { pictures, ...fields } = item.data;
+    const images = [];
+    for (const { bytes, alt } of pictures) {
+      const saved = await uploadQuestionImage(user, bytes);
+      images.push({ imageId: saved.id, alt });
+    }
     const doc = new Question({
-      ...item.data,
+      ...fields,
+      images,
       createdBy: user._id,
     });
     doc.rootQuestionId = doc._id;

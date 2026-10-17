@@ -641,8 +641,8 @@ describe("Question Bank API (server/src/modules/question-bank)", () => {
       expect(imported.status).toBe("draft");
     });
 
-    it("rejects files larger than 5 MB with 400 FILE_TOO_LARGE", async () => {
-      const largeBuffer = Buffer.alloc(5 * 1024 * 1024 + 1);
+    it("rejects files larger than 25 MB with 400 FILE_TOO_LARGE", async () => {
+      const largeBuffer = Buffer.alloc(25 * 1024 * 1024 + 1);
       // PK magic bytes
       largeBuffer[0] = 0x50;
       largeBuffer[1] = 0x4b;

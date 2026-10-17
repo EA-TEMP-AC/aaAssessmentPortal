@@ -8,7 +8,7 @@ import {
 } from "../../api/questionBank";
 import { Dialog } from "../masterData/dialog";
 
-const MAX_BYTES = 5 * 1024 * 1024;
+const MAX_BYTES = 25 * 1024 * 1024;
 
 function saveBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
@@ -82,7 +82,7 @@ export function ImportDialog({
       return;
     }
     if (file.size > MAX_BYTES) {
-      setProblem("The file is larger than 5 MB.");
+      setProblem("The file is larger than 25 MB.");
       return;
     }
     setPending(true);
@@ -116,7 +116,7 @@ export function ImportDialog({
   return (
     <Dialog title="Import questions from Excel" busy={pending} wide onCancel={onCancel}>
       <p>
-        Use the template so the columns match. Up to 5,000 rows and 5 MB. Imported questions start as drafts.
+        Use the template so the columns match. Up to 5,000 rows and 25 MB. Pictures placed on a question row are imported with it (see the Notes sheet of the template). Imported questions start as drafts.
       </p>
       <p>
         <button type="button" onClick={() => void template()}>
