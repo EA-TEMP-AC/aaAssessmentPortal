@@ -57,7 +57,13 @@ export const resultsBodySchema = z
   })
   .strict();
 
-export const submitResultBodySchema = z.object({ lateReason: reasonSchema.optional() }).strict();
+/**
+ * X-44. `autoPublish` also records the awarding body's validation and publication in the same
+ * call, because the awarding body has no login. The result and the batch end `published`.
+ */
+export const submitResultBodySchema = z
+  .object({ lateReason: reasonSchema.optional(), autoPublish: z.boolean().optional() })
+  .strict();
 
 export const reviewBodySchema = z.object({ reason: reasonSchema.optional() }).strict();
 

@@ -417,7 +417,10 @@ function MarksEditor({
     setError(null);
     try {
       onSubmitted(
-        await submitResult(batch.id, late ? { lateReason: late } : {}),
+        await submitResult(batch.id, {
+          ...(late ? { lateReason: late } : {}),
+          autoPublish: true,
+        }),
       );
     } catch (err) {
       if (err instanceof ApiError && err.code === "SLA_RESULT_EXPIRED")

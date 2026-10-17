@@ -467,7 +467,16 @@ export async function submitResult(user, batchId, body = {}, context = {}) {
     });
   }
   await auditMove({ user, batch, before: result, after: saved.result, action, ip: context.ip });
-  return presentMove(batch, saved);
+  const submitted = presentMove(batch, saved);
+  if (!body.autoPublish) return submitted;
+
+  // X-44: the awarding body has no login, so its two steps are recorded here, by the same admin,
+  // each with its own history row and audit row.
+  const auto = { ...context, now, asReviewer: true };
+  const reason = "Recorded with the submission: the awarding body has no login";
+  await reviewResult(user, batchId, "validate", { reason }, auto);
+  const published = await reviewResult(user, batchId, "publish", { reason }, auto);
+  return { ...published, before: submitted.before };
 }
 
 /**
@@ -482,11 +491,13 @@ export async function submitResult(user, batchId, body = {}, context = {}) {
  */
 export async function reviewResult(user, batchId, action, body = {}, context = {}) {
   const now = context.now ?? new Date();
-  if (!rolesForAction(action).includes(user?.role)) throw forbidden();
+  // X-44: an admin submitting with `autoPublish` stands in for the awarding body reviewer.
+  const moveRole = context.asReviewer && user?.role === "aa_admin" ? "ab_reviewer" : user?.role;
+  if (!rolesForAction(action).includes(moveRole)) throw forbidden();
   const batch = await Batch.findById(batchId).lean();
   if (!batch) throw notFound();
   assertBatchScopeForReview(user, batch);
-  const next = resolveTransition(user.role, batch.status, action);
+  const next = resolveTransition(moveRole, batch.status, action);
   if (!next) throw invalidTransition();
 
   const result = await Result.findOne({ batchId: batch._id }).lean();

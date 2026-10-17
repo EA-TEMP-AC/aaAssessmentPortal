@@ -33,6 +33,7 @@ import { SettingsAccessPage } from "./pages/SettingsAccessPage";
 import { UsersPage } from "./pages/UsersPage";
 import { WorkingDaysPage } from "./pages/WorkingDaysPage";
 import { BatchesPage } from "./pages/BatchesPage";
+import { ResultsPage } from "./pages/ResultsPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
 import { ProctoringDemoPage } from "./pages/ProctoringDemoPage";
 import { RoleHomePage } from "./pages/RoleHomePage";
@@ -129,7 +130,9 @@ export function AppRoutes() {
                             ? "/registry/*"
                             : item.id === "papers"
                               ? "/papers/*"
-                              : item.to
+                              : item.id === "results"
+                                ? "/results/*"
+                                : item.to
                   }
                   element={
                     item.id === "ab-queue" ? (
@@ -170,6 +173,8 @@ export function AppRoutes() {
                       <PapersPage />
                     ) : item.id === "public-site" ? (
                       <PublicSiteAdminPage />
+                    ) : item.id === "results" ? (
+                      <ResultsPage />
                     ) : item.id === "settings" ? (
                       <SettingsAccessPage />
                     ) : (

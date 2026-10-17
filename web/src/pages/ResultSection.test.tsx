@@ -408,8 +408,8 @@ it("submits a complete draft and asks for a late reason on SLA_RESULT_EXPIRED", 
     await within(region).findByText("Result submitted to the awarding body."),
   ).toBeInTheDocument();
   expect(writes(world).map((call) => call.body)).toEqual([
-    {},
-    { lateReason: "Marks verification took an extra day" },
+    { autoPublish: true },
+    { lateReason: "Marks verification took an extra day", autoPublish: true },
   ]);
   // Marks are closed once submitted.
   expect(

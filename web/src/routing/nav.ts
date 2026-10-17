@@ -138,7 +138,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     id: "results",
     label: "Results",
     to: "/results",
-    description: "Result entry and review will be added in a later task.",
+    description: "Batch results and the candidate summary report.",
     roles: RESULTS_ROLES,
   },
   {

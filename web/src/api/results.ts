@@ -200,7 +200,7 @@ export async function saveResults(
 async function postMove(
   batchId: string,
   action: string,
-  body: Record<string, string>,
+  body: Record<string, string | boolean>,
 ): Promise<ResultMoveRecord> {
   return parseMove(
     await apiRequest<unknown>(
@@ -212,13 +212,12 @@ async function postMove(
 
 export async function submitResult(
   batchId: string,
-  input: { lateReason?: string } = {},
+  input: { lateReason?: string; autoPublish?: boolean } = {},
 ): Promise<ResultMoveRecord> {
-  return postMove(
-    batchId,
-    "submit-result",
-    input.lateReason ? { lateReason: input.lateReason } : {},
-  );
+  return postMove(batchId, "submit-result", {
+    ...(input.lateReason ? { lateReason: input.lateReason } : {}),
+    ...(input.autoPublish ? { autoPublish: true } : {}),
+  });
 }
 
 export async function validateResult(

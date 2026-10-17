@@ -393,8 +393,10 @@ Errors: `400 VALIDATION_ERROR` (missing reason), `409 INVALID_TRANSITION`.
 Owned by **B-05**. Roles: `aa_admin`. **No body** except optional soft-SLA:
 
 ```json
-{ "lateReason": "Marks verification with TP took extra day" }
+{ "lateReason": "Marks verification with TP took extra day", "autoPublish": true }
 ```
+
+`autoPublish` (X-44, optional): the awarding body has no login, so the admin's call also records `validate` and `publish` straight after the submit. Each step keeps its own change-log and audit row, with the reason "Recorded with the submission: the awarding body has no login". The batch ends `published`. Without the flag the old three-step flow is unchanged.
 
 Unknown keys are `400 VALIDATION_ERROR`. The server recomputes every outcome from the stored marks, the attendance rows, and the qualification as it is now, then moves batch `assessment_completed` → `result_submitted` and result `draft` → `submitted` in one transaction, and writes a change-log row (`action: "submit"`, with any row whose outcome changed on recompute).
 
@@ -671,6 +673,24 @@ An empty `.xlsx`: a `Data` sheet with the header row and a `Notes` sheet listing
 ### POST /master-import/:type
 
 Body: the `.xlsx` file (`Content-Type` `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` or `application/octet-stream`), at most 5 MB and 2000 data rows. Reads the `Data` sheet (or the first sheet). Every row goes through the same rules and service as the single-record form. Response `200 { type, totalRows, created, skipped, errors: [{ row, reason }] }`. A record that already exists (same code, email or reference) counts as `skipped`; a bad row is listed and the others are still created. `400` for a file that is not Excel or lacks the required columns. Centres use `tpCode` (the code of an existing training partner). A national ID column is never read. One audit row `master.bulk_import` with counts only.
+
+---
+
+## Results report (X-44)
+
+Roles: `aa_admin`, `mis`, `ncvet_viewer`, within their batch scope. Under `/reports`.
+
+### GET /reports/results
+
+Query (all optional, unknown keys `400`): `status` (`assessment_completed`, `result_submitted`, `ab_validated`, `published`), `sector`, `qualificationId`, `centreId`, `batchId`, `from`, `to` (YYYY-MM-DD, on the assessment start date), `page`, `pageSize` (max 100). Response `200 { page, pageSize, total, items: [{ batchId, qualification, sector, centre, partner, assessor, assessmentDate, batchStatus, resultStatus, total, pass, fail, absent }] }`. Counts only, no personal data.
+
+### GET /reports/batches/:batchId/candidate-summary
+
+The candidate summary report as data: `header` (job role, assessor, centre and mode, partner, date as DD-Mon-YYYY), `counts` (total, assessed, pass, fail, absent), `components` (theory, practical, viva; only those the qualification uses), `nos` (code and ceiling per component), `maxTotal`, and `rows` (sNo, reference, name, marks per NOS, totals, total, percentage to 2 decimals, status). Percentage is overall marks over the sum of ceilings. `404` if the batch has no result. Names are personal data: one learner access-log entry per read.
+
+### GET /reports/batches/:batchId/candidate-summary.xlsx
+
+The same report as an Excel sheet with the confidentiality footer. Cells that start with `=`, `+`, `-` or `@` are neutralised. Audit `report.candidate_summary_export` (row count only) plus the access log. There is no father or husband name and no Aadhaar column: the portal does not hold them.
 
 ---
 

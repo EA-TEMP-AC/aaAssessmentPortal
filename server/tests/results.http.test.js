@@ -466,6 +466,24 @@ describe("results", () => {
       expect(await ResultChangeLog.countDocuments({ action: "submit" })).toBe(0);
     });
 
+    it("with autoPublish also records the awarding body's two steps and ends published (X-44)", async () => {
+      const w = await world();
+      const admin = await sessionFor("aa_admin");
+      await putResults(admin.token, w.batch._id, { rows: fullRows(w) });
+      const res = await post(admin.token, w.batch._id, "submit-result", { autoPublish: true });
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      expect(res.body.status).toBe("published");
+      expect(res.body.batchStatus).toBe("published");
+      expect(res.body.submittedBy).toBe(admin.userId);
+      expect(res.body.validatedBy).toBe(admin.userId);
+      expect(res.body.publishedBy).toBe(admin.userId);
+      expect((await Batch.findById(w.batch._id).lean()).status).toBe("published");
+      const actions = (await ResultChangeLog.find({}).sort({ createdAt: 1 }).lean()).map(
+        (l) => l.action,
+      );
+      expect(actions).toEqual(expect.arrayContaining(["submit", "validate", "publish"]));
+    });
+
     it("recomputes outcomes, moves batch and result, and writes a change log", async () => {
       const w = await world();
       const admin = await sessionFor("aa_admin");

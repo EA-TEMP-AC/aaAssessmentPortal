@@ -383,4 +383,7 @@ export const PROCTORING_UNLOCK_ROLES = Object.freeze(["aa_admin", "proctor"]);
 export const PROCTORING_CAPTURE_READ_ROLES = Object.freeze([...PROCTORING_READ_ROLES, "tp"]);
 
 /** GET /reports/batches/:id/marks.xlsx. X-09: same people who list attempts, each inside their own scope. */
+/** X-44. Candidate summary report and the results list. Staff of the agency and the NCVET viewer. */
+export const RESULT_REPORT_ROLES = Object.freeze(["aa_admin", "mis", "ncvet_viewer"]);
+
 export const REPORT_MARKS_ROLES = Object.freeze(["aa_admin", "assessor", "ab_reviewer"]);
