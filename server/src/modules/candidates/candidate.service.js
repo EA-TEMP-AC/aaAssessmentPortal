@@ -206,7 +206,8 @@ export async function addCandidate(user, batchId, body, context = {}) {
  */
 export async function getCandidates(user, batchId, query = {}) {
   // X-36: staff who manage the roster also see each student's sign-in id and first password.
-  const withLogins = CANDIDATE_WRITE_ROLES.includes(user?.role);
+  // X-39: so does the assessor of the batch (scope is checked below), for exam day.
+  const withLogins = CANDIDATE_WRITE_ROLES.includes(user?.role) || user?.role === "assessor";
   const batch = await loadBatch(batchId);
   if (!(await canReadCandidates(user, batch))) throw forbidden();
 

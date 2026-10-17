@@ -609,6 +609,14 @@ describe("batch candidates", () => {
           .set(bearer(assessorUser.token))
       ).status,
     ).toBe(200);
+    // X-39: the assessor of the batch sees each student's login; the training partner does not.
+    const assessorList = await request(app)
+      .get(`/api/v1/batches/${own.id}/candidates`)
+      .set(bearer(assessorUser.token));
+    for (const item of assessorList.body.items) {
+      expect(item.login).toMatchObject({ loginId: expect.stringContaining("@") });
+    }
+    for (const item of tpList.body.items) expect(item.login).toBeUndefined();
     expectError(
       await request(app)
         .get(`/api/v1/batches/${other.id}/candidates`)

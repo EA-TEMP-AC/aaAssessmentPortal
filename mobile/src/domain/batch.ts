@@ -27,6 +27,8 @@ export type RosterCandidate = {
   externalRef: string | null;
   active: boolean;
   accommodations?: string[];
+  /** The student's sign-in id and first password, shown to the assessor on exam day (X-39). */
+  login?: { loginId: string; initialPassword: string | null; mustChangePassword: boolean } | null;
 };
 
 export type AttendanceRecordState = {

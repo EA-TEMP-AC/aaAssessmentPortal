@@ -648,6 +648,8 @@ Creates roster row (name/externalRef from learner). Or `{ "name", "externalRef" 
 
 ### GET /batches/:id/candidates
 
+X-36/X-39: `aa_admin`, `mis` and the assessor of the batch also get `login { loginId, initialPassword, mustChangePassword, active }` on each item (`initialPassword` is null once the student has changed it). Other roles do not. Reading passwords is written to the access log.
+
 ### PATCH /batches/:id/candidates/:candidateId
 
 `{ "active": false }` deactivate; or update accommodations. Soft-delete only (no hard delete in Phase 1).

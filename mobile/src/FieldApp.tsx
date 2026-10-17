@@ -27,6 +27,7 @@ import type { AttendanceRecordInput, ChecklistItemInput, LoginEventType, QueuedI
 import { AttendanceScreen } from "./screens/AttendanceScreen";
 import { BatchScreen } from "./screens/BatchScreen";
 import { ChecklistScreen } from "./screens/ChecklistScreen";
+import { CredentialsScreen } from "./screens/CredentialsScreen";
 import { LoginScreen } from "./screens/LoginScreen";
 import { PasswordChangeScreen } from "./screens/PasswordChangeScreen";
 import { StatusScreen } from "./screens/StatusScreen";
@@ -54,11 +55,12 @@ const EMPTY_SNAPSHOT: QueueSnapshot = {
   retryMessage: null,
 };
 
-type Tab = "batch" | "attendance" | "checklist" | "tracking" | "status";
+type Tab = "batch" | "attendance" | "logins" | "checklist" | "tracking" | "status";
 
 const TAB_LABELS: Record<Tab, string> = {
   batch: "Batch",
   attendance: "Attendance",
+  logins: "Logins",
   checklist: "Checklist",
   tracking: "Tracking",
   status: "Session",
@@ -67,7 +69,7 @@ const TAB_LABELS: Record<Tab, string> = {
 /** Students and proctors record location (M-03). Attendance and checklist are the assessor's. */
 function tabsForRole(role: string): Tab[] {
   if (isTrackingRole(role)) return ["batch", "tracking", "status"];
-  return ["batch", "attendance", "checklist", "status"];
+  return ["batch", "attendance", "logins", "checklist", "status"];
 }
 
 function messageFrom(err: unknown, fallback: string): string {
@@ -602,6 +604,22 @@ export default function FieldApp() {
             saving={savingAttendance}
             banner={banner}
           />
+        );
+      }
+    } else if (activeTab === "logins") {
+      if (!cachedBatch) {
+        screenContent = (
+          <View style={styles.promptCard}>
+            <Text style={styles.promptTitle}>No Batch Downloaded</Text>
+            <Text style={styles.promptText}>Download your assigned batch first to see the student logins.</Text>
+            <Pressable style={styles.tabSwitchButton} onPress={() => setTab("batch")}>
+              <Text style={styles.tabSwitchButtonText}>Go to Batch Screen</Text>
+            </Pressable>
+          </View>
+        );
+      } else {
+        screenContent = (
+          <CredentialsScreen assessorName={decision.session.user.name} roster={cachedBatch.roster} />
         );
       }
     } else if (activeTab === "checklist") {
