@@ -349,6 +349,8 @@ function learnerAuditView(row) {
     ...row,
     fatherName: row.fatherName ? "[redacted]" : null,
     address: row.address ? "[redacted]" : null,
+    hasAadhaar: Boolean(row.aadhaarMasked),
+    aadhaarMasked: undefined,
   };
 }
 
@@ -374,7 +376,7 @@ mountReads(learnersRouter, LEARNER_READ_ROLES, {
   get: getLearner,
   access: {
     subjectType: "learner",
-    fields: ["name", "phone", "externalRef", "fatherName", "address"],
+    fields: ["name", "phone", "externalRef", "fatherName", "address", "aadhaar"],
   },
 });
 

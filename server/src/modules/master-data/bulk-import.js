@@ -209,6 +209,10 @@ const TYPES = {
       gender: { note: "Male, Female or Other", example: "Female" },
       phone: { note: "Mobile number", example: "9000000001" },
       address: { example: "12 Station Road, Gangtok" },
+      aadhaar: {
+        note: "Optional. 12 digits. Stored encrypted and shown only as the last four digits",
+        example: "",
+      },
       active: { note: "yes or no, default yes", example: "yes" },
     },
     schema: createLearnerSchema,
@@ -222,6 +226,7 @@ const TYPES = {
         fatherName: text(r.fatherName),
         gender: gender(r.gender),
         address: text(r.address),
+        aadhaar: text(r.aadhaar),
         active: flag(r.active),
       }),
   },

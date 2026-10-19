@@ -161,6 +161,7 @@ function SimpleForm({
   const queryClient = useQueryClient();
   const meta = MASTER_COLLECTION_META[collection];
   const editing = record !== null;
+  const editingMasked = record && "aadhaarMasked" in record ? record.aadhaarMasked : null;
   const [draft, setDraft] = useState(() => draftFrom(collection, record));
   const [pending, setPending] = useState(false);
   const [formError, setFormError] = useState<FormError | null>(null);
@@ -189,6 +190,7 @@ function SimpleForm({
   const fatherId = useId();
   const genderId = useId();
   const addressId = useId();
+  const aadhaarId = useId();
   const activeId = useId();
   const listBaseId = useId();
 
@@ -486,6 +488,34 @@ function SimpleForm({
                 />
               </div>
               <div className="field">
+                <label htmlFor={`${aadhaarId}-type`}>Identification Type</label>
+                <select id={`${aadhaarId}-type`} name="identificationType" value="aadhaar" disabled onChange={() => undefined}>
+                  <option value="aadhaar">Aadhaar Number</option>
+                </select>
+              </div>
+              <div className="field">
+                <label htmlFor={aadhaarId}>Aadhaar Number</label>
+                <input
+                  id={aadhaarId}
+                  ref={bind("aadhaar")}
+                  name="aadhaar"
+                  type="text"
+                  inputMode="numeric"
+                  value={draft.aadhaar}
+                  maxLength={14}
+                  autoComplete="off"
+                  spellCheck={false}
+                  placeholder={editing && editingMasked ? editingMasked : undefined}
+                  aria-invalid={formError?.fields.includes("aadhaar") || undefined}
+                  aria-describedby={`${aadhaarId}-hint`}
+                  onChange={(event) => update({ aadhaar: event.target.value })}
+                />
+                <p id={`${aadhaarId}-hint`} className="field-hint">
+                  Optional. 12 digits. Stored encrypted and shown only as the last four digits.
+                  {editing && editingMasked ? " Leave blank to keep the saved number." : ""}
+                </p>
+              </div>
+              <div className="field">
                 <label htmlFor={phoneId}>Mobile No.</label>
                 <input
                   id={phoneId}
@@ -663,6 +693,7 @@ function cellsFor(collection: SimpleCollection, record: SimpleRecord): ReactNode
       display(record.enrolmentNumber),
       display(record.fatherName),
       display(record.gender),
+      display(record.aadhaarMasked),
       display(record.phone),
       record.accommodations.length > 0 ? record.accommodations.join(", ") : "None",
       status,
@@ -708,7 +739,7 @@ export function SimpleResourceScreen({ collection }: { collection: SimpleCollect
   const filtered = Boolean(applied.active || (showTpFilter && applied.tpId));
   const columns = [
     "Name",
-    ...(collection === "learners" ? ["Student ID", "Enrolment number", "Father's / Husband's name", "Gender", "Mobile No.", "Accommodations"] : ["Code"]),
+    ...(collection === "learners" ? ["Student ID", "Enrolment number", "Father's / Husband's name", "Gender", "Aadhaar", "Mobile No.", "Accommodations"] : ["Code"]),
     ...(collection === "awarding-bodies" ? ["Notification emails"] : []),
     ...(collection === "training-partners" ? ["Email"] : []),
     ...(collection === "centres" ? ["Training partner id", "State"] : []),

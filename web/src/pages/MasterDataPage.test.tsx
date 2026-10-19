@@ -84,6 +84,7 @@ function learner(overrides: Partial<Learner> = {}): Learner {
     fatherName: null,
     gender: null,
     address: null,
+    aadhaarMasked: null,
     accommodations: ["Extra time"],
     active: true,
     createdAt: "2026-10-01T09:30:00.000Z",
@@ -534,7 +535,7 @@ it("keeps learner fields to the schema and does not offer delete or a national i
   expect(screen.getByRole("cell", { name: "Extra time" })).toBeInTheDocument();
   expect(screen.queryByText("SECRET-AADHAAR")).not.toBeInTheDocument();
   expect(screen.queryByText("hidden@example.com")).not.toBeInTheDocument();
-  expect(document.body.textContent ?? "").not.toMatch(/aadhaar/i);
+  expect(document.body.textContent ?? "").not.toMatch(/SECRET|\d{12}/);
   expect(screen.queryByRole("button", { name: /Delete/ })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: /Deactivate/ })).not.toBeInTheDocument();
   expect(screen.getByText("Learners cannot be deleted.")).toBeInTheDocument();
@@ -554,6 +555,11 @@ it("keeps learner fields to the schema and does not offer delete or a national i
   await user.type(within(dialog).getByLabelText("Father's / Husband's name"), "Ram Kumar");
   await user.selectOptions(within(dialog).getByLabelText("Gender"), "Female");
   await user.type(within(dialog).getByLabelText("Address"), "Gangtok");
+  await user.type(within(dialog).getByLabelText("Aadhaar Number"), "123");
+  await user.click(within(dialog).getByRole("button", { name: "Create learner" }));
+  expect(await within(dialog).findByRole("alert")).toHaveTextContent("Aadhaar number must be 12 digits.");
+  await user.clear(within(dialog).getByLabelText("Aadhaar Number"));
+  await user.type(within(dialog).getByLabelText("Aadhaar Number"), "2345 6789 0123");
   await user.click(within(dialog).getByRole("button", { name: "Add accommodation" }));
   await user.type(within(dialog).getByLabelText("Accommodation 1"), "Reader");
   await user.click(within(dialog).getByRole("button", { name: "Create learner" }));
@@ -567,6 +573,7 @@ it("keeps learner fields to the schema and does not offer delete or a national i
     fatherName: "Ram Kumar",
     gender: "Female",
     address: "Gangtok",
+    aadhaar: "234567890123",
     accommodations: ["Reader"],
     active: true,
   });

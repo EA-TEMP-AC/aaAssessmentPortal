@@ -23,6 +23,7 @@ export type SimpleDraft = {
   fatherName: string;
   gender: string;
   address: string;
+  aadhaar: string;
   accommodations: string[];
 };
 
@@ -45,6 +46,7 @@ export function emptySimpleDraft(): SimpleDraft {
     fatherName: "",
     gender: "",
     address: "",
+    aadhaar: "",
     accommodations: [],
   };
 }
@@ -68,7 +70,7 @@ export function simpleFieldOrder(collection: MasterCollection, draft: SimpleDraf
   }
   if (collection === "training-partners") return ["name", "code", "email"];
   if (collection === "centres") return ["name", "code", "tpId", "state"];
-  return ["name", "externalRef", "enrolmentNumber", "fatherName", "gender", "phone", "address", ...draft.accommodations.map((_, index) => `accommodations.${index}`)];
+  return ["name", "externalRef", "enrolmentNumber", "fatherName", "gender", "phone", "address", "aadhaar", ...draft.accommodations.map((_, index) => `accommodations.${index}`)];
 }
 
 export function buildSimpleWrite(collection: MasterCollection, draft: SimpleDraft, mode: "create" | "edit"): SimpleResult {
@@ -158,6 +160,11 @@ export function buildSimpleWrite(collection: MasterCollection, draft: SimpleDraf
   if (enrolmentNumber) bounded(enrolmentNumber, 64, "Enrolment number", "enrolmentNumber", messages, fields);
   if (fatherName) bounded(fatherName, 200, "Father's or husband's name", "fatherName", messages, fields);
   if (address) bounded(address, 500, "Address", "address", messages, fields);
+  const aadhaar = draft.aadhaar.replace(/[\s-]/g, "");
+  if (aadhaar && !/^[2-9]\d{11}$/.test(aadhaar)) {
+    messages.push("Aadhaar number must be 12 digits.");
+    fields.push("aadhaar");
+  }
   if (draft.gender && !["Male", "Female", "Other"].includes(draft.gender)) {
     messages.push("Choose Male, Female or Other.");
     fields.push("gender");
@@ -182,6 +189,8 @@ export function buildSimpleWrite(collection: MasterCollection, draft: SimpleDraf
   optionalText("enrolmentNumber", enrolmentNumber);
   optionalText("fatherName", fatherName);
   optionalText("address", address);
+  // Blank on edit leaves the stored number as it is.
+  if (aadhaar) body.aadhaar = aadhaar;
   if (draft.gender) body.gender = draft.gender as "Male" | "Female" | "Other";
   else if (mode === "edit") body.gender = null;
   if (accommodations.length > 0 || mode === "edit") body.accommodations = accommodations;

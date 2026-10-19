@@ -20,7 +20,7 @@ PLAN.md, TASKS.md (your row), API_CONTRACT.md, docs/SCHEMA.md, DECISIONS.md (acc
 ## Code rules
 - Do what the task asks and nothing else. If you find a bug outside your task, do not fix it silently: add an `it.todo` or a skipped test with a comment and list it in your summary.
 - Server: ESM, zod validation, every write audited with before and after, no secrets, tokens, passwords, personal data or question text in audit rows. Roles come from server/src/models/roles.js. Errors use the existing error code style.
-- Never accept or store national ID numbers (Aadhaar, PAN, voter id, passport). Reject unknown request keys.
+- Never accept or store national ID numbers (PAN, voter id, passport). The only exception is the student Aadhaar number (DECISIONS 1000): encrypted at rest, shown only as the last four digits, never in audit rows, logs or reports. Reject unknown request keys.
 - Dates are IST. Working-day rules and SLA constants live in server/src/config/compliance.js.
 - Web: React + TypeScript, Testing Library tests, keyboard and screen-reader friendly, show loading, empty and error states, never show or store passwords or tokens in the page.
 - Update API_CONTRACT.md and docs/SCHEMA.md for every API or model change.

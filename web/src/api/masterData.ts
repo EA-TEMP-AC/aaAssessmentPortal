@@ -121,6 +121,8 @@ export type Learner = {
   fatherName: string | null;
   gender: string | null;
   address: string | null;
+  /** Last four digits only (X-46). The server never sends the full number. */
+  aadhaarMasked: string | null;
   accommodations: string[];
   active: boolean;
   createdAt: string;
@@ -180,6 +182,7 @@ export type LearnerWrite = {
   fatherName?: string | null;
   gender?: "Male" | "Female" | "Other" | null;
   address?: string | null;
+  aadhaar?: string | null;
   accommodations?: string[];
   active: boolean;
 };
@@ -522,6 +525,7 @@ export function parseLearner(value: unknown): Learner {
     fatherName: optional(value.fatherName),
     gender: optional(value.gender),
     address: optional(value.address),
+    aadhaarMasked: optional(value.aadhaarMasked),
     accommodations,
     active,
     ...timestamps,

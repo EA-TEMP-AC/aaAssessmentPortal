@@ -202,7 +202,7 @@ Roles: write `aa_admin` | `mis`; read scoped roles as needed.
 
 Request: `{ "name": "Asha Devi", "externalRef": "TP-REG-10021", "enrolmentNumber": "ENR-1", "fatherName": "Ram Kumar", "gender": "Female", "phone": "9000000001", "address": "Gangtok", "active": true }`
 
-X-45 added `enrolmentNumber` (≤64), `fatherName` (≤200, encrypted), `gender` (`Male`, `Female`, `Other`) and `address` (≤500, encrypted). `externalRef` is the Student ID / Candidate ID. PATCH accepts `null` to clear any of them. The father or husband name and the address are shown as `[redacted]` in audit rows and are logged in the access log by field name. No national ID number is accepted (see DECISIONS 999).
+X-45 added `enrolmentNumber` (≤64), `fatherName` (≤200, encrypted), `gender` (`Male`, `Female`, `Other`) and `address` (≤500, encrypted). `externalRef` is the Student ID / Candidate ID. PATCH accepts `null` to clear any of them. The father or husband name and the address are shown as `[redacted]` in audit rows and are logged in the access log by field name. `aadhaar` (X-46, optional, 12 digits, spaces or dashes allowed; PATCH `null` clears it) is stored encrypted. Responses carry `aadhaarMasked` only (`XXXXXXXX1234` or `null`); the full number is never returned. Audit rows hold `hasAadhaar` and no number; the access log lists field `aadhaar`. Other national ID numbers are still refused (DECISIONS 1000).
 
 ---
 
@@ -666,7 +666,7 @@ CSV: `name,externalRef` (creates/links learners). Response `{ created, skipped, 
 
 ## Master records by Excel (X-43)
 
-Roles: `aa_admin`, `mis`. Types: `awarding-bodies`, `training-partners`, `centres`, `assessors`, `proctors`, `learners` (students). Student columns (X-45): `name`, `externalRef` (Student ID), `enrolmentNumber`, `fatherName`, `gender`, `phone`, `address`, `active`.
+Roles: `aa_admin`, `mis`. Types: `awarding-bodies`, `training-partners`, `centres`, `assessors`, `proctors`, `learners` (students). Student columns (X-45): `name`, `externalRef` (Student ID), `enrolmentNumber`, `fatherName`, `gender`, `phone`, `address`, `aadhaar` (optional), `active`.
 
 ### GET /master-import/:type/template
 

@@ -163,13 +163,23 @@ describe("master bulk import (X-43)", () => {
     });
   });
 
-  it("never reads a national ID column", async () => {
+  it("passes an Aadhaar column to the student rules, which check and encrypt it", async () => {
     const out = await importMasterRecords(
       "learners",
-      await sheet(["name", "externalRef", "aadhaar"], [["Asha", "R-1", "123412341234"]]),
+      await sheet(["name", "externalRef", "aadhaar"], [["Asha", "R-1", "2345 6789 0123"]]),
     );
     expect(out.created).toBe(1);
-    expect(JSON.stringify(created)).not.toContain("1234");
+    expect(created[0][1].aadhaar).toBe("234567890123");
+  });
+
+  it("reports a bad Aadhaar by row without echoing the number", async () => {
+    const out = await importMasterRecords(
+      "learners",
+      await sheet(["name", "aadhaar"], [["Asha", "12345"]]),
+    );
+    expect(out.created).toBe(0);
+    expect(out.errors).toHaveLength(1);
+    expect(JSON.stringify(out.errors)).not.toContain("12345");
   });
 });
 

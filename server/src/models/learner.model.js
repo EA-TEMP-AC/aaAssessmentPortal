@@ -17,6 +17,8 @@ const learnerSchema = new mongoose.Schema(
     gender: { type: String, enum: ["Male", "Female", "Other"] },
     fatherName: { type: String },
     address: { type: String },
+    // X-46 (DECISIONS 1000): Aadhaar number, digits only. Encrypted at rest, never returned in full.
+    aadhaar: { type: String },
     accommodations: { type: [{ type: String, trim: true, maxlength: 100 }], default: [] },
     active: { type: Boolean, required: true, default: true },
   },
@@ -29,6 +31,7 @@ learnerSchema.plugin(encryptedFieldsPlugin, {
     phone: { normalize: normalizeText },
     fatherName: { normalize: normalizeText },
     address: { normalize: normalizeText },
+    aadhaar: { normalize: normalizeText },
   },
 });
 

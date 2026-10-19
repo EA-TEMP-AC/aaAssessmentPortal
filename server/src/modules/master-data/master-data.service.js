@@ -201,6 +201,11 @@ function presentQualification(doc) {
   };
 }
 
+/** Last four digits only. The full number never leaves the server. */
+function maskAadhaar(value) {
+  return value ? `XXXXXXXX${String(value).slice(-4)}` : null;
+}
+
 function presentLearner(doc) {
   return {
     id: idOf(doc._id),
@@ -211,6 +216,7 @@ function presentLearner(doc) {
     fatherName: doc.fatherName ?? null,
     gender: doc.gender ?? null,
     address: doc.address ?? null,
+    aadhaarMasked: maskAadhaar(doc.aadhaar),
     accommodations: [...(doc.accommodations ?? [])],
     active: doc.active,
     createdAt: iso(doc.createdAt),
@@ -470,7 +476,7 @@ export async function createLearner(body) {
   };
   if (body.externalRef) doc.externalRef = body.externalRef;
   if (body.phone) doc.phone = body.phone;
-  for (const key of ["enrolmentNumber", "fatherName", "gender", "address"]) {
+  for (const key of ["enrolmentNumber", "fatherName", "gender", "address", "aadhaar"]) {
     if (body[key]) doc[key] = body[key];
   }
   try {
@@ -504,7 +510,7 @@ export async function updateLearner(id, body) {
   if (body.active !== undefined) set.active = body.active;
   assignClearable(set, unset, "externalRef", body.externalRef);
   assignClearable(set, unset, "phone", body.phone);
-  for (const key of ["enrolmentNumber", "fatherName", "gender", "address"]) {
+  for (const key of ["enrolmentNumber", "fatherName", "gender", "address", "aadhaar"]) {
     assignClearable(set, unset, key, body[key]);
   }
   const updated = await applyUpdate(Learner, existing._id, updateDoc(set, unset));

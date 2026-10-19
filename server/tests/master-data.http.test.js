@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import request from "supertest";
 import { createApp } from "../src/app.js";
 import { AuditLog } from "../src/models/audit-log.model.js";
@@ -182,7 +183,8 @@ describe("master data", () => {
       accommodations: ["extra time"],
       active: true,
     });
-    expect(JSON.stringify(learner.body)).not.toMatch(/aadhaar/i);
+    // No Aadhaar was entered: the number is absent, and the full number is never in a response.
+    expect(learner.body.aadhaarMasked).toBeNull();
 
     const listed = await request(app)
       .get("/api/v1/learners?page=1&pageSize=20")
@@ -315,11 +317,23 @@ describe("master data", () => {
     const missing = await request(app).post("/api/v1/learners").set(bearer(admin.token)).send({});
     expectError(missing, 400, "VALIDATION_ERROR");
 
-    const aadhaar = await request(app)
+    const badAadhaar = await request(app)
       .post("/api/v1/learners")
       .set(bearer(admin.token))
-      .send({ name: "Asha", aadhaar: "123412341234" });
-    expectError(aadhaar, 400, "VALIDATION_ERROR");
+      .send({ name: "Asha", aadhaar: "123" });
+    expectError(badAadhaar, 400, "VALIDATION_ERROR");
+    const goodAadhaar = await request(app)
+      .post("/api/v1/learners")
+      .set(bearer(admin.token))
+      .send({ name: "Asha", aadhaar: "2345 6789 0123" });
+    expect(goodAadhaar.status).toBe(201);
+    expect(goodAadhaar.body.aadhaarMasked).toBe("XXXXXXXX0123");
+    expect(JSON.stringify(goodAadhaar.body)).not.toContain("234567890123");
+    const stored = await Learner.collection.findOne({
+      _id: new mongoose.Types.ObjectId(goodAadhaar.body.id),
+    });
+    expect(String(stored.aadhaar)).toMatch(/^enc:v1:/);
+    expect(JSON.stringify(await AuditLog.find({}).lean())).not.toContain("234567890123");
     const email = await request(app)
       .post("/api/v1/learners")
       .set(bearer(admin.token))

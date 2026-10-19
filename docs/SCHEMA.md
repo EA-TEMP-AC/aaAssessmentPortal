@@ -2,7 +2,7 @@
 
 Single-AA deployment. BSON types. Instant timestamps are UTC `Date` unless noted. **Assessment calendar dates** and clash windows use **`YYYY-MM-DD` in Asia/Kolkata (IST)** (project choice; TR s29).
 
-**PII rule:** do **not** store Aadhaar (or other national ID) numbers. Identity verification is a boolean + optional opaque reference only.
+**PII rule:** do **not** store national ID numbers (PAN, voter id, passport). One exception (X-46, DECISIONS 1000): the student Aadhaar number on `learners.aadhaar`, encrypted, never returned in full, never audited. Identity verification is a boolean + optional opaque reference only.
 
 **Status transitions:** atomic compare-and-set on `batches.status` (and `statusVersion`); illegal CAS → `INVALID_TRANSITION`.
 
@@ -321,6 +321,7 @@ Stable person across batches.
 | enrolmentNumber | string | N | ≤64 (X-45) |
 | gender | string | N | `Male`, `Female`, `Other` (X-45) |
 | fatherName | string | N | Father's or husband's name. **Stored encrypted** (X-45) |
+| aadhaar | string | N | 12 digits, digits only. **Stored encrypted** (X-46). API shows `aadhaarMasked` (`XXXXXXXX1234`) only. Not searchable, not in audit rows |
 | address | string | N | ≤500. **Stored encrypted** (X-45) |
 | accommodations | string[] | N | default accommodations |
 | active | bool | Y | |

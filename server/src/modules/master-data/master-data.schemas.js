@@ -278,6 +278,12 @@ const fatherNameSchema = z.string().trim().min(1).max(200);
 const addressSchema = z.string().trim().min(1).max(500);
 const enrolmentSchema = z.string().trim().min(1).max(64);
 const genderSchema = z.enum(["Male", "Female", "Other"]);
+/** Twelve digits (spaces and dashes allowed), first digit 2 to 9. Stored as digits only. */
+const aadhaarSchema = z
+  .string()
+  .trim()
+  .transform((v) => v.replace(/[\s-]/g, ""))
+  .refine((v) => /^[2-9]\d{11}$/.test(v), { message: "Expected a 12 digit Aadhaar number" });
 
 export const createLearnerSchema = z
   .object({
@@ -288,6 +294,7 @@ export const createLearnerSchema = z
     fatherName: fatherNameSchema.optional(),
     gender: genderSchema.optional(),
     address: addressSchema.optional(),
+    aadhaar: aadhaarSchema.optional(),
     accommodations: z.array(z.string().trim().min(1).max(100)).optional(),
     active: z.boolean().optional(),
   })
@@ -302,6 +309,7 @@ export const patchLearnerSchema = z
     fatherName: z.union([fatherNameSchema, z.null()]).optional(),
     gender: z.union([genderSchema, z.null()]).optional(),
     address: z.union([addressSchema, z.null()]).optional(),
+    aadhaar: z.union([aadhaarSchema, z.null()]).optional(),
     accommodations: z.array(z.string().trim().min(1).max(100)).optional(),
     active: z.boolean().optional(),
   })
