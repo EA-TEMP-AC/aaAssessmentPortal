@@ -76,6 +76,14 @@ Batch status and SLA timers with late reasons, assessor clash checks, audit with
 3. Practice test and multiple question sets per assessment.
 4. Photo and identity upload for candidates (compliance risk: no Aadhaar or other national ids).
 
+## Two more screens (added 19 Oct 2026, evening)
+
+**Bulk upload candidates (screen 29).** Three yes or no questions come first: do you know the assessment date and timings, do you have the Excel template ready, upload for the previous centre. Step 2 then asks for batch level fields beside the Excel file: SSC, job role, version, assessor, batch id, batch start and end date, centre id and name, centre SPOC name, email and mobile, TP name, SPOC name and mobile, date assigned to AA, assessment name, duration, assessment date, postponed-from date, start and end time, state, assessment type, level, address (500 characters), scheme and sub scheme, location, scheme type, student's preferred language of assessment, and "create meeting" yes or no. Ours: the batch is made first (Create batch) and students are added to it by Excel or CSV; the batch fields above mostly exist already. Missing: sub scheme on the batch, level, duration, "preferred language per student", location text.
+
+**Question bank edit (screen 30).** A question bank belongs to an SSC, a job role and a subject. It lists NOS codes, each marked Core or Non-core, with performance criteria (PC) rows and a description for each. A criteria table below shows, for every NOS and PC, three upload slots: Low, Medium and High difficulty questions. Ours: NOS and PC are on the qualification and every question points at one NOS and PC. Missing: a Core or Non-core flag on the NOS and a Low, Medium or High difficulty per question (with the paper generator choosing by it).
+
+**Sample report file.** `docs/reference-samples/CandidateSummaryReport.xls` is the real export behind the Candidate Summary Report (it is an HTML table saved with an .xls name; open it in Excel). It holds test students only (TEST1 to TEST10, first names). Our report follows its layout: header block, result index, per NOS theory and practical columns, totals, status and percentage.
+
 ## Screenshots of the RAS demo
 Saved in `docs/reference-demo-screens-2026-10-19/` (28 images, taken 19 Oct 2026, admin view, nothing saved in their system). They are internal reference only: do not publish them or copy their design. Some are low resolution because they were taken at reduced size. Numbers match the order of the menu walk:
 
@@ -108,3 +116,5 @@ Saved in `docs/reference-demo-screens-2026-10-19/` (28 images, taken 19 Oct 2026
 | 25-update-assessment-marks | Update assessment marks search |
 | 26-not-attempted-students | Record entry for not-attempted students |
 | 27-create-candidate-form-top, 28-create-candidate-form-bottom | Create candidate form (all fields) |
+| 29-bulk-upload-candidates-form | Bulk upload candidates, step 2 (all batch fields next to the Excel upload) |
+| 30-manage-question-bank-nos-pc | Question bank edit: NOS list with core or non-core, performance criteria per NOS, difficulty table |
