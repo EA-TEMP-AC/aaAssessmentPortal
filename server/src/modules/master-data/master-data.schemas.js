@@ -274,12 +274,20 @@ export const listQualificationsQuerySchema = z.object({
 
 const phoneSchema = z.string().trim().min(1).max(32);
 const externalRefSchema = z.string().trim().min(1).max(64);
+const fatherNameSchema = z.string().trim().min(1).max(200);
+const addressSchema = z.string().trim().min(1).max(500);
+const enrolmentSchema = z.string().trim().min(1).max(64);
+const genderSchema = z.enum(["Male", "Female", "Other"]);
 
 export const createLearnerSchema = z
   .object({
     name: nameSchema,
     externalRef: externalRefSchema.optional(),
     phone: phoneSchema.optional(),
+    enrolmentNumber: enrolmentSchema.optional(),
+    fatherName: fatherNameSchema.optional(),
+    gender: genderSchema.optional(),
+    address: addressSchema.optional(),
     accommodations: z.array(z.string().trim().min(1).max(100)).optional(),
     active: z.boolean().optional(),
   })
@@ -290,6 +298,10 @@ export const patchLearnerSchema = z
     name: nameSchema.optional(),
     externalRef: z.union([externalRefSchema, z.null()]).optional(),
     phone: z.union([phoneSchema, z.null()]).optional(),
+    enrolmentNumber: z.union([enrolmentSchema, z.null()]).optional(),
+    fatherName: z.union([fatherNameSchema, z.null()]).optional(),
+    gender: z.union([genderSchema, z.null()]).optional(),
+    address: z.union([addressSchema, z.null()]).optional(),
     accommodations: z.array(z.string().trim().min(1).max(100)).optional(),
     active: z.boolean().optional(),
   })

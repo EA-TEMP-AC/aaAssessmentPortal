@@ -1,10 +1,30 @@
 import { z } from "zod";
 import { isCalendarDate } from "../../lib/working-days.js";
+import { SECTOR_NAMES } from "../../config/annexure.js";
+import { BILLED_ON, JOB_ROLE_CATEGORIES } from "../../models/sub-scheme.model.js";
 import { SIGNATORY_SCOPES } from "../../models/signatory.model.js";
 
 const objectIdSchema = z.string().regex(/^[a-fA-F0-9]{24}$/, "Invalid id");
 const nameSchema = z.string().trim().min(1).max(200);
 const codeSchema = z.string().trim().min(1).max(64);
+const sectorSchema = z.string().refine((v) => SECTOR_NAMES.includes(v), {
+  message: "Expected an Annexure II sector",
+});
+const descriptionSchema = z.string().trim().max(250);
+const price = z.number().finite().min(0).max(100_000_000);
+const triState = z.preprocess((value) => {
+  if (value === "" || value === undefined || value === "both") return undefined;
+  if (value === "yes" || value === "true") return true;
+  if (value === "no" || value === "false") return false;
+  return value;
+}, z.boolean().optional());
+const searchText = z.preprocess(
+  blankToUndefinedEarly,
+  z.string().trim().min(1).max(100).optional(),
+);
+function blankToUndefinedEarly(value) {
+  return value === "" || value === undefined ? undefined : value;
+}
 const calendarDate = z.string().refine(isCalendarDate, "Expected YYYY-MM-DD");
 
 export const PAGE_SIZE_DEFAULT = 20;
@@ -38,8 +58,11 @@ export const idParamSchema = z.object({ id: objectIdSchema });
 export const createSchemeSchema = z
   .object({
     name: nameSchema,
-    code: codeSchema,
-    fundingBody: nameSchema,
+    code: codeSchema.optional(),
+    fundingBody: nameSchema.optional(),
+    sector: sectorSchema.optional(),
+    description: descriptionSchema.optional(),
+    thirdParty: z.boolean().optional(),
     active: z.boolean().optional(),
   })
   .strict();
@@ -49,12 +72,63 @@ export const patchSchemeSchema = z
     name: nameSchema.optional(),
     code: codeSchema.optional(),
     fundingBody: nameSchema.optional(),
+    sector: sectorSchema.optional(),
+    description: descriptionSchema.optional(),
+    thirdParty: z.boolean().optional(),
     active: z.boolean().optional(),
   })
   .strict()
   .refine(atLeastOne, { message: "At least one field is required" });
 
-export const listSchemesQuerySchema = z.object({ ...pageQuery, active: activeQuery });
+export const listSchemesQuerySchema = z.object({
+  ...pageQuery,
+  active: activeQuery,
+  sector: z.preprocess(blankToUndefined, sectorSchema.optional()),
+  thirdParty: triState,
+  q: searchText,
+});
+
+export const createSubSchemeSchema = z
+  .object({
+    name: nameSchema,
+    sector: sectorSchema,
+    schemeId: objectIdSchema,
+    qualificationId: objectIdSchema.optional(),
+    priceRegular: price,
+    priceReassessment: price,
+    priceEffectiveDate: calendarDate.optional(),
+    billedOn: z.enum(BILLED_ON),
+    description: descriptionSchema.optional(),
+    jobRoleCategory: z.enum(JOB_ROLE_CATEGORIES).optional(),
+    active: z.boolean().optional(),
+  })
+  .strict();
+
+export const patchSubSchemeSchema = z
+  .object({
+    name: nameSchema.optional(),
+    sector: sectorSchema.optional(),
+    schemeId: objectIdSchema.optional(),
+    qualificationId: objectIdSchema.nullable().optional(),
+    priceRegular: price.optional(),
+    priceReassessment: price.optional(),
+    priceEffectiveDate: calendarDate.nullable().optional(),
+    billedOn: z.enum(BILLED_ON).optional(),
+    description: descriptionSchema.optional(),
+    jobRoleCategory: z.enum(JOB_ROLE_CATEGORIES).optional(),
+    active: z.boolean().optional(),
+  })
+  .strict()
+  .refine(atLeastOne, { message: "At least one field is required" });
+
+export const listSubSchemesQuerySchema = z.object({
+  ...pageQuery,
+  active: activeQuery,
+  sector: z.preprocess(blankToUndefined, sectorSchema.optional()),
+  schemeId: z.preprocess(blankToUndefined, objectIdSchema.optional()),
+  qualificationId: z.preprocess(blankToUndefined, objectIdSchema.optional()),
+  q: searchText,
+});
 
 export const createProjectSchema = z
   .object({

@@ -96,6 +96,13 @@ export const NAV_ITEMS: readonly NavItem[] = [
     roles: SCHEME_READ_ROLES,
   },
   {
+    id: "sub-schemes",
+    label: "Sub schemes",
+    to: "/sub-schemes",
+    description: "Priced parts of a scheme, by SSC and job role.",
+    roles: SCHEME_READ_ROLES,
+  },
+  {
     id: "projects",
     label: "Projects",
     to: "/projects",

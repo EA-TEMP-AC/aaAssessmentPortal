@@ -1,7 +1,9 @@
 import { AppError, duplicateResource, notFound, validationError } from "../../lib/errors.js";
 import { safeErrorCode } from "../../lib/safe-error.js";
 import { Project } from "../../models/project.model.js";
+import { Qualification } from "../../models/qualification.model.js";
 import { Scheme } from "../../models/scheme.model.js";
+import { SubScheme } from "../../models/sub-scheme.model.js";
 import { Signatory } from "../../models/signatory.model.js";
 import { signatoryScopeIssues } from "./schemes.schemas.js";
 
@@ -26,7 +28,10 @@ function presentScheme(doc) {
     id: idOf(doc._id),
     name: doc.name,
     code: doc.code,
-    fundingBody: doc.fundingBody,
+    fundingBody: doc.fundingBody ?? "",
+    sector: doc.sector ?? null,
+    description: doc.description ?? null,
+    thirdParty: doc.thirdParty === true,
     active: doc.active,
     createdAt: iso(doc.createdAt),
     updatedAt: iso(doc.updatedAt),
@@ -116,10 +121,35 @@ async function activeProject(projectId, field = "projectId") {
 
 /** Schemes. */
 
+function escapeRegex(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** The form has no code field, so one is made from the name and made unique. */
+async function generatedCode(name) {
+  const base =
+    "SCH-" +
+    name
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 40);
+  for (let n = 1; n < 100; n += 1) {
+    const code = n === 1 ? base : `${base}-${n}`;
+    if (!(await Scheme.exists({ code }))) return code;
+  }
+  throw duplicateResource("A record with this code already exists");
+}
+
 export async function createScheme(body) {
   return create(
     Scheme,
-    { ...pick(body, ["name", "code", "fundingBody"]), active: body.active ?? true },
+    {
+      ...pick(body, ["name", "fundingBody", "sector", "description"]),
+      code: body.code ?? (await generatedCode(body.name)),
+      thirdParty: body.thirdParty ?? false,
+      active: body.active ?? true,
+    },
     presentScheme,
   );
 }
@@ -127,6 +157,11 @@ export async function createScheme(body) {
 export async function listSchemes(query) {
   const filter = {};
   if (query.active !== undefined) filter.active = query.active;
+  if (query.sector) filter.sector = query.sector;
+  if (query.thirdParty !== undefined) {
+    filter.thirdParty = query.thirdParty ? true : { $ne: true };
+  }
+  if (query.q) filter.name = { $regex: escapeRegex(query.q), $options: "i" };
   return paginate(Scheme, filter, query, presentScheme);
 }
 
@@ -142,7 +177,7 @@ export async function updateScheme(id, body) {
   const updated = await applyUpdate(
     Scheme,
     existing._id,
-    pick(body, ["name", "code", "fundingBody", "active"]),
+    pick(body, ["name", "code", "fundingBody", "sector", "description", "thirdParty", "active"]),
   );
   return { before: presentScheme(existing), scheme: presentScheme(updated) };
 }
@@ -295,4 +330,117 @@ export async function resolveBatchLinks({ schemeId, projectId }) {
   const parent = String(project.schemeId);
   if (!schemeId) await activeScheme(parent, "projectId");
   return { schemeId: parent, projectId };
+}
+
+/** Sub-schemes (X-45). */
+
+function presentSubScheme(doc) {
+  return {
+    id: idOf(doc._id),
+    name: doc.name,
+    sector: doc.sector,
+    schemeId: idOf(doc.schemeId),
+    qualificationId: idOf(doc.qualificationId),
+    priceRegular: doc.priceRegular,
+    priceReassessment: doc.priceReassessment,
+    priceEffectiveDate: doc.priceEffectiveDate ?? null,
+    billedOn: doc.billedOn,
+    description: doc.description ?? null,
+    jobRoleCategory: doc.jobRoleCategory,
+    active: doc.active,
+    createdAt: iso(doc.createdAt),
+    updatedAt: iso(doc.updatedAt),
+  };
+}
+
+const SUB_SCHEME_KEYS = [
+  "name",
+  "sector",
+  "schemeId",
+  "qualificationId",
+  "priceRegular",
+  "priceReassessment",
+  "priceEffectiveDate",
+  "billedOn",
+  "description",
+  "jobRoleCategory",
+  "active",
+];
+
+async function checkJobRole(qualificationId, sector) {
+  if (!qualificationId) return;
+  const q = await Qualification.findById(qualificationId).select("sector").lean();
+  if (!q) {
+    throw validationError("Unknown reference", { qualificationId: ["Does not exist"] });
+  }
+  if (q.sector !== sector) {
+    throw validationError("Job role is in another sector", {
+      qualificationId: ["Must be in the same sector as the sub-scheme"],
+    });
+  }
+}
+
+export async function createSubScheme(body) {
+  await activeScheme(body.schemeId);
+  await checkJobRole(body.qualificationId, body.sector);
+  return create(
+    SubScheme,
+    {
+      ...pick(body, SUB_SCHEME_KEYS),
+      jobRoleCategory: body.jobRoleCategory ?? "not_applicable",
+      active: body.active ?? true,
+    },
+    presentSubScheme,
+  );
+}
+
+export async function listSubSchemes(query) {
+  const filter = {};
+  if (query.active !== undefined) filter.active = query.active;
+  if (query.sector) filter.sector = query.sector;
+  if (query.schemeId) filter.schemeId = query.schemeId;
+  if (query.qualificationId) filter.qualificationId = query.qualificationId;
+  if (query.q) filter.name = { $regex: escapeRegex(query.q), $options: "i" };
+  return paginate(SubScheme, filter, query, presentSubScheme);
+}
+
+export async function getSubScheme(id) {
+  const doc = await SubScheme.findById(id).lean();
+  if (!doc) throw notFound();
+  return presentSubScheme(doc);
+}
+
+export async function updateSubScheme(id, body) {
+  const existing = await SubScheme.findById(id).lean();
+  if (!existing) throw notFound();
+  if (body.schemeId && body.schemeId !== String(existing.schemeId)) {
+    await activeScheme(body.schemeId);
+  }
+  const sector = body.sector ?? existing.sector;
+  const qualificationId =
+    body.qualificationId === undefined ? existing.qualificationId : body.qualificationId;
+  await checkJobRole(qualificationId, sector);
+  const set = pick(body, SUB_SCHEME_KEYS);
+  const update = { $set: { ...set } };
+  if (body.qualificationId === null) {
+    delete update.$set.qualificationId;
+    update.$unset = { qualificationId: "" };
+  }
+  if (body.priceEffectiveDate === null) {
+    delete update.$set.priceEffectiveDate;
+    update.$unset = { ...update.$unset, priceEffectiveDate: "" };
+  }
+  try {
+    const updated = await SubScheme.findOneAndUpdate({ _id: existing._id }, update, {
+      new: true,
+      runValidators: true,
+    }).lean();
+    return { before: presentSubScheme(existing), subScheme: presentSubScheme(updated) };
+  } catch (err) {
+    throwWriteError(err);
+  }
+}
+
+export async function deactivateSubScheme(id) {
+  return updateSubScheme(id, { active: false });
 }

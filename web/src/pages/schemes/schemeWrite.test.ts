@@ -4,6 +4,8 @@ import {
   buildProjectWrite,
   buildSchemeWrite,
   buildSignatoryWrite,
+  buildSubSchemeWrite,
+  emptySubSchemeDraft,
   emptyProjectDraft,
   emptySchemeDraft,
   emptySignatoryDraft,
@@ -14,13 +16,21 @@ const SCHEME_ID = "66f0000000000000000000a1";
 const PROJECT_ID = "66f0000000000000000000b1";
 
 it("builds a scheme body and trims text", () => {
-  const result = buildSchemeWrite({ ...emptySchemeDraft(), name: " State Skill ", code: " SSS-01 ", fundingBody: " Mission " });
-  expect(result).toEqual({ ok: true, body: { name: "State Skill", code: "SSS-01", fundingBody: "Mission", active: true } });
+  const result = buildSchemeWrite({ ...emptySchemeDraft(), name: " State Skill ", sector: "Electronics", code: " SSS-01 ", fundingBody: " Mission " });
+  expect(result).toEqual({
+    ok: true,
+    body: { name: "State Skill", sector: "Electronics", code: "SSS-01", fundingBody: "Mission", thirdParty: false, active: true },
+  });
+  // The code and funding body are optional now.
+  expect(buildSchemeWrite({ ...emptySchemeDraft(), name: "A", sector: "Electronics" })).toEqual({
+    ok: true,
+    body: { name: "A", sector: "Electronics", thirdParty: false, active: true },
+  });
 });
 
 it("lists every missing or long scheme field", () => {
   const result = buildSchemeWrite({ ...emptySchemeDraft(), code: "x".repeat(65) });
-  expect(result).toMatchObject({ ok: false, fields: ["name", "code", "fundingBody"] });
+  expect(result).toMatchObject({ ok: false, fields: ["name", "sector", "code"] });
 });
 
 it("needs a scheme and a start date for a project, and an end date not before the start", () => {
@@ -60,4 +70,35 @@ it("reads field names from server validation details", () => {
   expect(serverFieldErrors(new ApiError(409, "DUPLICATE_RESOURCE", "Duplicate", { field: "code" }), ["name", "code"])).toEqual(["code"]);
   expect(serverFieldErrors(new Error("x"), ["name"])).toEqual([]);
   expect(serverFieldErrors(new ApiError(500, "X", "x"), ["name"])).toEqual([]);
+});
+
+it("checks a sub scheme: prices, billing basis, scheme and the 250 character description", () => {
+  const empty = buildSubSchemeWrite(emptySubSchemeDraft());
+  expect(empty).toMatchObject({ ok: false, fields: ["name", "sector", "schemeId", "priceRegular", "priceReassessment", "billedOn"] });
+  const ok = buildSubSchemeWrite({
+    ...emptySubSchemeDraft(),
+    name: " STT ",
+    sector: "Electronics",
+    schemeId: SCHEME_ID,
+    priceRegular: "500",
+    priceReassessment: "250.5",
+    billedOn: "appeared",
+  });
+  expect(ok).toEqual({
+    ok: true,
+    body: {
+      name: "STT",
+      sector: "Electronics",
+      schemeId: SCHEME_ID,
+      qualificationId: null,
+      priceRegular: 500,
+      priceReassessment: 250.5,
+      priceEffectiveDate: null,
+      billedOn: "appeared",
+      description: "",
+      jobRoleCategory: "not_applicable",
+      active: true,
+    },
+  });
+  expect(buildSubSchemeWrite({ ...emptySubSchemeDraft(), priceRegular: "-1", description: "x".repeat(251) })).toMatchObject({ ok: false });
 });

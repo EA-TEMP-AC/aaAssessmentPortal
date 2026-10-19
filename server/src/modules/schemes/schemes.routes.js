@@ -7,30 +7,38 @@ import {
   createProjectSchema,
   createSchemeSchema,
   createSignatorySchema,
+  createSubSchemeSchema,
   idParamSchema,
   listProjectsQuerySchema,
   listSchemesQuerySchema,
   listSignatoriesQuerySchema,
+  listSubSchemesQuerySchema,
   patchProjectSchema,
   patchSchemeSchema,
   patchSignatorySchema,
+  patchSubSchemeSchema,
 } from "./schemes.schemas.js";
 import {
   createProject,
   createScheme,
   createSignatory,
+  createSubScheme,
   deactivateProject,
   deactivateScheme,
   deactivateSignatory,
+  deactivateSubScheme,
   getProject,
   getScheme,
   getSignatory,
+  getSubScheme,
   listProjects,
   listSchemes,
   listSignatories,
+  listSubSchemes,
   updateProject,
   updateScheme,
   updateSignatory,
+  updateSubScheme,
 } from "./schemes.service.js";
 
 const REDACTED = "[redacted]";
@@ -128,6 +136,7 @@ function mountCrud(router, { entity, key, schemas, service, view = (row) => row,
 export const schemesRouter = Router();
 export const projectsRouter = Router();
 export const signatoriesRouter = Router();
+export const subSchemesRouter = Router();
 
 mountCrud(schemesRouter, {
   entity: "scheme",
@@ -176,4 +185,21 @@ mountCrud(signatoriesRouter, {
   },
   view: signatoryAuditView,
   onBody: redactBodyName,
+});
+
+mountCrud(subSchemesRouter, {
+  entity: "sub_scheme",
+  key: "subScheme",
+  schemas: {
+    create: createSubSchemeSchema,
+    patch: patchSubSchemeSchema,
+    list: listSubSchemesQuerySchema,
+  },
+  service: {
+    create: createSubScheme,
+    list: listSubSchemes,
+    get: getSubScheme,
+    update: updateSubScheme,
+    deactivate: deactivateSubScheme,
+  },
 });

@@ -10,11 +10,23 @@ import type { ActiveListQuery, MasterListPage } from "./masterData";
 export const SIGNATORY_SCOPES = ["scheme", "project", "agency"] as const;
 export type SignatoryScope = (typeof SIGNATORY_SCOPES)[number];
 
+export const BILLED_ON = ["enrolled", "appeared"] as const;
+export type BilledOn = (typeof BILLED_ON)[number];
+export const JOB_ROLE_CATEGORIES = [
+  "category_1",
+  "category_2",
+  "not_applicable",
+] as const;
+export type JobRoleCategory = (typeof JOB_ROLE_CATEGORIES)[number];
+
 export type Scheme = {
   id: string;
   name: string;
   code: string;
   fundingBody: string;
+  sector: string | null;
+  description: string | null;
+  thirdParty: boolean;
   active: boolean;
   createdAt: string;
   updatedAt: string;
@@ -48,9 +60,52 @@ export type Signatory = {
 
 export type SchemeWrite = {
   name: string;
-  code: string;
-  fundingBody: string;
+  code?: string;
+  fundingBody?: string;
+  sector: string;
+  description?: string;
+  thirdParty: boolean;
   active: boolean;
+};
+
+export type SubScheme = {
+  id: string;
+  name: string;
+  sector: string;
+  schemeId: string;
+  qualificationId: string | null;
+  priceRegular: number;
+  priceReassessment: number;
+  priceEffectiveDate: string | null;
+  billedOn: BilledOn;
+  description: string | null;
+  jobRoleCategory: JobRoleCategory;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SubSchemeWrite = {
+  name: string;
+  sector: string;
+  schemeId: string;
+  qualificationId: string | null;
+  priceRegular: number;
+  priceReassessment: number;
+  priceEffectiveDate: string | null;
+  billedOn: BilledOn;
+  description: string;
+  jobRoleCategory: JobRoleCategory;
+  active: boolean;
+};
+
+export type SchemeListQuery = ActiveListQuery & {
+  sector?: string;
+  thirdParty?: "yes" | "no";
+};
+export type SubSchemeListQuery = ActiveListQuery & {
+  sector?: string;
+  schemeId?: string;
 };
 
 export type ProjectWrite = {
@@ -126,18 +181,65 @@ export function parseScheme(value: unknown): Scheme {
   const id = text(value.id);
   const name = text(value.name);
   const code = text(value.code);
-  const fundingBody = text(value.fundingBody);
   const times = stamps(value);
+  if (!id || !name || !code || typeof value.active !== "boolean" || !times)
+    throw responseError();
+  return {
+    id,
+    name,
+    code,
+    fundingBody: typeof value.fundingBody === "string" ? value.fundingBody : "",
+    sector: text(value.sector),
+    description: text(value.description),
+    thirdParty: value.thirdParty === true,
+    active: value.active,
+    ...times,
+  };
+}
+
+export function parseSubScheme(value: unknown): SubScheme {
+  if (!isRecord(value)) throw responseError();
+  const id = text(value.id);
+  const name = text(value.name);
+  const sector = text(value.sector);
+  const schemeId = text(value.schemeId);
+  const times = stamps(value);
+  const billedOn = (BILLED_ON as readonly unknown[]).includes(value.billedOn)
+    ? (value.billedOn as BilledOn)
+    : null;
+  const category = (JOB_ROLE_CATEGORIES as readonly unknown[]).includes(
+    value.jobRoleCategory,
+  )
+    ? (value.jobRoleCategory as JobRoleCategory)
+    : null;
   if (
     !id ||
     !name ||
-    !code ||
-    !fundingBody ||
+    !sector ||
+    !schemeId ||
+    !billedOn ||
+    !category ||
+    typeof value.priceRegular !== "number" ||
+    typeof value.priceReassessment !== "number" ||
     typeof value.active !== "boolean" ||
     !times
   )
     throw responseError();
-  return { id, name, code, fundingBody, active: value.active, ...times };
+  return {
+    id,
+    name,
+    sector,
+    schemeId,
+    qualificationId: text(value.qualificationId),
+    priceRegular: value.priceRegular,
+    priceReassessment: value.priceReassessment,
+    priceEffectiveDate: text(value.priceEffectiveDate),
+    billedOn,
+    description: text(value.description),
+    jobRoleCategory: category,
+    active: value.active,
+    ...times,
+  };
 }
 
 export function parseProject(value: unknown): Project {
@@ -257,11 +359,17 @@ function itemPath(path: string, id: string): string {
 }
 
 export async function listSchemes(
-  query: ActiveListQuery,
+  query: SchemeListQuery,
   signal?: AbortSignal,
 ): Promise<MasterListPage<Scheme>> {
   return parseList(
-    await apiRequest<unknown>(listPath("/schemes", query, {}), { signal }),
+    await apiRequest<unknown>(
+      listPath("/schemes", query, {
+        sector: query.sector,
+        thirdParty: query.thirdParty,
+      }),
+      { signal },
+    ),
     parseScheme,
   );
 }
@@ -385,6 +493,50 @@ export async function updateSignatory(
 export async function deactivateSignatory(id: string): Promise<Signatory> {
   return parseSignatory(
     await apiRequest<unknown>(itemPath("/signatories", id), {
+      method: "DELETE",
+    }),
+  );
+}
+
+export async function listSubSchemes(
+  query: SubSchemeListQuery,
+  signal?: AbortSignal,
+): Promise<MasterListPage<SubScheme>> {
+  return parseList(
+    await apiRequest<unknown>(
+      listPath("/sub-schemes", query, {
+        sector: query.sector,
+        schemeId: query.schemeId,
+      }),
+      { signal },
+    ),
+    parseSubScheme,
+  );
+}
+
+export async function createSubScheme(
+  input: SubSchemeWrite,
+): Promise<SubScheme> {
+  return parseSubScheme(
+    await apiRequest<unknown>("/sub-schemes", { method: "POST", body: input }),
+  );
+}
+
+export async function updateSubScheme(
+  id: string,
+  input: SubSchemeWrite,
+): Promise<SubScheme> {
+  return parseSubScheme(
+    await apiRequest<unknown>(itemPath("/sub-schemes", id), {
+      method: "PATCH",
+      body: input,
+    }),
+  );
+}
+
+export async function deactivateSubScheme(id: string): Promise<SubScheme> {
+  return parseSubScheme(
+    await apiRequest<unknown>(itemPath("/sub-schemes", id), {
       method: "DELETE",
     }),
   );

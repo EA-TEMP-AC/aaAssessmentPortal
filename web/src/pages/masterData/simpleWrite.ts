@@ -19,6 +19,10 @@ export type SimpleDraft = {
   notificationEmails: string[];
   externalRef: string;
   phone: string;
+  enrolmentNumber: string;
+  fatherName: string;
+  gender: string;
+  address: string;
   accommodations: string[];
 };
 
@@ -37,6 +41,10 @@ export function emptySimpleDraft(): SimpleDraft {
     notificationEmails: [""],
     externalRef: "",
     phone: "",
+    enrolmentNumber: "",
+    fatherName: "",
+    gender: "",
+    address: "",
     accommodations: [],
   };
 }
@@ -60,7 +68,7 @@ export function simpleFieldOrder(collection: MasterCollection, draft: SimpleDraf
   }
   if (collection === "training-partners") return ["name", "code", "email"];
   if (collection === "centres") return ["name", "code", "tpId", "state"];
-  return ["name", "externalRef", "phone", ...draft.accommodations.map((_, index) => `accommodations.${index}`)];
+  return ["name", "externalRef", "enrolmentNumber", "fatherName", "gender", "phone", "address", ...draft.accommodations.map((_, index) => `accommodations.${index}`)];
 }
 
 export function buildSimpleWrite(collection: MasterCollection, draft: SimpleDraft, mode: "create" | "edit"): SimpleResult {
@@ -144,6 +152,16 @@ export function buildSimpleWrite(collection: MasterCollection, draft: SimpleDraf
   const phone = draft.phone.trim();
   if (externalRef) bounded(externalRef, 64, "External reference", "externalRef", messages, fields);
   if (phone) bounded(phone, 32, "Phone", "phone", messages, fields);
+  const enrolmentNumber = draft.enrolmentNumber.trim();
+  const fatherName = draft.fatherName.trim();
+  const address = draft.address.trim();
+  if (enrolmentNumber) bounded(enrolmentNumber, 64, "Enrolment number", "enrolmentNumber", messages, fields);
+  if (fatherName) bounded(fatherName, 200, "Father's or husband's name", "fatherName", messages, fields);
+  if (address) bounded(address, 500, "Address", "address", messages, fields);
+  if (draft.gender && !["Male", "Female", "Other"].includes(draft.gender)) {
+    messages.push("Choose Male, Female or Other.");
+    fields.push("gender");
+  }
   const accommodations: string[] = [];
   draft.accommodations.forEach((value, index) => {
     const trimmed = value.trim();
@@ -157,6 +175,15 @@ export function buildSimpleWrite(collection: MasterCollection, draft: SimpleDraf
   else if (mode === "edit") body.externalRef = null;
   if (phone) body.phone = phone;
   else if (mode === "edit") body.phone = null;
+  const optionalText = (key: "enrolmentNumber" | "fatherName" | "address", value: string) => {
+    if (value) body[key] = value;
+    else if (mode === "edit") body[key] = null;
+  };
+  optionalText("enrolmentNumber", enrolmentNumber);
+  optionalText("fatherName", fatherName);
+  optionalText("address", address);
+  if (draft.gender) body.gender = draft.gender as "Male" | "Female" | "Other";
+  else if (mode === "edit") body.gender = null;
   if (accommodations.length > 0 || mode === "edit") body.accommodations = accommodations;
   return { ok: true, body };
 }

@@ -111,12 +111,16 @@ export type Qualification = {
   updatedAt: string;
 };
 
-/** SCHEMA §3.3 only. There is no national-identity field. */
+/** SCHEMA §3.3. X-45 added father/husband name, gender, address and enrolment number. */
 export type Learner = {
   id: string;
   name: string;
   externalRef: string | null;
   phone: string | null;
+  enrolmentNumber: string | null;
+  fatherName: string | null;
+  gender: string | null;
+  address: string | null;
   accommodations: string[];
   active: boolean;
   createdAt: string;
@@ -172,6 +176,10 @@ export type LearnerWrite = {
   name: string;
   externalRef?: string | null;
   phone?: string | null;
+  enrolmentNumber?: string | null;
+  fatherName?: string | null;
+  gender?: "Male" | "Female" | "Other" | null;
+  address?: string | null;
   accommodations?: string[];
   active: boolean;
 };
@@ -489,6 +497,8 @@ export function parseLearner(value: unknown): Learner {
   const name = requiredString(value.name);
   const externalRef = nullableString(value.externalRef);
   const phone = nullableString(value.phone);
+  // Older servers do not send the X-45 fields.
+  const optional = (v: unknown) => (typeof v === "string" ? v : null);
   const accommodations = stringList(value.accommodations);
   const active = requiredBoolean(value.active);
   const timestamps = parseTimestamps(value);
@@ -508,6 +518,10 @@ export function parseLearner(value: unknown): Learner {
     name,
     externalRef,
     phone,
+    enrolmentNumber: optional(value.enrolmentNumber),
+    fatherName: optional(value.fatherName),
+    gender: optional(value.gender),
+    address: optional(value.address),
     accommodations,
     active,
     ...timestamps,

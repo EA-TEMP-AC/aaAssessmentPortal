@@ -200,7 +200,9 @@ Both flags are `false` until `aa_admin` changes them. Clients read the flags to 
 
 Roles: write `aa_admin` | `mis`; read scoped roles as needed.
 
-Request: `{ "name": "Asha Devi", "externalRef": "TP-REG-10021", "active": true }`
+Request: `{ "name": "Asha Devi", "externalRef": "TP-REG-10021", "enrolmentNumber": "ENR-1", "fatherName": "Ram Kumar", "gender": "Female", "phone": "9000000001", "address": "Gangtok", "active": true }`
+
+X-45 added `enrolmentNumber` (≤64), `fatherName` (≤200, encrypted), `gender` (`Male`, `Female`, `Other`) and `address` (≤500, encrypted). `externalRef` is the Student ID / Candidate ID. PATCH accepts `null` to clear any of them. The father or husband name and the address are shown as `[redacted]` in audit rows and are logged in the access log by field name. No national ID number is accepted (see DECISIONS 999).
 
 ---
 
@@ -664,7 +666,7 @@ CSV: `name,externalRef` (creates/links learners). Response `{ created, skipped, 
 
 ## Master records by Excel (X-43)
 
-Roles: `aa_admin`, `mis`. Types: `awarding-bodies`, `training-partners`, `centres`, `assessors`, `proctors`, `learners` (students).
+Roles: `aa_admin`, `mis`. Types: `awarding-bodies`, `training-partners`, `centres`, `assessors`, `proctors`, `learners` (students). Student columns (X-45): `name`, `externalRef` (Student ID), `enrolmentNumber`, `fatherName`, `gender`, `phone`, `address`, `active`.
 
 ### GET /master-import/:type/template
 
@@ -690,7 +692,7 @@ The candidate summary report as data: `header` (job role, assessor, centre and m
 
 ### GET /reports/batches/:batchId/candidate-summary.xlsx
 
-The same report as an Excel sheet with the confidentiality footer. Cells that start with `=`, `+`, `-` or `@` are neutralised. Audit `report.candidate_summary_export` (row count only) plus the access log. There is no father or husband name and no Aadhaar column: the portal does not hold them.
+The same report as an Excel sheet with the confidentiality footer. Cells that start with `=`, `+`, `-` or `@` are neutralised. Audit `report.candidate_summary_export` (row count only) plus the access log. Rows carry `fatherName` (Name of Father or Husband). There is no Aadhaar column.
 
 ---
 
@@ -1604,6 +1606,16 @@ Body fields: `name` (1-120), `qualificationId` (optional, id or code; null or mi
 | `GET /:id/versions` | same | All versions, oldest first. `{items, total}`. |
 
 Everyone else gets `403 FORBIDDEN`. Audit rows hold ids, name, version, status and the percentages only. See "POST /api/v1/tests/generate with a weight profile" for how a profile is used.
+
+## Schemes and sub-schemes (X-45)
+
+Roles as for schemes (`SCHEME_READ_ROLES` read, `SCHEME_WRITE_ROLES` write).
+
+**Schemes** now also carry `sector` (an Annexure II SSC), `description` (≤250) and `thirdParty` (bool). `code` and `fundingBody` are optional on create; with no `code` one is made from the name (`SCH-NAME`, numbered if taken). `GET /schemes` filters: `sector`, `thirdParty` (`yes`, `no`, or omit for both), `q` (name contains), plus `active`, `page`, `pageSize`.
+
+**Sub-schemes**: `POST /sub-schemes`, `GET /sub-schemes`, `GET /sub-schemes/:id`, `PATCH /sub-schemes/:id`, `DELETE /sub-schemes/:id` (deactivates). Body: `name`, `sector`, `schemeId` (an active scheme), `qualificationId` (optional job role; must be in the same sector), `priceRegular`, `priceReassessment` (numbers, zero or more), `priceEffectiveDate` (optional `YYYY-MM-DD`), `billedOn` (`enrolled` or `appeared`), `description` (≤250), `jobRoleCategory` (`category_1`, `category_2`, `not_applicable`, default `not_applicable`), `active`. A name is unique within its scheme (`409`). List filters: `sector`, `schemeId`, `qualificationId`, `q`, `active`. Audit entity `sub_scheme`.
+
+---
 
 ## Schemes, projects, authorised signatories (H-01)
 

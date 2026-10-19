@@ -4,6 +4,7 @@ import { namesForBatches } from "../../lib/display-names.js";
 import { batchQueryFilter, isInBatchScope } from "../../middleware/scope.js";
 import { Batch } from "../../models/batch.model.js";
 import { Candidate } from "../../models/candidate.model.js";
+import { Learner } from "../../models/learner.model.js";
 import { Qualification } from "../../models/qualification.model.js";
 import { Result } from "../../models/result.model.js";
 import { componentCeiling } from "../results/result-scoring.js";
@@ -49,7 +50,13 @@ export async function candidateSummary(user, batchId) {
     Candidate.find({ batchId: batch._id }).select("name externalRef learnerId").lean(),
   ]);
   if (!result) throw notFound("No result for this batch");
-  const [names] = await Promise.all([namesForBatches([batch])]);
+  const [names, learners] = await Promise.all([
+    namesForBatches([batch]),
+    Learner.find({ _id: { $in: candidates.map((c) => c.learnerId) } })
+      .select("fatherName")
+      .lean(),
+  ]);
+  const fatherOf = new Map(learners.map((l) => [String(l._id), l.fatherName ?? ""]));
   const labels = [...names.values()][0] ?? names;
   const nosList = (qualification?.nos ?? []).map((n) => ({
     nosId: n.nosId,
@@ -89,6 +96,7 @@ export async function candidateSummary(user, batchId) {
       learnerId: c.learnerId ? String(c.learnerId) : null,
       reference: c.externalRef ?? "",
       name: c.name,
+      fatherName: fatherOf.get(String(c.learnerId)) ?? "",
       marks,
       totals,
       total: absent ? 0 : total,
@@ -132,7 +140,7 @@ export async function buildCandidateSummaryWorkbook(s) {
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet("Candidate summary");
   const bold = { bold: true };
-  const width = 6 + s.nos.length * s.components.length + s.components.length + 3;
+  const width = 7 + s.nos.length * s.components.length + s.components.length + 3;
   ws.addRow([safeCell("CANDIDATE SUMMARY REPORT")]).font = { bold: true, size: 14 };
   ws.addRow([]);
   const head = [
@@ -151,7 +159,14 @@ export async function buildCandidateSummaryWorkbook(s) {
   ws.addRow([]);
 
   // Three header rows: fixed columns, NOS code over its components, and the maximum marks.
-  const fixed = ["S.No", "Candidate Id", "Candidate Name", "Partner Name", "Job Role"];
+  const fixed = [
+    "S.No",
+    "Candidate Id",
+    "Candidate Name",
+    "Name of Father or Husband",
+    "Partner Name",
+    "Job Role",
+  ];
   const r1 = [...fixed];
   const r2 = fixed.map(() => "");
   const r3 = fixed.map(() => "");
@@ -180,6 +195,7 @@ export async function buildCandidateSummaryWorkbook(s) {
       r.sNo,
       safeCell(r.reference),
       safeCell(r.name),
+      safeCell(r.fatherName),
       safeCell(s.header.partner),
       safeCell(s.header.qualification),
       ...r.marks.flatMap((m) => s.components.map((c) => m[c])),
@@ -193,7 +209,7 @@ export async function buildCandidateSummaryWorkbook(s) {
   ws.addRow([
     "This is a system generated report, contains confidential information intended for a specific individual and purpose, and is intended for the addressee only. Any unauthorized use, copying, or distribution of this report is strictly prohibited.",
   ]);
-  ws.columns = Array.from({ length: width }, (_, i) => ({ width: i < 5 ? 24 : 12 }));
+  ws.columns = Array.from({ length: width }, (_, i) => ({ width: i < 6 ? 24 : 12 }));
   return Buffer.from(await wb.xlsx.writeBuffer());
 }
 

@@ -316,8 +316,12 @@ Stable person across batches.
 | Field | Type | Req | Notes |
 |---|---|---|---|
 | name | string | Y | |
-| externalRef | string | N | TP/AB stable id; **not** Aadhaar |
+| externalRef | string | N | Student ID / Candidate ID from the TP/AB; **not** a national ID |
 | phone | string | N | **Stored encrypted** (§7). Not searchable |
+| enrolmentNumber | string | N | ≤64 (X-45) |
+| gender | string | N | `Male`, `Female`, `Other` (X-45) |
+| fatherName | string | N | Father's or husband's name. **Stored encrypted** (X-45) |
+| address | string | N | ≤500. **Stored encrypted** (X-45) |
 | accommodations | string[] | N | default accommodations |
 | active | bool | Y | |
 
@@ -693,10 +697,30 @@ Never deleted; `active: false` is the deactivated state. Dates are `YYYY-MM-DD` 
 |---|---|---|---|
 | name | string | Y | ≤200 |
 | code | string | Y | unique, ≤64 |
-| fundingBody | string | Y | ≤200 |
+| fundingBody | string | N | ≤200, default empty (X-45) |
+| sector | string | N | Annexure II SSC (X-45) |
+| description | string | N | ≤250 (X-45) |
+| thirdParty | bool | Y | default false (X-45) |
 | active | bool | Y | default true |
 
 Indexes: `{ code: 1 }` unique.
+
+`subSchemes` (X-45)
+
+| Field | Type | Req | Notes |
+|---|---|---|---|
+| name | string | Y | ≤200, unique within `schemeId` |
+| sector | string | Y | Annexure II SSC |
+| schemeId | ObjectId | Y | `schemes`; active at create and when changed |
+| qualificationId | ObjectId | N | `qualifications` (the job role); same sector |
+| priceRegular, priceReassessment | number | Y | ≥0 |
+| priceEffectiveDate | string | N | `YYYY-MM-DD` |
+| billedOn | string | Y | `enrolled`, `appeared` |
+| description | string | N | ≤250 |
+| jobRoleCategory | string | Y | `category_1`, `category_2`, `not_applicable` (default) |
+| active | bool | Y | default true |
+
+Indexes: `{ schemeId: 1, name: 1 }` unique; `{ sector: 1 }`.
 
 `projects`
 

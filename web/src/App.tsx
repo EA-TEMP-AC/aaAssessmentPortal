@@ -27,6 +27,7 @@ import { RegistryPage } from "./pages/RegistryPage";
 import {
   ProjectsPage,
   SchemesPage,
+  SubSchemesPage,
   SignatoriesPage,
 } from "./pages/schemes/SchemeScreens";
 import { SettingsAccessPage } from "./pages/SettingsAccessPage";
@@ -157,6 +158,8 @@ export function AppRoutes() {
                       <MasterDataPage />
                     ) : item.id === "schemes" ? (
                       <SchemesPage />
+                    ) : item.id === "sub-schemes" ? (
+                      <SubSchemesPage />
                     ) : item.id === "projects" ? (
                       <ProjectsPage />
                     ) : item.id === "signatories" ? (

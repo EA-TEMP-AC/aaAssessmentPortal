@@ -233,6 +233,7 @@ function ReportView() {
                 <th scope="col" rowSpan={2}>S.No</th>
                 <th scope="col" rowSpan={2}>Candidate Id</th>
                 <th scope="col" rowSpan={2}>Candidate Name</th>
+                <th scope="col" rowSpan={2}>Name of Father or Husband</th>
                 {s.nos.map((n) => (
                   <th key={n.nosId} scope="colgroup" colSpan={s.components.length}>
                     {n.code}
@@ -263,6 +264,7 @@ function ReportView() {
                   <td>{r.sNo}</td>
                   <td>{r.reference || "—"}</td>
                   <td>{r.name}</td>
+                  <td>{r.fatherName || "—"}</td>
                   {r.marks.flatMap((m, i) =>
                     s.components.map((c) => <td key={`${i}-${c}`}>{m[c] ?? "—"}</td>),
                   )}

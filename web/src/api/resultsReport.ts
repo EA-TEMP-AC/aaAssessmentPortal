@@ -37,6 +37,7 @@ export type SummaryRow = {
   sNo: number;
   reference: string;
   name: string;
+  fatherName: string;
   marks: Record<string, number | null>[];
   totals: Record<string, number>;
   total: number;

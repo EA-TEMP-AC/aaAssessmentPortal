@@ -45,6 +45,14 @@ const text = (v) => {
   const t = String(v ?? "").trim();
   return t === "" ? undefined : t;
 };
+const gender = (v) => {
+  const t = text(v);
+  if (t === undefined) return undefined;
+  const m = { male: "Male", m: "Male", female: "Female", f: "Female", other: "Other" }[
+    t.toLowerCase()
+  ];
+  return m ?? t;
+};
 const flag = (v) => (yes(v) ? true : no(v) ? false : undefined);
 const int = (v) => (text(v) === undefined ? undefined : Number(v));
 
@@ -195,8 +203,12 @@ const TYPES = {
     title: "Students",
     columns: {
       name: { required: true, example: "Asha Devi" },
-      externalRef: { note: "The training partner's registration number", example: "TP-REG-10021" },
-      phone: { example: "9000000001" },
+      externalRef: { note: "Student ID / Candidate ID", example: "TP-REG-10021" },
+      enrolmentNumber: { note: "Enrolment number", example: "ENR-2026-001" },
+      fatherName: { note: "Father's or husband's name", example: "Ram Kumar" },
+      gender: { note: "Male, Female or Other", example: "Female" },
+      phone: { note: "Mobile number", example: "9000000001" },
+      address: { example: "12 Station Road, Gangtok" },
       active: { note: "yes or no, default yes", example: "yes" },
     },
     schema: createLearnerSchema,
@@ -206,6 +218,10 @@ const TYPES = {
         name: text(r.name),
         externalRef: text(r.externalRef),
         phone: text(r.phone),
+        enrolmentNumber: text(r.enrolmentNumber),
+        fatherName: text(r.fatherName),
+        gender: gender(r.gender),
+        address: text(r.address),
         active: flag(r.active),
       }),
   },

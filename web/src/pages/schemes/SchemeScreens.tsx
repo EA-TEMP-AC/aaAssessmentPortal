@@ -1,25 +1,49 @@
-import { Fragment, useId, useState, type MouseEvent, type ReactNode } from "react";
+import {
+  Fragment,
+  useId,
+  useState,
+  type MouseEvent,
+  type ReactNode,
+} from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import type { MasterListPage, MasterPageSize } from "../../api/masterData";
 import {
   deactivateProject,
   deactivateScheme,
   deactivateSignatory,
+  deactivateSubScheme,
   isSignatoryScope,
   listProjects,
   listSchemes,
   listSignatories,
+  listSubSchemes,
   SIGNATORY_SCOPES,
   type Project,
   type Scheme,
   type Signatory,
+  type SubScheme,
 } from "../../api/schemes";
+import { SECTOR_NAMES } from "../../api/annexure";
 import { useSession } from "../../api/session";
 import { SCHEME_READ_ROLES, canWriteSchemes } from "../../routing/access";
-import { ActiveFilterField, ListScaffold, PageSizeField } from "../masterData/listScaffold";
-import { READ_ONLY_NOTE, emptyListMessage, listSummary } from "../masterData/listText";
+import {
+  ActiveFilterField,
+  ListScaffold,
+  PageSizeField,
+} from "../masterData/listScaffold";
+import {
+  READ_ONLY_NOTE,
+  emptyListMessage,
+  listSummary,
+} from "../masterData/listText";
 import { useMasterDialog } from "../masterData/useMasterDialog";
-import { DeactivateDialog, ProjectForm, SchemeForm, SignatoryForm } from "./SchemeForms";
+import {
+  DeactivateDialog,
+  ProjectForm,
+  SchemeForm,
+  SignatoryForm,
+  SubSchemeForm,
+} from "./SchemeForms";
 import { SCHEME_DATA_KEY, SCOPE_LABELS } from "./schemeData";
 
 type Filters = {
@@ -27,16 +51,28 @@ type Filters = {
   pageSize: MasterPageSize;
   schemeId: string;
   scope: string;
+  sector: string;
+  thirdParty: "" | "yes" | "no";
 };
 
-const EMPTY_FILTERS: Filters = { active: "", pageSize: 20, schemeId: "", scope: "" };
+const EMPTY_FILTERS: Filters = {
+  active: "",
+  pageSize: 20,
+  schemeId: "",
+  scope: "",
+  sector: "",
+  thirdParty: "",
+};
 
 type Row = { id: string; name: string; active: boolean };
 
-type DialogState<T> = { type: "create" } | { type: "edit"; record: T } | { type: "deactivate"; record: T };
+type DialogState<T> =
+  | { type: "create" }
+  | { type: "edit"; record: T }
+  | { type: "deactivate"; record: T };
 
 type Config<T extends Row> = {
-  resource: "schemes" | "projects" | "signatories";
+  resource: "schemes" | "sub-schemes" | "projects" | "signatories";
   title: string;
   one: string;
   many: string;
@@ -45,9 +81,19 @@ type Config<T extends Row> = {
   /** Filter fields beyond status and page size. */
   scopeFilter?: boolean;
   schemeFilter?: boolean;
-  load: (filters: Filters, page: number, signal: AbortSignal) => Promise<MasterListPage<T>>;
+  sectorFilter?: boolean;
+  thirdPartyFilter?: boolean;
+  load: (
+    filters: Filters,
+    page: number,
+    signal: AbortSignal,
+  ) => Promise<MasterListPage<T>>;
   cells: (record: T, schemeNames: ReadonlyMap<string, string>) => ReactNode[];
-  form: (props: { record: T | null; onCancel: () => void; onSaved: (message: string) => void }) => ReactNode;
+  form: (props: {
+    record: T | null;
+    onCancel: () => void;
+    onSaved: (message: string) => void;
+  }) => ReactNode;
   deactivate: (record: T) => Promise<string>;
 };
 
@@ -67,7 +113,11 @@ function ResourceScreen<T extends Row>({ config }: { config: Config<T> }) {
   const chrome = useMasterDialog(dialog !== null);
   const schemeFilterId = useId();
   const scopeFilterId = useId();
-  const needsSchemeNames = Boolean(config.schemeFilter || config.resource === "signatories");
+  const needsSchemeNames = Boolean(
+    config.schemeFilter ||
+    config.resource === "signatories" ||
+    config.resource === "sub-schemes",
+  );
   const schemeNames = useQuery({
     queryKey: [SCHEME_DATA_KEY, "scheme-names"],
     enabled: canRead && needsSchemeNames,
@@ -92,15 +142,33 @@ function ResourceScreen<T extends Row>({ config }: { config: Config<T> }) {
     );
   }
 
-  const nameById = new Map<string, string>((schemeNames.data?.items ?? []).map((item) => [item.id, `${item.name} (${item.code})`]));
+  const nameById = new Map<string, string>(
+    (schemeNames.data?.items ?? []).map((item) => [
+      item.id,
+      `${item.name} (${item.code})`,
+    ]),
+  );
   const result = records.isError ? undefined : records.data;
-  const filtered = Boolean(applied.active || applied.schemeId || applied.scope);
-  const columns = [...config.columns, "Status", ...(canWrite ? ["Actions"] : [])];
+  const filtered = Boolean(
+    applied.active ||
+    applied.schemeId ||
+    applied.scope ||
+    applied.sector ||
+    applied.thirdParty,
+  );
+  const columns = [
+    ...config.columns,
+    "Status",
+    ...(canWrite ? ["Actions"] : []),
+  ];
   const notes: string[] = [];
   if (!canWrite) notes.push(READ_ONLY_NOTE);
   else notes.push(`A ${config.one} is never deleted. Deactivate it instead.`);
 
-  function openDialog(event: MouseEvent<HTMLButtonElement>, next: DialogState<T>) {
+  function openDialog(
+    event: MouseEvent<HTMLButtonElement>,
+    next: DialogState<T>,
+  ) {
     chrome.rememberOpener(event);
     setDialog(next);
   }
@@ -115,7 +183,8 @@ function ResourceScreen<T extends Row>({ config }: { config: Config<T> }) {
     setDialog(null);
   }
 
-  const pickedScheme = (value: string) => setDraftFilters((current) => ({ ...current, schemeId: value }));
+  const pickedScheme = (value: string) =>
+    setDraftFilters((current) => ({ ...current, schemeId: value }));
 
   return (
     <ListScaffold
@@ -131,8 +200,55 @@ function ResourceScreen<T extends Row>({ config }: { config: Config<T> }) {
           <ActiveFilterField
             id={`${config.resource}-active`}
             value={draftFilters.active}
-            onChange={(active) => setDraftFilters((current) => ({ ...current, active }))}
+            onChange={(active) =>
+              setDraftFilters((current) => ({ ...current, active }))
+            }
           />
+          {config.sectorFilter ? (
+            <div className="field">
+              <label htmlFor={`${config.resource}-sector`}>SSC</label>
+              <select
+                id={`${config.resource}-sector`}
+                name="sector"
+                value={draftFilters.sector}
+                onChange={(event) =>
+                  setDraftFilters((current) => ({
+                    ...current,
+                    sector: event.target.value,
+                  }))
+                }
+              >
+                <option value="">Any SSC</option>
+                {SECTOR_NAMES.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+          {config.thirdPartyFilter ? (
+            <div className="field">
+              <label htmlFor={`${config.resource}-third-party`}>
+                Third party scheme
+              </label>
+              <select
+                id={`${config.resource}-third-party`}
+                name="thirdParty"
+                value={draftFilters.thirdParty}
+                onChange={(event) =>
+                  setDraftFilters((current) => ({
+                    ...current,
+                    thirdParty: event.target.value as Filters["thirdParty"],
+                  }))
+                }
+              >
+                <option value="">Both</option>
+                <option value="yes">Yes</option>
+                <option value="no">No</option>
+              </select>
+            </div>
+          ) : null}
           {config.scopeFilter ? (
             <div className="field">
               <label htmlFor={scopeFilterId}>Scope</label>
@@ -140,7 +256,12 @@ function ResourceScreen<T extends Row>({ config }: { config: Config<T> }) {
                 id={scopeFilterId}
                 name="scope"
                 value={draftFilters.scope}
-                onChange={(event) => setDraftFilters((current) => ({ ...current, scope: event.target.value }))}
+                onChange={(event) =>
+                  setDraftFilters((current) => ({
+                    ...current,
+                    scope: event.target.value,
+                  }))
+                }
               >
                 <option value="">Any scope</option>
                 {SIGNATORY_SCOPES.map((scope) => (
@@ -154,7 +275,12 @@ function ResourceScreen<T extends Row>({ config }: { config: Config<T> }) {
           {config.schemeFilter ? (
             <div className="field">
               <label htmlFor={schemeFilterId}>Scheme</label>
-              <select id={schemeFilterId} name="schemeId" value={draftFilters.schemeId} onChange={(event) => pickedScheme(event.target.value)}>
+              <select
+                id={schemeFilterId}
+                name="schemeId"
+                value={draftFilters.schemeId}
+                onChange={(event) => pickedScheme(event.target.value)}
+              >
                 <option value="">Any scheme</option>
                 {(schemeNames.data?.items ?? []).map((item) => (
                   <option key={item.id} value={item.id}>
@@ -167,7 +293,9 @@ function ResourceScreen<T extends Row>({ config }: { config: Config<T> }) {
           <PageSizeField
             id={`${config.resource}-page-size`}
             value={draftFilters.pageSize}
-            onChange={(pageSize) => setDraftFilters((current) => ({ ...current, pageSize }))}
+            onChange={(pageSize) =>
+              setDraftFilters((current) => ({ ...current, pageSize }))
+            }
           />
         </>
       }
@@ -191,7 +319,13 @@ function ResourceScreen<T extends Row>({ config }: { config: Config<T> }) {
         records.isFetching
           ? `Loading ${config.many}.`
           : result
-            ? listSummary(result.page, result.pageSize, result.total, config.one, config.many)
+            ? listSummary(
+                result.page,
+                result.pageSize,
+                result.total,
+                config.one,
+                config.many,
+              )
             : ""
       }
       columns={columns}
@@ -199,22 +333,39 @@ function ResourceScreen<T extends Row>({ config }: { config: Config<T> }) {
       rows={
         result && result.items.length === 0 ? (
           <tr>
-            <td colSpan={columns.length}>{emptyListMessage(config.many, filtered)}</td>
+            <td colSpan={columns.length}>
+              {emptyListMessage(config.many, filtered)}
+            </td>
           </tr>
         ) : (
           result?.items.map((record) => (
             <tr key={record.id}>
-              {[...config.cells(record, nameById), record.active ? "Active" : "Inactive"].map((cell, index) => (
+              {[
+                ...config.cells(record, nameById),
+                record.active ? "Active" : "Inactive",
+              ].map((cell, index) => (
                 <td key={columns[index] ?? index}>{cell}</td>
               ))}
               {canWrite ? (
                 <td>
                   <div className="row-actions">
-                    <button type="button" className="button-quiet" onClick={(event) => openDialog(event, { type: "edit", record })}>
+                    <button
+                      type="button"
+                      className="button-quiet"
+                      onClick={(event) =>
+                        openDialog(event, { type: "edit", record })
+                      }
+                    >
                       Edit {record.name}
                     </button>
                     {record.active ? (
-                      <button type="button" className="button-quiet" onClick={(event) => openDialog(event, { type: "deactivate", record })}>
+                      <button
+                        type="button"
+                        className="button-quiet"
+                        onClick={(event) =>
+                          openDialog(event, { type: "deactivate", record })
+                        }
+                      >
                         Deactivate {record.name}
                       </button>
                     ) : null}
@@ -238,7 +389,13 @@ function ResourceScreen<T extends Row>({ config }: { config: Config<T> }) {
         dialog?.type === "create" ? (
           config.form({ record: null, onCancel: cancelDialog, onSaved })
         ) : dialog?.type === "edit" ? (
-          <Fragment key={dialog.record.id}>{config.form({ record: dialog.record, onCancel: cancelDialog, onSaved })}</Fragment>
+          <Fragment key={dialog.record.id}>
+            {config.form({
+              record: dialog.record,
+              onCancel: cancelDialog,
+              onSaved,
+            })}
+          </Fragment>
         ) : dialog?.type === "deactivate" ? (
           <DeactivateDialog
             name={dialog.record.name}
@@ -267,11 +424,67 @@ const SCHEME_CONFIG: Config<Scheme> = {
   one: "scheme",
   many: "schemes",
   lede: "Funding schemes. A batch can be linked to a scheme when it is created.",
-  columns: ["Name", "Code", "Funding body"],
-  load: (filters, page, signal) => listSchemes(activeQuery(filters, page), signal),
-  cells: (record) => [record.name, record.code, record.fundingBody],
+  columns: ["Scheme name", "SSC", "Third party", "Code"],
+  sectorFilter: true,
+  thirdPartyFilter: true,
+  load: (filters, page, signal) =>
+    listSchemes(
+      {
+        ...activeQuery(filters, page),
+        sector: filters.sector || undefined,
+        thirdParty: filters.thirdParty || undefined,
+      },
+      signal,
+    ),
+  cells: (record) => [
+    record.name,
+    display(record.sector),
+    record.thirdParty ? "Yes" : "No",
+    record.code,
+  ],
   form: (props) => <SchemeForm {...props} />,
-  deactivate: async (record) => `${(await deactivateScheme(record.id)).name} is now inactive.`,
+  deactivate: async (record) =>
+    `${(await deactivateScheme(record.id)).name} is now inactive.`,
+};
+
+const SUB_SCHEME_CONFIG: Config<SubScheme> = {
+  resource: "sub-schemes",
+  title: "Sub schemes",
+  one: "sub scheme",
+  many: "sub schemes",
+  lede: "A priced part of a scheme for one SSC, and optionally one job role.",
+  columns: [
+    "Sub scheme",
+    "SSC",
+    "Scheme",
+    "Regular price",
+    "Re-assessment price",
+    "Billed on",
+    "Price from",
+  ],
+  sectorFilter: true,
+  schemeFilter: true,
+  load: (filters, page, signal) =>
+    listSubSchemes(
+      {
+        ...activeQuery(filters, page),
+        sector: filters.sector || undefined,
+        schemeId: filters.schemeId || undefined,
+      },
+      signal,
+    ),
+  cells: (record, names) => [
+    record.name,
+    record.sector,
+    names.get(record.schemeId) ?? record.schemeId,
+    String(record.priceRegular),
+    String(record.priceReassessment),
+    record.billedOn === "enrolled" ? "Enrolled students" : "Appeared students",
+    display(record.priceEffectiveDate),
+  ],
+  form: (props) => <SubSchemeForm {...props} />,
+  deactivate: async (record) =>
+    `${(await deactivateSubScheme(record.id)).name} is now inactive.`,
 };
 
 const PROJECT_CONFIG: Config<Project> = {
@@ -282,10 +495,24 @@ const PROJECT_CONFIG: Config<Project> = {
   lede: "Projects belong to a scheme. A batch can be linked to a project when it is created.",
   columns: ["Name", "Code", "Scheme", "Start date", "End date"],
   schemeFilter: true,
-  load: (filters, page, signal) => listProjects({ ...activeQuery(filters, page), schemeId: filters.schemeId || undefined }, signal),
-  cells: (record, names) => [record.name, record.code, names.get(record.schemeId) ?? record.schemeId, record.startDate, record.endDate ?? "Open-ended"],
+  load: (filters, page, signal) =>
+    listProjects(
+      {
+        ...activeQuery(filters, page),
+        schemeId: filters.schemeId || undefined,
+      },
+      signal,
+    ),
+  cells: (record, names) => [
+    record.name,
+    record.code,
+    names.get(record.schemeId) ?? record.schemeId,
+    record.startDate,
+    record.endDate ?? "Open-ended",
+  ],
   form: (props) => <ProjectForm {...props} />,
-  deactivate: async (record) => `${(await deactivateProject(record.id)).name} is now inactive.`,
+  deactivate: async (record) =>
+    `${(await deactivateProject(record.id)).name} is now inactive.`,
 };
 
 const SIGNATORY_CONFIG: Config<Signatory> = {
@@ -294,7 +521,14 @@ const SIGNATORY_CONFIG: Config<Signatory> = {
   one: "signatory",
   many: "signatories",
   lede: "People who may sign for a scheme, a project, or the whole agency.",
-  columns: ["Name", "Designation", "Scope", "Scheme or project", "Valid from", "Valid to"],
+  columns: [
+    "Name",
+    "Designation",
+    "Scope",
+    "Scheme or project",
+    "Valid from",
+    "Valid to",
+  ],
   scopeFilter: true,
   schemeFilter: true,
   load: (filters, page, signal) =>
@@ -319,11 +553,16 @@ const SIGNATORY_CONFIG: Config<Signatory> = {
     record.validTo ?? "No end date",
   ],
   form: (props) => <SignatoryForm {...props} />,
-  deactivate: async (record) => `${(await deactivateSignatory(record.id)).name} is now inactive.`,
+  deactivate: async (record) =>
+    `${(await deactivateSignatory(record.id)).name} is now inactive.`,
 };
 
 export function SchemesPage() {
   return <ResourceScreen config={SCHEME_CONFIG} />;
+}
+
+export function SubSchemesPage() {
+  return <ResourceScreen config={SUB_SCHEME_CONFIG} />;
 }
 
 export function ProjectsPage() {

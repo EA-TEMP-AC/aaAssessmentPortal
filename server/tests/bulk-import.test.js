@@ -172,3 +172,34 @@ describe("master bulk import (X-43)", () => {
     expect(JSON.stringify(created)).not.toContain("1234");
   });
 });
+
+describe("student columns (X-45)", () => {
+  it("reads the student form columns and maps the gender", async () => {
+    const out = await importMasterRecords(
+      "learners",
+      await sheet(
+        ["name", "externalRef", "enrolmentNumber", "fatherName", "gender", "phone", "address"],
+        [["Asha Devi", "S-1", "ENR-1", "Ram Kumar", "f", "9000000001", "Gangtok"]],
+      ),
+    );
+    expect(out.created).toBe(1);
+    expect(created[0][1]).toMatchObject({
+      name: "Asha Devi",
+      externalRef: "S-1",
+      enrolmentNumber: "ENR-1",
+      fatherName: "Ram Kumar",
+      gender: "Female",
+      phone: "9000000001",
+      address: "Gangtok",
+    });
+  });
+
+  it("lists a bad gender as a row error", async () => {
+    const out = await importMasterRecords(
+      "learners",
+      await sheet(["name", "gender"], [["Asha", "unknown"]]),
+    );
+    expect(out.created).toBe(0);
+    expect(out.errors).toHaveLength(1);
+  });
+});

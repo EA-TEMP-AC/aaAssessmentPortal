@@ -101,6 +101,10 @@ function draftFrom(collection: SimpleCollection, record: SimpleRecord | null): S
       name: record.name,
       externalRef: record.externalRef ?? "",
       phone: record.phone ?? "",
+      enrolmentNumber: record.enrolmentNumber ?? "",
+      fatherName: record.fatherName ?? "",
+      gender: record.gender ?? "",
+      address: record.address ?? "",
       accommodations: [...record.accommodations],
       active: record.active,
     };
@@ -181,6 +185,10 @@ function SimpleForm({
   const stateId = useId();
   const externalRefId = useId();
   const phoneId = useId();
+  const enrolmentId = useId();
+  const fatherId = useId();
+  const genderId = useId();
+  const addressId = useId();
   const activeId = useId();
   const listBaseId = useId();
 
@@ -402,7 +410,7 @@ function SimpleForm({
           {collection === "learners" ? (
             <>
               <div className="field">
-                <label htmlFor={externalRefId}>External reference</label>
+                <label htmlFor={externalRefId}>Student ID / Candidate ID</label>
                 <input
                   id={externalRefId}
                   ref={bind("externalRef")}
@@ -417,11 +425,68 @@ function SimpleForm({
                   onChange={(event) => update({ externalRef: event.target.value })}
                 />
                 <p id={`${externalRefId}-hint`} className="field-hint">
-                  Optional stable reference. Up to 64 characters. Do not enter a national identity number.
+                  Optional. The student or candidate id from the training partner. Up to 64 characters.
                 </p>
               </div>
               <div className="field">
-                <label htmlFor={phoneId}>Phone</label>
+                <label htmlFor={enrolmentId}>Enrolment number</label>
+                <input
+                  id={enrolmentId}
+                  ref={bind("enrolmentNumber")}
+                  name="enrolmentNumber"
+                  type="text"
+                  value={draft.enrolmentNumber}
+                  maxLength={64}
+                  autoComplete="off"
+                  aria-invalid={formError?.fields.includes("enrolmentNumber") || undefined}
+                  onChange={(event) => update({ enrolmentNumber: event.target.value })}
+                />
+              </div>
+              <div className="field">
+                <label htmlFor={fatherId}>Father's / Husband's name</label>
+                <input
+                  id={fatherId}
+                  ref={bind("fatherName")}
+                  name="fatherName"
+                  type="text"
+                  value={draft.fatherName}
+                  maxLength={200}
+                  autoComplete="off"
+                  aria-invalid={formError?.fields.includes("fatherName") || undefined}
+                  onChange={(event) => update({ fatherName: event.target.value })}
+                />
+              </div>
+              <div className="field">
+                <label htmlFor={genderId}>Gender</label>
+                <select
+                  id={genderId}
+                  ref={bind("gender")}
+                  name="gender"
+                  value={draft.gender}
+                  aria-invalid={formError?.fields.includes("gender") || undefined}
+                  onChange={(event) => update({ gender: event.target.value })}
+                >
+                  <option value="">Select</option>
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+              <div className="field">
+                <label htmlFor={addressId}>Address</label>
+                <textarea
+                  id={addressId}
+                  ref={bind("address")}
+                  name="address"
+                  rows={3}
+                  maxLength={500}
+                  value={draft.address}
+                  aria-invalid={formError?.fields.includes("address") || undefined}
+                  onChange={(event) => update({ address: event.target.value })}
+                />
+              </div>
+              <div className="field">
+                <label htmlFor={phoneId}>Mobile No.</label>
                 <input
                   id={phoneId}
                   ref={bind("phone")}
@@ -595,6 +660,9 @@ function cellsFor(collection: SimpleCollection, record: SimpleRecord): ReactNode
     return [
       record.name,
       display(record.externalRef),
+      display(record.enrolmentNumber),
+      display(record.fatherName),
+      display(record.gender),
       display(record.phone),
       record.accommodations.length > 0 ? record.accommodations.join(", ") : "None",
       status,
@@ -640,7 +708,7 @@ export function SimpleResourceScreen({ collection }: { collection: SimpleCollect
   const filtered = Boolean(applied.active || (showTpFilter && applied.tpId));
   const columns = [
     "Name",
-    ...(collection === "learners" ? ["External reference", "Phone", "Accommodations"] : ["Code"]),
+    ...(collection === "learners" ? ["Student ID", "Enrolment number", "Father's / Husband's name", "Gender", "Mobile No.", "Accommodations"] : ["Code"]),
     ...(collection === "awarding-bodies" ? ["Notification emails"] : []),
     ...(collection === "training-partners" ? ["Email"] : []),
     ...(collection === "centres" ? ["Training partner id", "State"] : []),

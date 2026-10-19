@@ -207,6 +207,10 @@ function presentLearner(doc) {
     name: doc.name,
     externalRef: doc.externalRef ?? null,
     phone: doc.phone ?? null,
+    enrolmentNumber: doc.enrolmentNumber ?? null,
+    fatherName: doc.fatherName ?? null,
+    gender: doc.gender ?? null,
+    address: doc.address ?? null,
     accommodations: [...(doc.accommodations ?? [])],
     active: doc.active,
     createdAt: iso(doc.createdAt),
@@ -466,6 +470,9 @@ export async function createLearner(body) {
   };
   if (body.externalRef) doc.externalRef = body.externalRef;
   if (body.phone) doc.phone = body.phone;
+  for (const key of ["enrolmentNumber", "fatherName", "gender", "address"]) {
+    if (body[key]) doc[key] = body[key];
+  }
   try {
     const created = await Learner.create(doc);
     return presentLearner(created.toObject());
@@ -497,6 +504,9 @@ export async function updateLearner(id, body) {
   if (body.active !== undefined) set.active = body.active;
   assignClearable(set, unset, "externalRef", body.externalRef);
   assignClearable(set, unset, "phone", body.phone);
+  for (const key of ["enrolmentNumber", "fatherName", "gender", "address"]) {
+    assignClearable(set, unset, key, body[key]);
+  }
   const updated = await applyUpdate(Learner, existing._id, updateDoc(set, unset));
   return { before: presentLearner(existing), learner: presentLearner(updated) };
 }

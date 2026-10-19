@@ -15,6 +15,26 @@ const scheme = (over: Record<string, unknown> = {}) => ({
   name: "State Skill Scheme",
   code: "SSS-01",
   fundingBody: "State Skill Mission",
+  sector: "Electronics",
+  description: null,
+  thirdParty: false,
+  active: true,
+  ...STAMPS,
+  ...over,
+});
+
+const subScheme = (over: Record<string, unknown> = {}) => ({
+  id: "66f0000000000000000000d1",
+  name: "STT 2026",
+  sector: "Electronics",
+  schemeId: SCHEME_ID,
+  qualificationId: null,
+  priceRegular: 500,
+  priceReassessment: 250,
+  priceEffectiveDate: "2026-10-01",
+  billedOn: "appeared",
+  description: null,
+  jobRoleCategory: "not_applicable",
   active: true,
   ...STAMPS,
   ...over,
@@ -70,6 +90,8 @@ function installFetch(handler: Handler = () => undefined) {
     const custom = handler(u, init);
     if (custom) return custom;
     if (u.pathname.endsWith("/schemes")) return jsonResponse(200, page([scheme()]));
+    if (u.pathname.endsWith("/sub-schemes")) return jsonResponse(200, page([subScheme()]));
+    if (u.pathname.endsWith("/qualifications")) return jsonResponse(200, page([]));
     if (u.pathname.endsWith("/projects")) return jsonResponse(200, page([project()]));
     if (u.pathname.endsWith("/signatories")) return jsonResponse(200, page([signatory()]));
     return jsonResponse(404, { error: { code: "NOT_FOUND", message: "Missing" } });
@@ -138,7 +160,8 @@ it("lists schemes with a loading line, then the rows, and sends the active filte
   const table = await screen.findByRole("table");
   const row = within(table).getByRole("row", { name: /State Skill Scheme/ });
   expect(within(row).getByText("SSS-01")).toBeInTheDocument();
-  expect(within(row).getByText("State Skill Mission")).toBeInTheDocument();
+  expect(within(row).getByText("Electronics")).toBeInTheDocument();
+  expect(within(row).getByText("SSS-01")).toBeInTheDocument();
   expect(within(row).getByText("Active")).toBeInTheDocument();
   expect(listCalls(mock, "/schemes")[0]?.[0]).toContain("pageSize=20");
 
@@ -203,16 +226,18 @@ it("creates a scheme with the contract body and shows the notice", async () => {
   renderApp("/schemes");
   await userEvent.click(await screen.findByRole("button", { name: "Create scheme" }));
   const dialog = screen.getByRole("dialog", { name: "Create scheme" });
-  await userEvent.type(within(dialog).getByLabelText("Name"), "New Scheme");
-  await userEvent.type(within(dialog).getByLabelText("Code"), "NEW-1");
-  await userEvent.type(within(dialog).getByLabelText("Funding body"), "State Skill Mission");
+  await userEvent.type(within(dialog).getByLabelText("Scheme name"), "New Scheme");
+  await userEvent.selectOptions(within(dialog).getByLabelText("SSC"), "Electronics");
+  await userEvent.type(within(dialog).getByLabelText("Description"), "For tests");
+  await userEvent.click(within(dialog).getByRole("checkbox", { name: "Is it a third party scheme" }));
   await userEvent.click(within(dialog).getByRole("button", { name: "Create scheme" }));
   expect(await screen.findByText("New Scheme was created.")).toBeInTheDocument();
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   expect(body(listCalls(mock, "/schemes", "POST")[0]?.[1])).toEqual({
     name: "New Scheme",
-    code: "NEW-1",
-    fundingBody: "State Skill Mission",
+    sector: "Electronics",
+    description: "For tests",
+    thirdParty: true,
     active: true,
   });
 });
@@ -224,9 +249,9 @@ it("checks required fields before any request and focuses the first bad one", as
   await userEvent.click(await screen.findByRole("button", { name: "Create scheme" }));
   const dialog = screen.getByRole("dialog", { name: "Create scheme" });
   await userEvent.click(within(dialog).getByRole("button", { name: "Create scheme" }));
-  expect(within(dialog).getByRole("alert")).toHaveTextContent("Name is required. Code is required. Funding body is required.");
-  expect(within(dialog).getByLabelText("Name")).toHaveFocus();
-  expect(within(dialog).getByLabelText("Name")).toHaveAttribute("aria-invalid", "true");
+  expect(within(dialog).getByRole("alert")).toHaveTextContent("Name is required. SSC is required.");
+  expect(within(dialog).getByLabelText("Scheme name")).toHaveFocus();
+  expect(within(dialog).getByLabelText("Scheme name")).toHaveAttribute("aria-invalid", "true");
   expect(listCalls(mock, "/schemes", "POST")).toHaveLength(0);
 });
 
@@ -240,14 +265,14 @@ it("puts a server field error on the field and keeps the form open", async () =>
   renderApp("/schemes");
   await userEvent.click(await screen.findByRole("button", { name: "Create scheme" }));
   const dialog = screen.getByRole("dialog", { name: "Create scheme" });
-  await userEvent.type(within(dialog).getByLabelText("Name"), "X");
+  await userEvent.type(within(dialog).getByLabelText("Scheme name"), "X");
+  await userEvent.selectOptions(within(dialog).getByLabelText("SSC"), "Electronics");
   await userEvent.type(within(dialog).getByLabelText("Code"), "SSS-01");
-  await userEvent.type(within(dialog).getByLabelText("Funding body"), "Y");
   await userEvent.click(within(dialog).getByRole("button", { name: "Create scheme" }));
   expect(await within(dialog).findByRole("alert")).toHaveTextContent("DUPLICATE_RESOURCE");
   expect(within(dialog).getByLabelText("Code")).toHaveFocus();
   expect(within(dialog).getByLabelText("Code")).toHaveAttribute("aria-invalid", "true");
-  expect(within(dialog).getByLabelText("Code")).toHaveAccessibleDescription(/Must be unique/);
+  expect(within(dialog).getByLabelText("Code")).toHaveAccessibleDescription(/one is made from the name/);
   expect(screen.getByRole("dialog", { name: "Create scheme" })).toBeInTheDocument();
 });
 
@@ -259,7 +284,7 @@ it("edits a scheme and sends the changed body to PATCH", async () => {
   renderApp("/schemes");
   await userEvent.click(await screen.findByRole("button", { name: "Edit State Skill Scheme" }));
   const dialog = screen.getByRole("dialog", { name: "Edit State Skill Scheme" });
-  const name = within(dialog).getByLabelText("Name");
+  const name = within(dialog).getByLabelText("Scheme name");
   expect(name).toHaveValue("State Skill Scheme");
   await userEvent.clear(name);
   await userEvent.type(name, "Renamed");
@@ -268,8 +293,10 @@ it("edits a scheme and sends the changed body to PATCH", async () => {
   expect(await screen.findByText("Renamed was saved.")).toBeInTheDocument();
   expect(body(listCalls(mock, "/schemes/" + SCHEME_ID, "PATCH")[0]?.[1])).toEqual({
     name: "Renamed",
+    sector: "Electronics",
     code: "SSS-01",
     fundingBody: "State Skill Mission",
+    thirdParty: false,
     active: false,
   });
 });
@@ -436,4 +463,36 @@ it("asks for a project when the signatory scope is project", async () => {
   expect(within(dialog).getByRole("alert")).toHaveTextContent("Choose a project.");
   expect(within(dialog).getByLabelText("Project")).toHaveFocus();
   expect(listCalls(mock, "/signatories", "POST")).toHaveLength(0);
+});
+
+it("lists sub schemes with prices and creates one with the price fields", async () => {
+  const mock = installFetch((u, init) =>
+    u.pathname.endsWith("/sub-schemes") && method(init) === "POST" ? jsonResponse(201, subScheme({ name: "New Sub" })) : undefined,
+  );
+  setSession(sessionFor("aa_admin"));
+  renderApp("/sub-schemes");
+  const row = (await screen.findByText("STT 2026")).closest("tr") as HTMLElement;
+  expect(within(row).getByText("500")).toBeInTheDocument();
+  expect(within(row).getByText("Appeared students")).toBeInTheDocument();
+
+  await userEvent.click(screen.getByRole("button", { name: "Create sub scheme" }));
+  const dialog = screen.getByRole("dialog", { name: "Create sub scheme and set price" });
+  await userEvent.type(within(dialog).getByLabelText("Sub scheme name"), "New Sub");
+  await userEvent.selectOptions(within(dialog).getByLabelText("SSC"), "Electronics");
+  await waitFor(() => expect(within(dialog).getByLabelText("Scheme")).toBeEnabled());
+  await userEvent.selectOptions(within(dialog).getByLabelText("Scheme"), SCHEME_ID);
+  await userEvent.type(within(dialog).getByLabelText("Price for regular assessment"), "600");
+  await userEvent.type(within(dialog).getByLabelText("Price for re-assessment"), "300");
+  await userEvent.click(within(dialog).getByRole("radio", { name: "Enrolled students" }));
+  await userEvent.click(within(dialog).getByRole("button", { name: "Create sub scheme" }));
+  expect(await screen.findByText("New Sub was created.")).toBeInTheDocument();
+  expect(body(listCalls(mock, "/sub-schemes", "POST")[0]?.[1])).toMatchObject({
+    name: "New Sub",
+    sector: "Electronics",
+    schemeId: SCHEME_ID,
+    priceRegular: 600,
+    priceReassessment: 300,
+    billedOn: "enrolled",
+    jobRoleCategory: "not_applicable",
+  });
 });

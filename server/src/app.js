@@ -43,6 +43,7 @@ import {
   projectsRouter,
   schemesRouter,
   signatoriesRouter,
+  subSchemesRouter,
 } from "./modules/schemes/schemes.routes.js";
 import { questionBankRouter } from "./modules/question-bank/question-bank.routes.js";
 import { attemptsRouter } from "./modules/attempts/attempt.routes.js";
@@ -96,6 +97,7 @@ export function createApp() {
   app.use("/api/v1/schemes", schemesRouter);
   app.use("/api/v1/projects", projectsRouter);
   app.use("/api/v1/signatories", signatoriesRouter);
+  app.use("/api/v1/sub-schemes", subSchemesRouter);
   app.use("/api/v1/security", securityRouter);
   app.use("/api/v1/proctoring", proctoringRouter);
   app.use("/api/v1/reports", reportsRouter);

@@ -342,6 +342,16 @@ qualificationsRouter.delete(
   }),
 );
 
+/** Audit rows keep that a value exists, not the father or husband name or the address. */
+function learnerAuditView(row) {
+  if (!row) return row;
+  return {
+    ...row,
+    fatherName: row.fatherName ? "[redacted]" : null,
+    address: row.address ? "[redacted]" : null,
+  };
+}
+
 learnersRouter.post(
   "/",
   requireRoles(...MASTER_DATA_WRITE_ROLES),
@@ -352,7 +362,7 @@ learnersRouter.post(
       action: "learner.create",
       entity: "learner",
       entityId: created.id,
-      after: created,
+      after: learnerAuditView(created),
     });
     await res.status(201).json(created);
   }),
@@ -362,7 +372,10 @@ mountReads(learnersRouter, LEARNER_READ_ROLES, {
   listQuery: listLearnersQuerySchema,
   list: listLearners,
   get: getLearner,
-  access: { subjectType: "learner", fields: ["name", "phone", "externalRef"] },
+  access: {
+    subjectType: "learner",
+    fields: ["name", "phone", "externalRef", "fatherName", "address"],
+  },
 });
 
 learnersRouter.patch(
@@ -376,8 +389,8 @@ learnersRouter.patch(
       action: "learner.update",
       entity: "learner",
       entityId: saved.learner.id,
-      before: saved.before,
-      after: saved.learner,
+      before: learnerAuditView(saved.before),
+      after: learnerAuditView(saved.learner),
     });
     await res.status(200).json(saved.learner);
   }),

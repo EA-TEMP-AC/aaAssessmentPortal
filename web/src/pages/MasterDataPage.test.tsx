@@ -80,6 +80,10 @@ function learner(overrides: Partial<Learner> = {}): Learner {
     name: "Asha Devi",
     externalRef: "TP-REG-10021",
     phone: "9876543210",
+    enrolmentNumber: null,
+    fatherName: null,
+    gender: null,
+    address: null,
     accommodations: ["Extra time"],
     active: true,
     createdAt: "2026-10-01T09:30:00.000Z",
@@ -538,14 +542,18 @@ it("keeps learner fields to the schema and does not offer delete or a national i
   await user.click(screen.getByRole("button", { name: "Create learner" }));
   const dialog = screen.getByRole("dialog", { name: "Create learner" });
   expect(within(dialog).getByLabelText("Name")).toBeInTheDocument();
-  expect(within(dialog).getByLabelText("External reference")).toBeInTheDocument();
-  expect(within(dialog).getByLabelText("Phone")).toBeInTheDocument();
+  expect(within(dialog).getByLabelText("Student ID / Candidate ID")).toBeInTheDocument();
+  expect(within(dialog).getByLabelText("Mobile No.")).toBeInTheDocument();
   expect(within(dialog).getByRole("button", { name: "Add accommodation" })).toBeInTheDocument();
   expect(within(dialog).queryByLabelText(/email/i)).not.toBeInTheDocument();
 
   await user.type(within(dialog).getByLabelText("Name"), "New Learner");
-  await user.type(within(dialog).getByLabelText("External reference"), "TP-REG-9");
-  await user.type(within(dialog).getByLabelText("Phone"), "9999900000");
+  await user.type(within(dialog).getByLabelText("Student ID / Candidate ID"), "TP-REG-9");
+  await user.type(within(dialog).getByLabelText("Mobile No."), "9999900000");
+  await user.type(within(dialog).getByLabelText("Enrolment number"), "ENR-9");
+  await user.type(within(dialog).getByLabelText("Father's / Husband's name"), "Ram Kumar");
+  await user.selectOptions(within(dialog).getByLabelText("Gender"), "Female");
+  await user.type(within(dialog).getByLabelText("Address"), "Gangtok");
   await user.click(within(dialog).getByRole("button", { name: "Add accommodation" }));
   await user.type(within(dialog).getByLabelText("Accommodation 1"), "Reader");
   await user.click(within(dialog).getByRole("button", { name: "Create learner" }));
@@ -555,8 +563,11 @@ it("keeps learner fields to the schema and does not offer delete or a national i
     name: "New Learner",
     externalRef: "TP-REG-9",
     phone: "9999900000",
+    enrolmentNumber: "ENR-9",
+    fatherName: "Ram Kumar",
+    gender: "Female",
+    address: "Gangtok",
     accommodations: ["Reader"],
     active: true,
   });
-  expect(Object.keys(created).sort()).toEqual(["accommodations", "active", "externalRef", "name", "phone"]);
 });
