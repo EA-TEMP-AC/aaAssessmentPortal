@@ -33,3 +33,78 @@ Skill report, Candidate report, Subjective report evaluation, Admin audit log. B
 
 ## Admin modules (top nav)
 Dashboard, Question, Test Manager, Candidate, Proctoring, Batch, Assessor, Report. Assessor create: name, code, password, email, contact, profile image, identity image, active toggle (only active assessors can be added to a batch).
+
+# Reference notes: RAS Systems "Assessment" portal demo (admin view, 19 Oct 2026)
+
+Looked at by hand in a demo login, read only. Nothing was saved, edited or downloaded. These are our own notes on screens and fields, for comparing features. Not a copy of their design or text.
+
+## Their menu (about 25 screens, one flat list)
+Manage Candidates, Assign Multiple Job Roles to Assessor, Manage Scheme Details (schemes and sub-schemes), Update Assessment Code and Set Order, Dashboard with Details, Post Attendance (theory and viva tabs, with marks), Bulk Upload Candidates With Photos, Get Student and Assessor Credentials, Assessment submenu (Question Bank, Assessment, Assessment with Criteria, Assessment Details, Questions, Update Candidate Marks, Record Entry for Not-Attempted Students), Batch Start, Admin Module (roles, users, subjects), Candidate Summary Report, QB Analysis Report, bulk question upload (plain, with images, PC-wise), View User Image and Voice Recording, Users Log Report, Send Mails to TP/TC, Manage Batch Centre and TP Details, Update Exam Date, Manage User Logins, View User Punch Details, Delete Logins.
+
+## Things they show that we do not (gap list)
+| Area | What they have | Ours today | Worth doing? |
+|---|---|---|---|
+| Dashboard | Search by sector, batch id or date range. Panels: batches scheduled, assessors scheduled, number of users writing the exam right now, batches for the next 7 days, "Today CCTV" | Home page is a text placeholder; Analytics is separate | Yes. A real home dashboard for AA admin |
+| Proctoring review | Filter by suspicious type (face emotions, dual person, person change, gadget found), exam status (running, completed, not started), chat, image and voice recordings in one screen | Proctoring list with flags and decisions; no voice or chat | Check against TR section 6 (audio) |
+| Attendance with marks | Theory and viva tabs; filter by month, year, date, batch | Attendance on mobile only; marks on batch page | Maybe: web attendance fallback |
+| Not-attempted students | Separate screen to record students who did not take the exam | We use an Absent tick in the result table | Probably covered |
+| Update marks after the fact | Dedicated "Update Assessment Marks" screen | Edit with change reason in Result section | Covered, with an audit trail |
+| Mails to TP/TC and assessor | Search batches, then send notification mails; assessor and TP status filters; cannot send for past dates | Assessor login alerts the AB by email only | Yes: batch notification to TP and assessor (confirm in DECISIONS) |
+| Centre and TP details per batch | Own screen | TP contact on batch page | Covered |
+| Punch details | Per-user punch (login) history by sector, role, user | Access log and audit log, no per-user punch view | Maybe |
+| Users log report | By sector, batch id and exam date | None | Maybe |
+| Student and assessor credentials | Screen for both (we show student only to assessor) | Student credentials in roster and on mobile | Add assessor credentials view if wanted |
+| Login management | Tabs: change password, activate student login, manage proctor login; Delete Logins screen | Users page: reset, deactivate | Covered |
+| Multiple job roles per assessor | One screen to assign several job roles | Registry holds qualifications per assessor | Check Registry |
+| Assessment code and set order | Codes and priority order for question sets (set 1, set 2) | One paper per language | Maybe: multiple sets per assessment |
+| Assessment with Criteria | Separate version with pass criteria | Pass rule is in batch settings | Covered |
+| Question bank screens | Search by sector, job role, subject; manage questions by parent topic, sub topic, mode, complexity; "QB Analysis" report by QP code | Question bank by qualification, NOS, PC; analytics page | Add topic and complexity fields? |
+| Practice test | Assessment type "Practice Test" as well as "Assessment Test" | None | Maybe, for student trial run |
+| Postponed exams | Candidate has "Postponed From Date" | Batch dates change with audit; no field | Maybe |
+
+## Candidate form fields they have (ours in brackets where different)
+Name, student id, enrolment number, father or husband name, gender, mobile, Identification Type with Aadhaar number (we never store national ids, CLAUDE.md rule), sector, job role, assessor, manager, coordinator, assessment type, batch start and end date, address, batch id, centre name, centre SPOC name, email and mobile, TP name, SPOC name, email and mobile, start and end time (HH and MM), assessment date, postponed-from date, scheme name, state, level, date assigned to AA, location, scheme type, photo upload, identity document upload.
+
+Fields we may want: father or husband name, gender, address, manager and coordinator, exam start and end time of day on the candidate or batch, state on the learner, photo upload with identity check. Identity upload and Aadhaar must stay out unless a decision allows it.
+
+## Where ours is stronger
+Batch status and SLA timers with late reasons, assessor clash checks, audit with before and after, role-based menus, one-click result submit, mobile offline app with video evidence, encryption of personal fields, access log, and DPDP controls. Their portal has a flat admin menu with no role separation visible in this login, ASP.NET postback pages, and a search-first layout.
+
+## Open points for a human
+1. Do we want a real dashboard on Home (their strongest screen)?
+2. Mail notifications to TP and assessor from the batch page.
+3. Practice test and multiple question sets per assessment.
+4. Photo and identity upload for candidates (compliance risk: no Aadhaar or other national ids).
+
+## Screenshots of the RAS demo
+Saved in `docs/reference-demo-screens-2026-10-19/` (28 images, taken 19 Oct 2026, admin view, nothing saved in their system). They are internal reference only: do not publish them or copy their design. Some are low resolution because they were taken at reduced size. Numbers match the order of the menu walk:
+
+| File | Screen |
+|---|---|
+| 01-dashboard | Dashboard (search and panels) |
+| 02-assign-job-roles-to-assessor | Assign job roles to assessor |
+| 03-manage-scheme-details | Scheme and sub-scheme choice |
+| 04-update-assessment-code-set-order | Assessment code and set order |
+| 05-post-attendance-with-marks | Attendance with marks (theory and viva tabs) |
+| 06-bulk-upload-candidates | Bulk upload candidates (asks if exam date and time are known) |
+| 07-student-details-credentials | Student and assessor credentials search |
+| 08-manage-assessment | Assessment list |
+| 09-batch-start | Batch start search |
+| 10-admin-module | Admin area (roles, users, subjects) |
+| 11-candidate-summary-report | Candidate summary report search |
+| 12-qb-analysis-report | Question bank analysis report search |
+| 13-image-voice-recording-review | Chat, image and voice review with suspicious-type filters |
+| 14-users-log-report | Users log report |
+| 15-send-mails-to-tp-tc-assessor | Batch notification mails |
+| 16-manage-batch-centre-tp-details | Batch centre and TP details |
+| 17-assign-update-exam-date | Assign or update exam date |
+| 18-manage-user-logins | Change password, activate student login, proctor login tabs |
+| 19-view-user-punch-details | User punch details |
+| 20-assessment-submenu | Assessment submenu |
+| 21-manage-question-bank | Question bank list |
+| 22-manage-assessment-with-criteria | Assessment with criteria list |
+| 23-assessment-details | Assessment details search |
+| 24-manage-questions | Manage questions (topic, sub topic, mode, complexity) |
+| 25-update-assessment-marks | Update assessment marks search |
+| 26-not-attempted-students | Record entry for not-attempted students |
+| 27-create-candidate-form-top, 28-create-candidate-form-bottom | Create candidate form (all fields) |
