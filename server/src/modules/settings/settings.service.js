@@ -4,6 +4,7 @@ export function presentAccessSettings(doc) {
   return {
     abReviewerCanReadAssessorPayments: doc?.abReviewerCanReadAssessorPayments === true,
     ncvetViewerCanSeeAbQueue: doc?.ncvetViewerCanSeeAbQueue === true,
+    aadhaarVisibility: doc?.aadhaarVisibility ?? "masked",
     updatedBy: doc?.updatedBy ? String(doc.updatedBy) : null,
     updatedAt: doc?.updatedAt ? new Date(doc.updatedAt).toISOString() : null,
   };

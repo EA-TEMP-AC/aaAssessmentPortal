@@ -1,7 +1,7 @@
 ﻿import { useEffect, useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { errorMessage } from "../api/client";
-import { getAccessSettings, saveAccessSettings } from "../api/settings";
+import { getAccessSettings, saveAccessSettings, type AadhaarVisibility } from "../api/settings";
 
 export function SettingsAccessPage() {
   const queryClient = useQueryClient();
@@ -56,6 +56,23 @@ export function SettingsAccessPage() {
       if (field === "ncvetViewerCanSeeAbQueue") {
         setDraftQueue(query.data?.ncvetViewerCanSeeAbQueue ?? false);
       }
+      setFormError(errorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleAadhaar(value: AadhaarVisibility) {
+    if (saving) return;
+    setSaving(true);
+    setFormError(null);
+    setNotice(null);
+    try {
+      const saved = await saveAccessSettings({ aadhaarVisibility: value });
+      queryClient.setQueryData(["settings", "access"], saved);
+      await queryClient.invalidateQueries({ queryKey: ["settings", "access"] });
+      setNotice("Settings saved.");
+    } catch (err) {
       setFormError(errorMessage(err));
     } finally {
       setSaving(false);
@@ -152,6 +169,25 @@ export function SettingsAccessPage() {
               </label>
               <p className="field-hint">
                 Allow NCVET viewers to inspect the awarding body validation and publication queue.
+              </p>
+            </div>
+
+            <div className="field">
+              <label htmlFor="aadhaar-visibility">Who can see the Aadhaar number</label>
+              <select
+                id="aadhaar-visibility"
+                name="aadhaarVisibility"
+                value={query.data.aadhaarVisibility ?? "masked"}
+                disabled={saving}
+                onChange={(e) => void handleAadhaar(e.target.value as AadhaarVisibility)}
+              >
+                <option value="hidden">Nobody (not even the last four digits)</option>
+                <option value="masked">Last four digits only</option>
+                <option value="full">Full number for admin and MIS, last four for others</option>
+              </select>
+              <p className="field-hint">
+                Also controls the Aadhaar card picture: it can be opened only when the full number is
+                allowed. The number is always stored encrypted. Every read is logged.
               </p>
             </div>
 

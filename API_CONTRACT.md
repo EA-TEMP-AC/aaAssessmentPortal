@@ -182,15 +182,16 @@ Roles: `aa_admin`, `mis`, `ncvet_viewer`, `ab_reviewer`; others `403`. Response 
 {
   "abReviewerCanReadAssessorPayments": false,
   "ncvetViewerCanSeeAbQueue": false,
+  "aadhaarVisibility": "masked",
   "updatedBy": null,
   "updatedAt": null
 }
 ```
-Both flags are `false` until `aa_admin` changes them. Clients read the flags to show or hide screens; the server does not gate the AB queue on `ncvetViewerCanSeeAbQueue` (the queue is the batch list, which `ncvet_viewer` can already read).
+Both flags are `false` until `aa_admin` changes them. `aadhaarVisibility` (X-47) is `hidden`, `masked` (default) or `full`; see Learners. Clients read the flags to show or hide screens; the server does not gate the AB queue on `ncvetViewerCanSeeAbQueue` (the queue is the batch list, which `ncvet_viewer` can already read).
 
 ### PUT /settings/access
 
-`aa_admin` only. Body: one or both booleans, `{ "abReviewerCanReadAssessorPayments": true }`; an empty body, an unknown key or a non-boolean is `400 VALIDATION_ERROR`. Flags not named keep their value. Response `200`: the same shape as GET. Audit: `settings.access.update`, entity `settings`, entityId `access`, `before` and `after` as the GET shape. Decisions 174 and 175 (Q161, Q171).
+`aa_admin` only. Body: one or more of the two booleans and `aadhaarVisibility` (`hidden`, `masked`, `full`), e.g. `{ "abReviewerCanReadAssessorPayments": true }`; an empty body, an unknown key or a non-boolean is `400 VALIDATION_ERROR`. Flags not named keep their value. Response `200`: the same shape as GET. Audit: `settings.access.update`, entity `settings`, entityId `access`, `before` and `after` as the GET shape. Decisions 174 and 175 (Q161, Q171).
 
 ---
 
@@ -202,7 +203,19 @@ Roles: write `aa_admin` | `mis`; read scoped roles as needed.
 
 Request: `{ "name": "Asha Devi", "externalRef": "TP-REG-10021", "enrolmentNumber": "ENR-1", "fatherName": "Ram Kumar", "gender": "Female", "phone": "9000000001", "address": "Gangtok", "active": true }`
 
-X-45 added `enrolmentNumber` (≤64), `fatherName` (≤200, encrypted), `gender` (`Male`, `Female`, `Other`) and `address` (≤500, encrypted). `externalRef` is the Student ID / Candidate ID. PATCH accepts `null` to clear any of them. The father or husband name and the address are shown as `[redacted]` in audit rows and are logged in the access log by field name. `aadhaar` (X-46, optional, 12 digits, spaces or dashes allowed; PATCH `null` clears it) is stored encrypted. Responses carry `aadhaarMasked` only (`XXXXXXXX1234` or `null`); the full number is never returned. Audit rows hold `hasAadhaar` and no number; the access log lists field `aadhaar`. Other national ID numbers are still refused (DECISIONS 1000).
+X-45 added `enrolmentNumber` (≤64), `fatherName` (≤200, encrypted), `gender` (`Male`, `Female`, `Other`) and `address` (≤500, encrypted). `externalRef` is the Student ID / Candidate ID. PATCH accepts `null` to clear any of them. The father or husband name and the address are shown as `[redacted]` in audit rows and are logged in the access log by field name. `aadhaar` (X-46, optional, 12 digits, spaces or dashes allowed; PATCH `null` clears it) is stored encrypted. Learner responses carry `hasAadhaar` and `aadhaarMasked` (`XXXXXXXX1234` or `null`). What else is shown follows the setting `aadhaarVisibility` (X-47): `hidden` (no digits for anyone, `aadhaarMasked` is `null`), `masked` (default, last four digits), `full` (`aa_admin` and `mis` also get `aadhaar` with all twelve digits; every other role still gets the last four). Audit rows hold `hasAadhaar` and no number; the access log lists field `aadhaar`. Other national ID numbers are still refused (DECISIONS 1000).
+
+---
+
+### Student photo and identity cards (X-47)
+
+Roles: `aa_admin`, `mis`. Pictures are stored in the evidence storage driver; the row only says where.
+
+- `POST /learners/:id/files` multipart: `file`, `kind` (`photo` or `identity`), `docType` (`aadhaar_card`, `driving_licence`, `voter_id`; required for `identity`, refused for `photo`). Photo: JPEG or PNG, up to 2 MB. Identity: JPEG, PNG or PDF, up to 5 MB. The type is read from the file bytes (`415 UNSUPPORTED_FILE_TYPE`, `413 FILE_TOO_LARGE`). A new upload replaces the current one for the same kind and document type (the old one is kept, not shown). Response `201 { id, learnerId, kind, docType, contentType, size, uploadedAt }`. Audit `learner.file_upload` with kind, docType, type and size only.
+- `GET /learners/:id/files` the current files (metadata).
+- `GET /learners/:id/files/:fileId` the picture. Every read is access-logged first (field `photo` or `identity_<docType>`). An `aadhaar_card` picture shows the whole number, so it is `403` unless `aadhaarVisibility` is `full` and the caller is `aa_admin` or `mis`.
+
+No number is read from the pictures.
 
 ---
 

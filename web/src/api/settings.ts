@@ -3,11 +3,15 @@
 export type AccessSettings = {
   abReviewerCanReadAssessorPayments: boolean;
   ncvetViewerCanSeeAbQueue: boolean;
+  aadhaarVisibility: AadhaarVisibility;
   updatedBy: string | null;
   updatedAt: string | null;
 };
 
+export type AadhaarVisibility = "hidden" | "masked" | "full";
+
 export type SaveAccessSettingsInput = {
+  aadhaarVisibility?: AadhaarVisibility;
   abReviewerCanReadAssessorPayments?: boolean;
   ncvetViewerCanSeeAbQueue?: boolean;
 };

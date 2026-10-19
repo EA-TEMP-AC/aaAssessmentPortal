@@ -122,7 +122,10 @@ export type Learner = {
   gender: string | null;
   address: string | null;
   /** Last four digits only (X-46). The server never sends the full number. */
+  hasAadhaar: boolean;
   aadhaarMasked: string | null;
+  /** Only when the Aadhaar setting is "full" and the viewer is admin or MIS. */
+  aadhaar?: string;
   accommodations: string[];
   active: boolean;
   createdAt: string;
@@ -525,7 +528,9 @@ export function parseLearner(value: unknown): Learner {
     fatherName: optional(value.fatherName),
     gender: optional(value.gender),
     address: optional(value.address),
+    hasAadhaar: value.hasAadhaar === true,
     aadhaarMasked: optional(value.aadhaarMasked),
+    ...(typeof value.aadhaar === "string" ? { aadhaar: value.aadhaar } : {}),
     accommodations,
     active,
     ...timestamps,

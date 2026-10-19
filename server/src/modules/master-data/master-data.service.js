@@ -3,6 +3,7 @@ import { AppError, duplicateResource, forbidden, notFound } from "../../lib/erro
 import { safeErrorCode } from "../../lib/safe-error.js";
 import { AwardingBody } from "../../models/awarding-body.model.js";
 import { Centre } from "../../models/centre.model.js";
+import { AccessSettings, ACCESS_SETTINGS_KEY } from "../../models/access-settings.model.js";
 import { Learner } from "../../models/learner.model.js";
 import { Qualification } from "../../models/qualification.model.js";
 import { TrainingPartner } from "../../models/training-partner.model.js";
@@ -206,7 +207,23 @@ function maskAadhaar(value) {
   return value ? `XXXXXXXX${String(value).slice(-4)}` : null;
 }
 
-function presentLearner(doc) {
+/** Roles that may see all twelve digits when the setting is "full". */
+const AADHAAR_FULL_ROLES = ["aa_admin", "mis"];
+
+/** hidden, masked or full for this viewer, from the access setting (X-47). */
+export async function aadhaarModeFor(user) {
+  const setting = await AccessSettings.findOne({ key: ACCESS_SETTINGS_KEY })
+    .select("aadhaarVisibility")
+    .lean();
+  const visibility = setting?.aadhaarVisibility ?? "masked";
+  if (visibility === "hidden") return "hidden";
+  if (visibility === "full" && AADHAAR_FULL_ROLES.includes(user?.role)) return "full";
+  return "masked";
+}
+
+function presentLearner(doc, mode = "masked") {
+  const hasAadhaar = Boolean(doc.aadhaar);
+  const shown = hasAadhaar && mode === "full" ? { aadhaar: String(doc.aadhaar) } : {};
   return {
     id: idOf(doc._id),
     name: doc.name,
@@ -216,7 +233,9 @@ function presentLearner(doc) {
     fatherName: doc.fatherName ?? null,
     gender: doc.gender ?? null,
     address: doc.address ?? null,
-    aadhaarMasked: maskAadhaar(doc.aadhaar),
+    hasAadhaar,
+    aadhaarMasked: mode === "hidden" ? null : maskAadhaar(doc.aadhaar),
+    ...shown,
     accommodations: [...(doc.accommodations ?? [])],
     active: doc.active,
     createdAt: iso(doc.createdAt),
@@ -468,7 +487,7 @@ export async function deleteQualification(id) {
   return presentQualification(existing);
 }
 
-export async function createLearner(body) {
+export async function createLearner(body, viewer) {
   const doc = {
     name: body.name,
     accommodations: body.accommodations ?? [],
@@ -481,7 +500,7 @@ export async function createLearner(body) {
   }
   try {
     const created = await Learner.create(doc);
-    return presentLearner(created.toObject());
+    return presentLearner(created.toObject(), await aadhaarModeFor(viewer));
   } catch (err) {
     throwWriteError(err);
   }
@@ -490,17 +509,18 @@ export async function createLearner(body) {
 export async function listLearners(user, query) {
   const filter = { ...scopeFilter(user, "learner") };
   if (query.active !== undefined) filter.active = query.active;
-  return paginate(Learner, filter, query, presentLearner);
+  const mode = await aadhaarModeFor(user);
+  return paginate(Learner, filter, query, (doc) => presentLearner(doc, mode));
 }
 
 export async function getLearner(user, id) {
   const doc = await Learner.findById(id).lean();
   if (!doc) throw notFound();
   assertInScope(user, "learner", doc);
-  return presentLearner(doc);
+  return presentLearner(doc, await aadhaarModeFor(user));
 }
 
-export async function updateLearner(id, body) {
+export async function updateLearner(id, body, viewer) {
   const existing = await Learner.findById(id).lean();
   if (!existing) throw notFound();
   const set = {};
@@ -514,5 +534,6 @@ export async function updateLearner(id, body) {
     assignClearable(set, unset, key, body[key]);
   }
   const updated = await applyUpdate(Learner, existing._id, updateDoc(set, unset));
-  return { before: presentLearner(existing), learner: presentLearner(updated) };
+  const mode = await aadhaarModeFor(viewer);
+  return { before: presentLearner(existing, mode), learner: presentLearner(updated, mode) };
 }

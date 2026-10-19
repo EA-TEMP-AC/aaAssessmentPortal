@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import request from "supertest";
 import { createApp } from "../src/app.js";
+import { AccessSettings } from "../src/models/access-settings.model.js";
 import { AuditLog } from "../src/models/audit-log.model.js";
 import { AwardingBody } from "../src/models/awarding-body.model.js";
 import { Centre } from "../src/models/centre.model.js";
@@ -334,6 +335,21 @@ describe("master data", () => {
     });
     expect(String(stored.aadhaar)).toMatch(/^enc:v1:/);
     expect(JSON.stringify(await AuditLog.find({}).lean())).not.toContain("234567890123");
+
+    // X-47: the Aadhaar setting decides what each role sees.
+    const readAs = async (token) =>
+      (await request(app).get(`/api/v1/learners/${goodAadhaar.body.id}`).set(bearer(token))).body;
+    expect(await readAs(admin.token)).toMatchObject({
+      hasAadhaar: true,
+      aadhaarMasked: "XXXXXXXX0123",
+    });
+    expect((await readAs(admin.token)).aadhaar).toBeUndefined();
+    await AccessSettings.create({ key: "access", aadhaarVisibility: "full" });
+    expect((await readAs(admin.token)).aadhaar).toBe("234567890123");
+    await AccessSettings.updateOne({ key: "access" }, { $set: { aadhaarVisibility: "hidden" } });
+    const hidden = await readAs(admin.token);
+    expect(hidden).toMatchObject({ hasAadhaar: true, aadhaarMasked: null });
+    expect(hidden.aadhaar).toBeUndefined();
     const email = await request(app)
       .post("/api/v1/learners")
       .set(bearer(admin.token))

@@ -45,6 +45,7 @@ describe("GET and PUT /settings/access", () => {
     expect(res.body).toEqual({
       abReviewerCanReadAssessorPayments: false,
       ncvetViewerCanSeeAbQueue: false,
+      aadhaarVisibility: "masked",
       updatedBy: null,
       updatedAt: null,
     });
@@ -67,6 +68,15 @@ describe("GET and PUT /settings/access", () => {
     });
     expect(await AccessSettings.countDocuments()).toBe(1);
     expect((await get(admin.token)).body).toMatchObject(second.body);
+  });
+
+  it("lets aa_admin choose who sees the Aadhaar number, and rejects other values", async () => {
+    const admin = await sessionFor("aa_admin");
+    const full = await put(admin.token, { aadhaarVisibility: "full" });
+    expect(full.status, JSON.stringify(full.body)).toBe(200);
+    expect(full.body.aadhaarVisibility).toBe("full");
+    const bad = await put(admin.token, { aadhaarVisibility: "everyone" });
+    expect(bad.status).toBe(400);
   });
 
   it("audits each change with before and after", async () => {

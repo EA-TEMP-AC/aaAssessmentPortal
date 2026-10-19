@@ -36,6 +36,7 @@ import {
   canWriteMasterData,
   readsEveryCentre,
 } from "../masterDataAccess";
+import { LearnerFilesPanel } from "./LearnerFilesPanel";
 import { Dialog, FormAlert } from "./dialog";
 import { formatMasterDataError } from "./formatApiError";
 import { ActiveFilterField, ListScaffold, PageSizeField } from "./listScaffold";
@@ -161,7 +162,8 @@ function SimpleForm({
   const queryClient = useQueryClient();
   const meta = MASTER_COLLECTION_META[collection];
   const editing = record !== null;
-  const editingMasked = record && "aadhaarMasked" in record ? record.aadhaarMasked : null;
+  const editingMasked =
+    record && "aadhaarMasked" in record ? (record.aadhaarMasked ?? (record.hasAadhaar ? "Saved" : null)) : null;
   const [draft, setDraft] = useState(() => draftFrom(collection, record));
   const [pending, setPending] = useState(false);
   const [formError, setFormError] = useState<FormError | null>(null);
@@ -515,6 +517,7 @@ function SimpleForm({
                   {editing && editingMasked ? " Leave blank to keep the saved number." : ""}
                 </p>
               </div>
+              {editing && record && "hasAadhaar" in record ? <LearnerFilesPanel learnerId={record.id} /> : null}
               <div className="field">
                 <label htmlFor={phoneId}>Mobile No.</label>
                 <input
@@ -693,7 +696,7 @@ function cellsFor(collection: SimpleCollection, record: SimpleRecord): ReactNode
       display(record.enrolmentNumber),
       display(record.fatherName),
       display(record.gender),
-      display(record.aadhaarMasked),
+      display(record.aadhaar ?? record.aadhaarMasked ?? (record.hasAadhaar ? "Saved" : null)),
       display(record.phone),
       record.accommodations.length > 0 ? record.accommodations.join(", ") : "None",
       status,

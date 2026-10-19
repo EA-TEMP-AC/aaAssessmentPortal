@@ -177,3 +177,27 @@ it("shows error alert when loading settings fails", async () => {
   const errorAlert = await screen.findByRole("alert");
   expect(errorAlert).toHaveTextContent("Failed to load database settings");
 });
+
+it("lets the admin choose who sees the Aadhaar number", async () => {
+  const user = userEvent.setup();
+  let putBody: unknown = null;
+  installFetch(async (url, init) => {
+    if (url.pathname.endsWith("/settings/access") && methodOf(init) === "PUT") {
+      putBody = requestBody(init);
+      return jsonResponse(200, {
+        abReviewerCanReadAssessorPayments: false,
+        ncvetViewerCanSeeAbQueue: false,
+        aadhaarVisibility: "full",
+        updatedBy: null,
+        updatedAt: null,
+      });
+    }
+  });
+  setSession(sessionFor("aa_admin"));
+  renderApp("/settings/access");
+  const select = await screen.findByLabelText("Who can see the Aadhaar number");
+  expect(select).toHaveValue("masked");
+  await user.selectOptions(select, "full");
+  expect(await screen.findByText("Settings saved.")).toBeInTheDocument();
+  expect(putBody).toEqual({ aadhaarVisibility: "full" });
+});

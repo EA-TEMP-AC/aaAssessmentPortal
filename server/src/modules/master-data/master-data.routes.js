@@ -10,6 +10,7 @@ import {
   QUALIFICATION_READ_ROLES,
   TRAINING_PARTNER_READ_ROLES,
 } from "../../models/roles.js";
+import { mountLearnerFileRoutes } from "../learner-files/learner-files.routes.js";
 import { recordAccess } from "../audit/access-log.service.js";
 import {
   createAwardingBodySchema,
@@ -349,7 +350,7 @@ function learnerAuditView(row) {
     ...row,
     fatherName: row.fatherName ? "[redacted]" : null,
     address: row.address ? "[redacted]" : null,
-    hasAadhaar: Boolean(row.aadhaarMasked),
+    aadhaar: undefined,
     aadhaarMasked: undefined,
   };
 }
@@ -359,7 +360,7 @@ learnersRouter.post(
   requireRoles(...MASTER_DATA_WRITE_ROLES),
   asyncHandler(async (req, res) => {
     const body = createLearnerSchema.parse(req.body);
-    const created = await createLearner(body);
+    const created = await createLearner(body, req.user);
     setAudit(req, {
       action: "learner.create",
       entity: "learner",
@@ -380,13 +381,15 @@ mountReads(learnersRouter, LEARNER_READ_ROLES, {
   },
 });
 
+mountLearnerFileRoutes(learnersRouter);
+
 learnersRouter.patch(
   "/:id",
   requireRoles(...MASTER_DATA_WRITE_ROLES),
   asyncHandler(async (req, res) => {
     const { id } = idParamSchema.parse(req.params);
     const body = patchLearnerSchema.parse(req.body);
-    const saved = await updateLearner(id, body);
+    const saved = await updateLearner(id, body, req.user);
     setAudit(req, {
       action: "learner.update",
       entity: "learner",

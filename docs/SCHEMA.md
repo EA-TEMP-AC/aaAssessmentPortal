@@ -2,7 +2,7 @@
 
 Single-AA deployment. BSON types. Instant timestamps are UTC `Date` unless noted. **Assessment calendar dates** and clash windows use **`YYYY-MM-DD` in Asia/Kolkata (IST)** (project choice; TR s29).
 
-**PII rule:** do **not** store national ID numbers (PAN, voter id, passport). One exception (X-46, DECISIONS 1000): the student Aadhaar number on `learners.aadhaar`, encrypted, never returned in full, never audited. Identity verification is a boolean + optional opaque reference only.
+**PII rule:** do **not** store national ID numbers (PAN, voter id, passport). One exception (X-46, DECISIONS 1000): the student Aadhaar number on `learners.aadhaar`, encrypted, never audited; returned in full only to admin and MIS when `settings.aadhaarVisibility` is `full` (X-47), otherwise as the last four digits or not at all. Pictures of ID cards are files (`learnerFiles`, §3.3a); no number is read from them. Identity verification is a boolean + optional opaque reference only.
 
 **Status transitions:** atomic compare-and-set on `batches.status` (and `statusVersion`); illegal CAS → `INVALID_TRANSITION`.
 
@@ -327,6 +327,19 @@ Stable person across batches.
 | active | bool | Y | |
 
 Indexes: `{ externalRef: 1 }` sparse unique; `{ name: 1 }`.
+
+### 3.3a `learnerFiles` (X-47)
+
+| Field | Type | Req | Notes |
+|---|---|---|---|
+| learnerId | ObjectId | Y | `learners` |
+| kind | string | Y | `photo`, `identity` |
+| docType | string | for identity | `aadhaar_card`, `driving_licence`, `voter_id` |
+| storageKey, contentType, size, sha256 | | Y | where the bytes are (evidence storage driver) and what they are |
+| uploadedBy | ObjectId | Y | |
+| current | bool | Y | a new upload sets the older row for the same kind and docType to false |
+
+Indexes: `{ learnerId: 1, kind: 1, docType: 1, current: 1 }`.
 
 ### 3.4b `examVideoChunks` (X-27)
 

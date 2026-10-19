@@ -1,4 +1,4 @@
-import { cleanup, screen, within } from "@testing-library/react";
+import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { expect, it, vi } from "vitest";
 import type { AwardingBody, Learner, Qualification } from "../api/masterData";
@@ -84,6 +84,7 @@ function learner(overrides: Partial<Learner> = {}): Learner {
     fatherName: null,
     gender: null,
     address: null,
+    hasAadhaar: false,
     aadhaarMasked: null,
     accommodations: ["Extra time"],
     active: true,
@@ -524,7 +525,7 @@ it("keeps learner fields to the schema and does not offer delete or a national i
     if (methodOf(init) === "POST") {
       return jsonResponse(201, learner({ name: "New Learner", externalRef: "TP-REG-9", phone: "9999900000", accommodations: ["Reader"] }));
     }
-    return jsonResponse(200, listBody([{ ...existing, aadhaar: "SECRET-AADHAAR", email: "hidden@example.com" }]));
+    return jsonResponse(200, listBody([{ ...existing, panNumber: "SECRET-AADHAAR", email: "hidden@example.com" }]));
   });
   setSession(sessionFor("aa_admin"));
   renderApp("/master-data/learners");
@@ -577,4 +578,42 @@ it("keeps learner fields to the schema and does not offer delete or a national i
     accommodations: ["Reader"],
     active: true,
   });
+});
+
+it("shows the saved Aadhaar as the server sends it, and offers photo and card uploads when editing", async () => {
+  const user = userEvent.setup();
+  const existing = learner({ hasAadhaar: true, aadhaarMasked: "XXXXXXXX0123" });
+  let uploaded: FormData | null = null;
+  installFetch(async (url, init) => {
+    if (url.pathname.endsWith("/files") && methodOf(init) === "POST") {
+      uploaded = init?.body as FormData;
+      return jsonResponse(201, {
+        id: "f1",
+        learnerId: existing.id,
+        kind: "photo",
+        docType: null,
+        contentType: "image/png",
+        size: 4,
+        uploadedAt: "2026-10-19T09:00:00.000Z",
+      });
+    }
+    if (url.pathname.endsWith("/files")) return jsonResponse(200, { items: [] });
+    return jsonResponse(200, listBody([existing]));
+  });
+  setSession(sessionFor("aa_admin"));
+  renderApp("/master-data/learners");
+  expect(await screen.findByRole("cell", { name: "XXXXXXXX0123" })).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Edit Asha Devi" }));
+  const dialog = screen.getByRole("dialog", { name: "Edit Asha Devi" });
+  expect(within(dialog).getByLabelText("Aadhaar Number")).toHaveAttribute("placeholder", "XXXXXXXX0123");
+  const photo = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], "me.png", { type: "image/png" });
+  await user.upload(within(dialog).getByLabelText("Photo"), photo);
+  await user.click(within(dialog).getAllByRole("button", { name: "Upload" })[0] as HTMLElement);
+  await waitFor(() => expect(uploaded).not.toBeNull());
+  const form = uploaded as unknown as FormData;
+  expect(form.get("kind")).toBe("photo");
+  expect(form.get("docType")).toBeNull();
+  for (const label of ["Aadhaar card", "Driving licence", "Voter ID card"]) {
+    expect(within(dialog).getByLabelText(label)).toBeInTheDocument();
+  }
 });
