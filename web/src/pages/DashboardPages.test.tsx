@@ -71,7 +71,7 @@ it("searches upcoming batches and queues mails, listing what was skipped", async
       if (String(input).includes("/batch-mails/send")) {
         expect(JSON.parse(String(init?.body))).toEqual({
           batchIds: ["b1"],
-          recipients: ["training_partner", "assessor"],
+          recipients: ["training_partner", "centre", "assessor"],
         });
         return jsonResponse(200, {
           queued: 1,

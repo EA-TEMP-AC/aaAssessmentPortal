@@ -11,6 +11,8 @@ const centreSchema = new mongoose.Schema(
     code: { type: String, trim: true, maxlength: 64 },
     tpId: { type: mongoose.Schema.Types.ObjectId, required: true, ref: "TrainingPartner" },
     state: { type: String, required: true, enum: STATE_UTS },
+    // X-50: where batch notice mails for this centre go. Not unique: a centre may share the partner's address.
+    email: { type: String, trim: true, lowercase: true, maxlength: 320 },
     active: { type: Boolean, required: true, default: true },
   },
   { timestamps: true },

@@ -144,6 +144,7 @@ function presentCentre(doc) {
     code: doc.code ?? null,
     tpId: idOf(doc.tpId),
     state: doc.state,
+    email: doc.email ?? null,
     active: doc.active,
     createdAt: iso(doc.createdAt),
     updatedAt: iso(doc.updatedAt),
@@ -359,6 +360,7 @@ export async function createCentre(body) {
     { name: body.name, tpId: body.tpId, state: body.state, active: body.active ?? true },
     body,
   );
+  if (body.email) doc.email = body.email;
   try {
     const created = await Centre.create(doc);
     return presentCentre(created.toObject());
@@ -392,6 +394,7 @@ export async function updateCentre(id, body) {
   if (body.state !== undefined) set.state = body.state;
   if (body.active !== undefined) set.active = body.active;
   assignClearable(set, unset, "code", body.code);
+  assignClearable(set, unset, "email", body.email);
   const updated = await applyUpdate(Centre, existing._id, updateDoc(set, unset));
   return { before: presentCentre(existing), centre: presentCentre(updated) };
 }

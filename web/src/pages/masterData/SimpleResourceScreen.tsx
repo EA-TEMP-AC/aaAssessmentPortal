@@ -93,6 +93,7 @@ function draftFrom(collection: SimpleCollection, record: SimpleRecord | null): S
       code: record.code ?? "",
       tpId: record.tpId,
       state: record.state,
+      email: record.email ?? "",
       active: record.active,
     };
   }
@@ -345,7 +346,7 @@ function SimpleForm({
               </button>
             </fieldset>
           ) : null}
-          {collection === "training-partners" ? (
+          {collection === "training-partners" || collection === "centres" ? (
             <div className="field">
               <label htmlFor={emailId}>Email</label>
               <input
@@ -687,7 +688,7 @@ function cellsFor(collection: SimpleCollection, record: SimpleRecord): ReactNode
     return [record.name, display(record.code), display(record.email), status];
   }
   if (collection === "centres" && "tpId" in record) {
-    return [record.name, display(record.code), record.tpId, record.state, status];
+    return [record.name, display(record.code), record.tpId, record.state, display(record.email), status];
   }
   if ("accommodations" in record) {
     return [
@@ -745,7 +746,7 @@ export function SimpleResourceScreen({ collection }: { collection: SimpleCollect
     ...(collection === "learners" ? ["Student ID", "Enrolment number", "Father's / Husband's name", "Gender", "Aadhaar", "Mobile No.", "Accommodations"] : ["Code"]),
     ...(collection === "awarding-bodies" ? ["Notification emails"] : []),
     ...(collection === "training-partners" ? ["Email"] : []),
-    ...(collection === "centres" ? ["Training partner id", "State"] : []),
+    ...(collection === "centres" ? ["Training partner id", "State", "Email"] : []),
     "Status",
     ...(canWrite ? ["Actions"] : []),
   ];

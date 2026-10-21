@@ -64,7 +64,7 @@ export type MailBatchPage = {
   total: number;
   items: MailBatch[];
 };
-export type MailRecipient = "training_partner" | "assessor";
+export type MailRecipient = "training_partner" | "centre" | "assessor";
 export type MailResult = {
   queued: number;
   skipped: { batchId: string; reason: string }[];

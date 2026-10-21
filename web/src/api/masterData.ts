@@ -73,6 +73,7 @@ export type Centre = {
   code: string | null;
   tpId: string;
   state: StateName;
+  email: string | null;
   active: boolean;
   createdAt: string;
   updatedAt: string;
@@ -174,6 +175,7 @@ export type CentreWrite = {
   code?: string | null;
   tpId: string;
   state: StateName;
+  email?: string | null;
   active: boolean;
 };
 
@@ -393,7 +395,7 @@ export function parseCentre(value: unknown): Centre {
     !timestamps
   )
     throw responseError();
-  return { id, name, code, tpId, state, active, ...timestamps };
+  return { id, name, code, tpId, state, email: nullableString(value.email) ?? null, active, ...timestamps };
 }
 
 function parsePc(value: unknown): PerformanceCriterion {

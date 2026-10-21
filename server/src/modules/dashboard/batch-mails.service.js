@@ -3,6 +3,7 @@ import { namesForBatches } from "../../lib/display-names.js";
 import { istCalendarDate } from "../../lib/working-days.js";
 import { Assessor } from "../../models/assessor.model.js";
 import { Batch } from "../../models/batch.model.js";
+import { Centre } from "../../models/centre.model.js";
 import { TrainingPartner } from "../../models/training-partner.model.js";
 import { enqueueEmailSafely } from "../email/email-queue.service.js";
 import { baseBatchFilter, batchRow } from "./dashboard.service.js";
@@ -14,7 +15,7 @@ import { baseBatchFilter, batchRow } from "./dashboard.service.js";
  */
 export const ASSESSOR_FILTERS = Object.freeze(["assigned", "unassigned"]);
 export const TP_FILTERS = Object.freeze(["pending", "accepted"]);
-export const MAIL_RECIPIENTS = Object.freeze(["training_partner", "assessor"]);
+export const MAIL_RECIPIENTS = Object.freeze(["training_partner", "centre", "assessor"]);
 const PAGE_SIZE = 25;
 
 function searchFilter(user, query, today) {
@@ -71,7 +72,7 @@ function mailText(row, role) {
     `Training partner: ${row.tpName ?? "-"}`,
     `Candidates: ${row.candidateCount}`,
   ];
-  if (role === "training_partner") lines.push(`Assessor: ${row.assessorName ?? "to be assigned"}`);
+  if (role !== "assessor") lines.push(`Assessor: ${row.assessorName ?? "to be assigned"}`);
   lines.push("", "Please log in to the portal for the full details.");
   return lines.join("\n");
 }
@@ -87,8 +88,11 @@ export async function sendBatchMails(user, { batchIds, recipients }, now = new D
   }).lean();
   if (batches.length === 0) throw notFound("No matching batches");
   const names = await namesForBatches(batches);
-  const [tps, assessors] = await Promise.all([
+  const [tps, centres, assessors] = await Promise.all([
     TrainingPartner.find({ _id: { $in: batches.map((b) => b.tpId).filter(Boolean) } })
+      .select("email")
+      .lean(),
+    Centre.find({ _id: { $in: batches.map((b) => b.centreId).filter(Boolean) } })
       .select("email")
       .lean(),
     Assessor.find({ _id: { $in: batches.map((b) => b.assessorId).filter(Boolean) } })
@@ -96,6 +100,7 @@ export async function sendBatchMails(user, { batchIds, recipients }, now = new D
       .lean(),
   ]);
   const tpEmail = new Map(tps.map((t) => [String(t._id), t.email]));
+  const centreEmail = new Map(centres.map((c) => [String(c._id), c.email]));
   const assessorEmail = new Map(assessors.map((a) => [String(a._id), a.email]));
 
   let queued = 0;
@@ -114,7 +119,9 @@ export async function sendBatchMails(user, { batchIds, recipients }, now = new D
       const address =
         role === "assessor"
           ? assessorEmail.get(String(batch.assessorId))
-          : tpEmail.get(String(batch.tpId));
+          : role === "centre"
+            ? centreEmail.get(String(batch.centreId))
+            : tpEmail.get(String(batch.tpId));
       if (!address) {
         skipped.push({ batchId, reason: `no_${role}_email` });
         continue;

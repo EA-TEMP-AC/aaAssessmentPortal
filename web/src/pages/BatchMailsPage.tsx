@@ -21,6 +21,7 @@ const REASON: Record<string, string> = {
   past_date: "date has passed",
   not_found: "batch not found",
   no_training_partner_email: "no training partner email",
+  no_centre_email: "no centre email",
   no_assessor_email: "no assessor email",
   queue_failed: "could not be queued",
 };
@@ -33,6 +34,7 @@ export function BatchMailsPage() {
   const [picked, setPicked] = useState<string[]>([]);
   const [recipients, setRecipients] = useState<MailRecipient[]>([
     "training_partner",
+    "centre",
     "assessor",
   ]);
   const query = useQuery({
@@ -60,8 +62,8 @@ export function BatchMailsPage() {
     <div>
       <h1>Batch mails</h1>
       <p className="field-hint">
-        Send a notice to the training partner (the mail names the centre) and
-        the assessor. Only batches that have not started yet are listed.
+        Send a notice to the training partner, the training centre and the
+        assessor. Only batches that have not started yet are listed.
       </p>
       <form
         className="audit-filters"
@@ -209,7 +211,15 @@ export function BatchMailsPage() {
                 checked={recipients.includes("training_partner")}
                 onChange={() => toggleRecipient("training_partner")}
               />{" "}
-              Training partner and centre
+              Training partner
+            </label>{" "}
+            <label>
+              <input
+                type="checkbox"
+                checked={recipients.includes("centre")}
+                onChange={() => toggleRecipient("centre")}
+              />{" "}
+              Training centre
             </label>{" "}
             <label>
               <input

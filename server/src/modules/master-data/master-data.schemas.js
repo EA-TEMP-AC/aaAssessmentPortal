@@ -211,6 +211,7 @@ export const createCentreSchema = z
     code: codeSchema.optional(),
     tpId: objectIdSchema,
     state: stateName,
+    email: emailSchema.optional(),
     active: z.boolean().optional(),
   })
   .strict();
@@ -221,6 +222,7 @@ export const patchCentreSchema = z
     code: z.union([codeSchema, z.null()]).optional(),
     tpId: objectIdSchema.optional(),
     state: stateName.optional(),
+    email: z.union([emailSchema, z.null()]).optional(),
     active: z.boolean().optional(),
   })
   .strict()

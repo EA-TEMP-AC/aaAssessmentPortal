@@ -3,6 +3,7 @@ import request from "supertest";
 import { createApp } from "../src/app.js";
 import { istCalendarDate } from "../src/lib/working-days.js";
 import { Batch } from "../src/models/batch.model.js";
+import { Centre } from "../src/models/centre.model.js";
 import { EmailQueue } from "../src/models/email-queue.model.js";
 import { LoginEvent } from "../src/models/login-event.model.js";
 import { TrainingPartner } from "../src/models/training-partner.model.js";
@@ -120,6 +121,36 @@ describe("dashboard, batch mails and login history (X-49)", () => {
     expect(sent.body.queued).toBe(1);
     expect(sent.body.skipped).toEqual([{ batchId: String(past._id), reason: "past_date" }]);
     expect(await EmailQueue.countDocuments({ kind: "batch_notice" })).toBe(1);
+  });
+
+  it("sends the centre notice to the centre's own email and skips a centre without one", async () => {
+    const tpId = oid();
+    const withMail = await Centre.create({
+      name: "C1",
+      tpId,
+      state: "Maharashtra",
+      email: "c1@example.com",
+    });
+    const noMail = await Centre.create({ name: "C2", tpId, state: "Maharashtra" });
+    const day = addDaysIso(today(), 2);
+    const a = await makeBatch({
+      assessmentStartDate: day,
+      assessmentEndDate: day,
+      centreId: withMail._id,
+    });
+    const b = await makeBatch({
+      assessmentStartDate: day,
+      assessmentEndDate: day,
+      centreId: noMail._id,
+    });
+    const { token } = await sessionFor("aa_admin");
+    const sent = await request(app)
+      .post("/api/v1/batch-mails/send")
+      .set(bearer(token))
+      .send({ batchIds: [String(a._id), String(b._id)], recipients: ["centre"] });
+    expect(sent.body.queued).toBe(1);
+    expect(sent.body.skipped).toEqual([{ batchId: String(b._id), reason: "no_centre_email" }]);
+    expect((await EmailQueue.findOne({ kind: "batch_notice" })).to).toEqual(["c1@example.com"]);
   });
 
   it("returns login events and punch rows without exact places", async () => {

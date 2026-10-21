@@ -69,7 +69,7 @@ export function simpleFieldOrder(collection: MasterCollection, draft: SimpleDraf
     return ["name", "code", ...draft.notificationEmails.map((_, index) => `notificationEmails.${index}`)];
   }
   if (collection === "training-partners") return ["name", "code", "email"];
-  if (collection === "centres") return ["name", "code", "tpId", "state"];
+  if (collection === "centres") return ["name", "code", "tpId", "state", "email"];
   return ["name", "externalRef", "enrolmentNumber", "fatherName", "gender", "phone", "address", "aadhaar", ...draft.accommodations.map((_, index) => `accommodations.${index}`)];
 }
 
@@ -143,10 +143,17 @@ export function buildSimpleWrite(collection: MasterCollection, draft: SimpleDraf
       messages.push("Choose a state.");
       fields.push("state");
     }
+    const email = draft.email.trim().toLowerCase();
+    if (email && (email.length > 320 || !EMAIL.test(email))) {
+      messages.push("Enter a valid email address.");
+      fields.push("email");
+    }
     if (messages.length > 0 || !isStateName(draft.state)) return fail(messages, fields);
     const body: CentreWrite = { name, tpId, state: draft.state, active: draft.active };
     if (code) body.code = code;
     else if (mode === "edit") body.code = null;
+    if (email) body.email = email;
+    else if (mode === "edit") body.email = null;
     return { ok: true, body };
   }
 

@@ -1272,3 +1272,5 @@ users / assessors / proctors .email and learners .phone encrypted at rest; *Hash
 ```
 
 **X-49 (no model change).** `emailQueue.kind` also takes `batch_notice` (meta: `batchId`, `recipient`; never the address). `loginEvents` and `attempts` are read by the dashboard and the login history report; no new fields or indexes.
+
+**X-50.** `centres.email` (string, optional, lowercase, max 320, not unique) is where batch notice mails for the centre go. Not encrypted, like the other centre contact fields.

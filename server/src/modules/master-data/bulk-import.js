@@ -113,6 +113,10 @@ const TYPES = {
         note: "State or UT as in Annexure IV, for example Maharashtra",
         example: "Maharashtra",
       },
+      email: {
+        note: "Where batch notices for this centre are sent",
+        example: "centre@example.com",
+      },
       active: { note: "yes or no, default yes", example: "yes" },
     },
     schema: createCentreSchema,
@@ -133,6 +137,7 @@ const TYPES = {
         code: text(r.code),
         tpId,
         state: text(r.state),
+        email: text(r.email),
         active: flag(r.active),
       });
     },
