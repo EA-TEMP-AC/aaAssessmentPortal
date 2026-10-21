@@ -387,3 +387,8 @@ export const PROCTORING_CAPTURE_READ_ROLES = Object.freeze([...PROCTORING_READ_R
 export const RESULT_REPORT_ROLES = Object.freeze(["aa_admin", "mis", "ncvet_viewer"]);
 
 export const REPORT_MARKS_ROLES = Object.freeze(["aa_admin", "assessor", "ab_reviewer"]);
+
+/** X-49. Home dashboard and login history: staff of the agency and the NCVET viewer. */
+export const DASHBOARD_ROLES = Object.freeze(["aa_admin", "mis", "ncvet_viewer"]);
+/** X-49. Batch notification mails to the training partner and the assessor. */
+export const BATCH_MAIL_ROLES = Object.freeze(["aa_admin", "mis"]);

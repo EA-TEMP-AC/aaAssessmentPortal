@@ -35,6 +35,8 @@ import { UsersPage } from "./pages/UsersPage";
 import { WorkingDaysPage } from "./pages/WorkingDaysPage";
 import { BatchesPage } from "./pages/BatchesPage";
 import { ResultsPage } from "./pages/ResultsPage";
+import { BatchMailsPage } from "./pages/BatchMailsPage";
+import { LoginHistoryPage } from "./pages/LoginHistoryPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
 import { ProctoringDemoPage } from "./pages/ProctoringDemoPage";
 import { RoleHomePage } from "./pages/RoleHomePage";
@@ -178,6 +180,10 @@ export function AppRoutes() {
                       <PublicSiteAdminPage />
                     ) : item.id === "results" ? (
                       <ResultsPage />
+                    ) : item.id === "batch-mails" ? (
+                      <BatchMailsPage />
+                    ) : item.id === "login-history" ? (
+                      <LoginHistoryPage />
                     ) : item.id === "settings" ? (
                       <SettingsAccessPage />
                     ) : (

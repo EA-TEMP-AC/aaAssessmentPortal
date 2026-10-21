@@ -52,6 +52,11 @@ import { weightProfileRouter } from "./modules/weight-profiles/weight-profiles.r
 import { securityRouter } from "./modules/security/security.routes.js";
 import { proctoringRouter } from "./modules/proctoring/proctoring.routes.js";
 import { reportsRouter } from "./modules/reports/reports.routes.js";
+import {
+  batchMailsRouter,
+  dashboardRouter,
+  loginHistoryRouter,
+} from "./modules/dashboard/dashboard.routes.js";
 
 export function createApp() {
   const app = express();
@@ -100,6 +105,9 @@ export function createApp() {
   app.use("/api/v1/sub-schemes", subSchemesRouter);
   app.use("/api/v1/security", securityRouter);
   app.use("/api/v1/proctoring", proctoringRouter);
+  app.use("/api/v1/dashboard", dashboardRouter);
+  app.use("/api/v1/batch-mails", batchMailsRouter);
+  app.use("/api/v1/reports/login-history", loginHistoryRouter);
   app.use("/api/v1/reports", reportsRouter);
 
   app.use((_req, res) => {

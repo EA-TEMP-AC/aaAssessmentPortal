@@ -217,3 +217,8 @@ export function isBatchRosterWritable(status: string): boolean {
 
 /** X-09: who may open a candidate's answer sheet. Same roles as the server's attempt list. */
 export const ANSWER_SHEET_ROLES: readonly Role[] = ["aa_admin", "assessor", "ab_reviewer"];
+
+/** X-49. Login history: agency staff and the NCVET viewer. */
+export const LOGIN_HISTORY_ROLES: readonly Role[] = ["aa_admin", "mis", "ncvet_viewer"];
+/** X-49. Batch notification mails. */
+export const BATCH_MAIL_ROLES: readonly Role[] = ["aa_admin", "mis"];

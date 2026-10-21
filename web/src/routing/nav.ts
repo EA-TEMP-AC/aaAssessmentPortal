@@ -3,9 +3,11 @@ import {
   ALL_ROLES,
   ANALYTICS_ROLES,
   AUDIT_ROLES,
+  BATCH_MAIL_ROLES,
   BATCH_ROLES,
   EVIDENCE_ROLES,
   EXAM_ROLES,
+  LOGIN_HISTORY_ROLES,
   MASTER_DATA_ROLES,
   PROCTORING_ROLES,
   QUESTION_BANK_ROLES,
@@ -147,6 +149,21 @@ export const NAV_ITEMS: readonly NavItem[] = [
     to: "/results",
     description: "Batch results and the candidate summary report.",
     roles: RESULTS_ROLES,
+  },
+  {
+    id: "batch-mails",
+    label: "Batch mails",
+    to: "/batch-mails",
+    description:
+      "Send notices about upcoming batches to training partners and assessors.",
+    roles: BATCH_MAIL_ROLES,
+  },
+  {
+    id: "login-history",
+    label: "Login history",
+    to: "/login-history",
+    description: "Users log and punch details from the app login events.",
+    roles: LOGIN_HISTORY_ROLES,
   },
   {
     id: "exam",

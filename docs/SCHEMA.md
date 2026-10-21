@@ -1270,3 +1270,5 @@ auditLogs append-only (secrets redacted)
 accessLogs append-only (who read which person's data; no values)
 users / assessors / proctors .email and learners .phone encrypted at rest; *Hash columns hold the lookup hash
 ```
+
+**X-49 (no model change).** `emailQueue.kind` also takes `batch_notice` (meta: `batchId`, `recipient`; never the address). `loginEvents` and `attempts` are read by the dashboard and the login history report; no new fields or indexes.
